@@ -14,24 +14,14 @@ st.title("Dashboard de Matrículas por Unidade")
 # ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
 df = carregar_dados("consultas/orders/orders.sql")
 
-# Pré-filtros
-df = df[df["status_id"] == 2]
-df = df[df["total_pedido"] != 0]
-df = df[df["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
-df["data_pagamento"] = pd.to_datetime(df["data_pagamento"])
-
 # Filtro: empresa
 empresas = df["empresa"].dropna().unique().tolist()
 empresa_selecionada = st.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
 df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
 
-# Filtro: data (padrão: mês atual)
-#data_inicio = datetime.today().replace(day=1)
-#data_fim = (data_inicio + pd.DateOffset(months=1)) - pd.Timedelta(seconds=1)
-#periodo = st.date_input("Período de vendas:", [data_inicio.date(), data_fim.date()])
+# Filtro: data (padrão: Hoje)
 hoje = datetime.today().date()
 periodo = st.date_input("Período de vendas:", [hoje, hoje])
-
 
 # Filtros adicionais recolhidos
 with st.expander("Filtros Avançados: Unidades e Categoria"):
@@ -50,14 +40,38 @@ df_filtrado = df[
     (df["empresa"].isin(empresa_selecionada)) &
     (df["unidade"].isin(unidade_selecionada)) &
     (df["categoria"].isin(categoria_selecionada)) &
-    (df["data_pagamento"] >= pd.to_datetime(periodo[0])) &
-    (df["data_pagamento"] <= pd.to_datetime(periodo[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+    (df["data_referencia"] >= pd.to_datetime(periodo[0])) &
+    (df["data_referencia"] <= pd.to_datetime(periodo[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
 ]
 def formatar_reais(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+# Pré-filtros Pago > Não grátis > Apenas Passaporte, Live e Presencial e Data de PAGAMENTO
+df_pagos = df_filtrado.copy()
+df_pagos = df_pagos[df_pagos["status_id"] == 2]
+df_pagos = df_pagos[df_pagos["total_pedido"] != 0]
+df_pagos = df_pagos[df_pagos["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
+df_pagos["data_referencia"] = pd.to_datetime(df_pagos["data_referencia"])
+
+df_cancelados = df_filtrado.copy()
+df_cancelados = df_cancelados[df_filtrado["status_id"].isin([3, 15])]
+df_cancelados = df_cancelados[df_cancelados["total_pedido"] != 0]
+df_cancelados = df_cancelados[df_cancelados["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
+df_cancelados["data_referencia"] = pd.to_datetime(df_pagos["data_referencia"])
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Total de Pedidos", df_pagos.shape[0])
+with col2:
+    st.metric("Total de Cancelados", df_cancelados.shape[0])
+with col3:
+    st.metric("Total Vendido", formatar_reais(df_pagos["total_pedido"].sum()))
+with col4:
+    st.metric("Total de Cancelados", formatar_reais(df_cancelados["estorno_cancelamento"].sum()))
+
 # Tabela por unidade
 tabela = (
-    df_filtrado.groupby("unidade")
+    df_pagos.groupby("unidade")
     .agg(
         quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
         total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
@@ -69,15 +83,13 @@ tabela["ticket_medio"] = tabela["total_vendido"] / tabela["quantidade"]
 tabela["ticket_medio"] = tabela["ticket_medio"].apply(formatar_reais)
 tabela["total_vendido"] = tabela["total_vendido"].apply(formatar_reais)
 
-st.metric("Total de Pedidos", df_filtrado.shape[0])
-st.metric("Total Vendido", formatar_reais(df_filtrado["total_pedido"].sum()))
 st.subheader("Vendas por Unidade")
 st.dataframe(tabela, use_container_width=True)
 
 # Gráficos
 st.subheader("Gráfico de Pedidos por Unidade e Categoria")
 grafico = (
-    df_filtrado.groupby(["unidade", "categoria"])
+    df_pagos.groupby(["unidade", "categoria"])
     .size()
     .reset_index(name="quantidade")
 )
@@ -95,7 +107,7 @@ st.plotly_chart(fig, use_container_width=True)
 # Gráfico de pedidos por curso venda quantitativa
 st.subheader("Pedidos por Curso Venda")
 grafico2 = (
-    df_filtrado.groupby(["curso_venda", "unidade"])
+    df_pagos.groupby(["curso_venda", "unidade"])
     .size()
     .reset_index(name="quantidade")
 )
@@ -113,10 +125,8 @@ fig2 = px.bar(
 st.plotly_chart(fig2, use_container_width=True)
 
 # Tabela de venda por curso venda
-st.subheader("Faturamento por Curso Venda (Modalidades)")
-
 # Agrupa total vendido por categoria
-valor_pivot = df_filtrado.pivot_table(
+valor_pivot = df_pagos.pivot_table(
     index="curso_venda",
     columns="categoria",
     values="total_pedido",
@@ -125,7 +135,7 @@ valor_pivot = df_filtrado.pivot_table(
 )
 
 # Agrupa quantidade por categoria
-qtd_pivot = df_filtrado.pivot_table(
+qtd_pivot = df_pagos.pivot_table(
     index="curso_venda",
     columns="categoria",
     values="ordem_id",
@@ -149,15 +159,14 @@ tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1).reset_index()
 st.subheader("Vendas por Curso e Categoria (Valor e Quantidade)")
 st.dataframe(tabela_completa, use_container_width=True)
 
-
 # Tabela detalhada de alunos
-tabela2 = df_filtrado[[
+tabela2 = df_pagos[[
     "nome_cliente", "email_cliente", "celular_cliente", "curso_venda", "unidade", "total_pedido"
 ]]
 tabela_alunos = tabela2.copy()
 tabela_alunos["total_pedido"] = tabela_alunos["total_pedido"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-st.subheader("Tabela de Alunos")
+st.subheader("Lista de Alunos")
 st.dataframe(tabela_alunos, use_container_width=True)
 
 # Exportar como Excel
@@ -169,8 +178,33 @@ with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
 buffer.seek(0)
 
 st.download_button(
-    label="📥 Baixar como Excel",
+    label="📥 Lista de Alunos",
     data=buffer,
     file_name="pedidos_detalhados.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
+
+tabela_cancelados = (
+    df_cancelados.groupby("unidade")
+    .agg(
+        quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
+        total_estornado=pd.NamedAgg(column="estorno_cancelamento", aggfunc="sum")
+    )
+    .reset_index()
+    .sort_values("total_estornado", ascending=False)
+)
+total_geral_c = pd.DataFrame({
+    "unidade": ["TOTAL GERAL"],
+    "quantidade": [tabela_cancelados["quantidade"].sum()],
+    "total_estornado": [tabela_cancelados["total_estornado"].sum()]
+})
+
+tabela_com_total_c = pd.concat([tabela_cancelados, total_geral_c], ignore_index=True)
+
+tabela_cancelados["total_estornado"] = tabela_cancelados["total_estornado"].apply(formatar_reais)
+
+tabela_com_total_c["total_estornado"] = tabela_com_total_c["total_estornado"].apply(formatar_reais)
+
+st.subheader("Estornos por Unidade")
+st.dataframe(tabela_com_total_c, use_container_width=True)

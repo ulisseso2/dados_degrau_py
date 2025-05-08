@@ -127,5 +127,5 @@ MIT License - Veja `LICENSE`
 
 ✉️ Contato:
 
-Equipe de Analytics - [ulisses@rce@gmail.com](mailto:ulisses@rce@gmail.com)
+Equipe de Analytics - [ulissesrce@gmail.com](mailto:ulissesrce@gmail.com)
 

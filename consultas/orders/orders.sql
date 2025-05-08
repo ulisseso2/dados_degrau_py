@@ -18,6 +18,7 @@ SELECT
     c.email as email_cliente,
     c.cellphone as celular_cliente,
 
+    COALESCE(o.request_date, o.paid_at) AS data_referencia,
 
     COALESCE(
         v.full_name,
