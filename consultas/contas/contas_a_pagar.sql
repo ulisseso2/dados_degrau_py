@@ -10,7 +10,15 @@ SELECT
   po.installments AS total_de_parcelas,
   CONCAT(pi.installment, '/', po.installments) AS parcelas_de,
   pi.completed AS data_pagamento_parcela,
-
+  COALESCE(pi.total_final, 0) * COALESCE(bxs.percent, 0) / 100 AS valor_corrigido,
+  
+  CASE
+    WHEN pi.completed IS NULL AND pi.date < CURDATE() THEN 'Em Atraso'
+    WHEN pi.completed IS NOT NULL AND pi.completed > pi.date THEN 'Pago Atrasado'
+    WHEN pi.completed IS NOT NULL AND pi.completed <= pi.date THEN 'Pago em dia'
+    ELSE 'A Vencer'
+  END AS situacao,
+  
   -- Status e identificação
   ps.name AS status_parcela,
   po.order_type AS tipo_pedido_compra,

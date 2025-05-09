@@ -21,7 +21,7 @@ df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
 
 # Filtro: data (padrão: Hoje)
 hoje = datetime.today().date()
-periodo = st.date_input("Período de vendas:", [hoje, hoje])
+periodo = st.date_input("Data Pagamento", [hoje, hoje])
 
 # Filtros adicionais recolhidos
 with st.expander("Filtros Avançados: Unidades e Categoria"):
