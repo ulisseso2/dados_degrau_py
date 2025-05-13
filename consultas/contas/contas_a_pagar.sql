@@ -21,6 +21,7 @@ SELECT
   
   -- Status e identificação
   ps.name AS status_parcela,
+  ps.id AS status_id,
   po.order_type AS tipo_pedido_compra,
   po.description AS descricao_pedido_compra,
   pi.purchase_order_id AS compra_id,

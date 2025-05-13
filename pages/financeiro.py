@@ -7,29 +7,30 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from datetime import datetime
+import json
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, JsCode
 import numpy as np
 
-from utils.sql_loader import carregar_dados  # agora usamos a função com cache
+from utils.sql_loader import carregar_dados  # Função com cache
 
 st.title("Dashboard Financeiro")
 
-# ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
+# Carrega os dados com cache
 df = carregar_dados("consultas/contas/contas_a_pagar.sql")
 
+# Filtros globais
 empresas = df["empresa"].dropna().unique().tolist()
 empresa_selecionada = st.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
 df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
 
-
-# Configuração inicial
-
-# Filtro: data (padrão: dia atual)
+# Filtro de período
 hoje = datetime.today().date()
 periodo = st.date_input("Período de vendas:", [hoje, hoje])
 
+# Converter coluna de data
 df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'])
-st.write(f"Tipo da coluna 'data_pagamento_parcela' após conversão: {df['data_pagamento_parcela'].dtype}") # Para verificar a conversão
 
+# Filtros avançados: Unidades
 with st.expander("Filtros Avançados: Unidades"):
     col1, col2 = st.columns(2)
 
@@ -42,51 +43,56 @@ with st.expander("Filtros Avançados: Unidades"):
         unidades_negocio = df_filtrado_estrategica["unidade_negocio"].dropna().unique().tolist()
         unidade_negocio_selecionada = st.multiselect("Selecione a unidade de Negócio:", unidades_negocio, default=unidades_negocio)
 
+# Filtros de categorias, custo e planos
 with st.expander("Filtro Categorias / Custo / Planos"):
-    col1, col2, col3 = st.columns(3)
-    
+    col1, col2 = st.columns(2)
+
     with col1:
-        categorias_pedido_compra = df_filtrado_empresa["categoria_pedido_compra"].dropna().unique().tolist()
-        categoria_pedido_compra_selecionada = st.multiselect("Selecione a categoria:", categorias_pedido_compra, default=categorias_pedido_compra)
+        centros_custos = df_filtrado_empresa["centro_custo"].dropna().unique().tolist()
+        centro_custo_selecionado = st.multiselect("Selecione o Centro de Custo:", centros_custos, default=centros_custos)
+        df_filtrado_centro_custo = df[df["centro_custo"].isin(centro_custo_selecionado)]
+
     
     with col2:
+        categorias_pedido_compra = df_filtrado_centro_custo["categoria_pedido_compra"].dropna().unique().tolist()
+        categoria_pedido_compra_selecionada = st.multiselect("Selecione a categoria:", categorias_pedido_compra, default=categorias_pedido_compra)
+    
+
+with st.expander("Filtro de Contas"):
+    col1, col2 = st.columns(2)
+
+    with col1:
         planos_contas = df_filtrado_empresa["plano_contas"].dropna().unique().tolist()
         plano_contas_selecionado = st.multiselect("Selecione o plano de contas:", planos_contas, default=planos_contas)
-    
-    with col3:
-        # Obtém todas as contas bancárias únicas do DataFrame
+
+    with col2:
         todas_contas = df['conta_bancaria'].dropna().unique().tolist()
         
-        # Inicializa o session_state se não existir
         if "contas_bancarias_selecionadas" not in st.session_state:
             st.session_state.contas_bancarias_selecionadas = todas_contas.copy()
         
-        # Checkbox mestre "Selecionar Todas"
         todas_selecionadas = st.checkbox(
-            "Selecionar Todas", 
+            "Sele calibre Todas", 
             value=len(st.session_state.contas_bancarias_selecionadas) == len(todas_contas)
         )
         
-        # Lógica para selecionar/deselecionar todas
         if todas_selecionadas:
             st.session_state.contas_bancarias_selecionadas = todas_contas.copy()
         else:
             if len(st.session_state.contas_bancarias_selecionadas) == len(todas_contas):
                 st.session_state.contas_bancarias_selecionadas = []
         
-        # Checkboxes individuais para cada conta bancária
         st.write("Selecione as contas bancárias:")
-        cols = st.columns(1)  # Cria 3 colunas para organizar os checkboxes
+        cols = st.columns(1)
         
         for idx, conta in enumerate(todas_contas):
-            with cols[idx % 1]:  # Distribui os checkboxes nas colunas
+            with cols[idx % 1]:
                 checkbox = st.checkbox(
                     conta,
                     value=conta in st.session_state.contas_bancarias_selecionadas,
                     key=f"check_{conta}"
                 )
-                
-                # Atualiza a lista de contas selecionadas
+
                 if checkbox and conta not in st.session_state.contas_bancarias_selecionadas:
                     st.session_state.contas_bancarias_selecionadas.append(conta)
                 elif not checkbox and conta in st.session_state.contas_bancarias_selecionadas:
@@ -94,10 +100,11 @@ with st.expander("Filtro Categorias / Custo / Planos"):
         
         contas_filtradas = st.session_state.contas_bancarias_selecionadas
 
-# Aplicação do filtro no DataFrame (corrigido)
+# Aplicação dos filtros
 data_inicio = pd.to_datetime(periodo[0])
 data_fim = pd.to_datetime(periodo[1]) + pd.Timedelta(days=1)
-
+def formatar_reais(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 df_filtrado = df[
     (df["empresa"].isin(empresa_selecionada)) &
@@ -105,112 +112,166 @@ df_filtrado = df[
     (df["unidade_negocio"].isin(unidade_negocio_selecionada)) &
     (df["categoria_pedido_compra"].isin(categoria_pedido_compra_selecionada)) &
     (df["plano_contas"].isin(plano_contas_selecionado)) &
-    (df["conta_bancaria"].isin(contas_filtradas)) & # Corrigido: removido o df[] extra
+    (df["conta_bancaria"].isin(contas_filtradas)) &
     (df["data_pagamento_parcela"] >= data_inicio) &
     (df["data_pagamento_parcela"] < data_fim)
 ]
 
-st.metric("valor_corrigido", f"R$ {df_filtrado['valor_corrigido'].sum():,.2f}")
+st.metric("Total Gasto no Período", formatar_reais(df_filtrado['valor_corrigido'].sum()))
 
-# 2. Cria a estrutura hierárquica
-niveis = ['centro_custo', 'categoria_pedido_compra', 'descricao_pedido_compra']
-metrica = 'valor_corrigido'
+df_pagos = df_filtrado.copy()
+df_pagos = df_pagos[df_pagos["status_id"] == 4]
 
-def format_currency(value):
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+# Tabela por Centro de Custo
+tabela = (
+    df_pagos.groupby("centro_custo")
+    .agg(
+        valor_corrigido=pd.NamedAgg(column="valor_corrigido", aggfunc="sum")
+    )
+    .reset_index()
+    .sort_values("valor_corrigido", ascending=False)
+)
 
-# 4. Tabela Dinâmica com Hierarquia
-st.title("📊 Tabela Dinâmica Financeira")
+tabela["valor_corrigido_formatado"] = tabela["valor_corrigido"].apply(formatar_reais)
 
-# CSS para estilo de tabela
-st.markdown("""
-<style>
-    .dataframe {
-        width: 100%;
+st.dataframe(
+    tabela[["centro_custo", "valor_corrigido_formatado"]].rename(
+        columns={
+            "centro_custo": "Centro de Custo",
+            "valor_corrigido_formatado": "Total Pago"
+        }
+    ),
+    use_container_width=True
+)
+
+# Tabela por Categoria
+tabela2 = (
+    df_pagos.groupby("categoria_pedido_compra")
+    .agg(
+        valor_corrigido=pd.NamedAgg(column="valor_corrigido", aggfunc="sum")
+    )
+    .reset_index()
+    .sort_values("valor_corrigido", ascending=False)
+)
+
+tabela2["valor_corrigido_formatado"] = tabela2["valor_corrigido"].apply(formatar_reais)
+
+st.dataframe(
+    tabela2[["categoria_pedido_compra", "valor_corrigido_formatado"]].rename(
+        columns={
+            "categoria_pedido_compra": "Categoria",
+            "valor_corrigido_formatado": "Total Pago"
+        }
+    ),
+    use_container_width=True
+)
+
+# Tabela por Histórico
+tabela3 = (
+    df_pagos.groupby("descricao_pedido_compra")
+    .agg(
+        valor_corrigido=pd.NamedAgg(column="valor_corrigido", aggfunc="sum")
+    )
+    .reset_index()
+    .sort_values("valor_corrigido", ascending=False)
+)
+
+tabela3["valor_corrigido_formatado"] = tabela3["valor_corrigido"].apply(formatar_reais)
+
+st.dataframe(
+    tabela3[["descricao_pedido_compra", "valor_corrigido_formatado"]].rename(
+        columns={
+            "descricao_pedido_compra": "Histórico",
+            "valor_corrigido_formatado": "Total Pago"
+        }
+    ),
+    use_container_width=True
+)
+
+tabela4 = (
+    df_pagos.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
+    .agg(
+        valor_corrigido=pd.NamedAgg(column="valor_corrigido", aggfunc="sum")
+    )
+    .reset_index()
+    .sort_values("centro_custo", ascending=False)
+)
+
+tabela4["valor_corrigido_formatado"] = tabela4["valor_corrigido"].apply(formatar_reais)
+
+st.dataframe(
+    tabela4[["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_corrigido_formatado"]].rename(
+        columns={
+            "centro_custo": "Centro de Custo",
+            "categoria_pedido_compra": "Categoria",
+            "descricao_pedido_compra": "Histórico",
+            "valor_corrigido_formatado": "Total Pago"
+        }
+    ),
+    use_container_width=True
+)
+
+
+# Cria a tabela hierárquica (similar à tabela4)
+df_hierarquico = (
+    df_pagos.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
+    .agg(valor_corrigido=("valor_corrigido", "sum"))
+    .reset_index()
+    .sort_values(["centro_custo", "categoria_pedido_compra", "valor_corrigido"], ascending=[True, True, False])
+)
+
+# Formata os valores
+df_hierarquico["valor_formatado"] = df_hierarquico["valor_corrigido"].apply(formatar_reais)
+
+# Configuração da tabela interativa
+gb = GridOptionsBuilder.from_dataframe(
+    df_hierarquico[["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_formatado"]]
+)
+
+# Define a hierarquia
+gb.configure_column("centro_custo", hide=False, rowGroup=True)
+gb.configure_column("categoria_pedido_compra", hide=False, rowGroup=True)
+gb.configure_column("descricao_pedido_compra", hide=False)
+gb.configure_column("valor_formatado", headerName="Valor Pago")
+
+# Configura o agrupamento
+gb.configure_grid_options(
+    groupDefaultExpanded=1,  # Expande apenas o primeiro nível inicialmente
+    autoGroupColumnDef= {
+        "headerName": "Centro de Custo",
+        "field": "centro_custo",
+        "cellRenderer": "agGroupCellRenderer",
+        "cellRendererParams": {
+            "suppressCount": True,
+            "checkbox": False,
+        },
+    },
+    groupDisplayType="groupRows",
+)
+
+# Adiciona estilo condicional
+cellstyle_jscode = JsCode("""
+function(params) {
+    if (params.node.group) {
+        return { 'font-weight': 'bold', 'background-color': '#f0f2f6' };
     }
-    .dataframe th {
-        background-color: #f0f2f6 !important;
-        font-weight: bold !important;
-    }
-    .dataframe tr:nth-child(even) {
-        background-color: #f9f9f9;
-    }
-    .dataframe tr:hover {
-        background-color: #f0f0f0;
-    }
-    .expand-button {
-        background: none;
-        border: none;
-        color: #1f78b4;
-        cursor: pointer;
-        padding: 0;
-        font: inherit;
-    }
-</style>
-""", unsafe_allow_html=True)
+}
+""")
 
-# Função principal para renderizar a tabela
-def render_pivot_table(data):
-    # Agrupa por todos os níveis
-    grouped = data.groupby(niveis)[metrica].sum().unstack(level=[1,2], fill_value=0)
-    
-    # Cria a tabela expandível
-    for centro in grouped.index:
-        # Total do centro de custo
-        total_centro = grouped.loc[centro].sum().sum()
-        
-        # Linha do centro de custo
-        cols = st.columns([3, 2, 3, 2])
-        cols[0].markdown(f"**{centro}**")
-        cols[3].markdown(f"**{format_currency(total_centro)}**")
-        
-        # Verifica se está expandido
-        expanded_centro = st.session_state.get(f"exp_centro_{centro}", False)
-        
-        # Botão de expansão
-        if cols[0].button("▶", key=f"btn_centro_{centro}", help="Expandir categorias"):
-            st.session_state[f"exp_centro_{centro}"] = not expanded_centro
-        
-        if expanded_centro:
-            # Dados para este centro
-            df_centro = data[data['centro_custo'] == centro]
-            
-            # Agrupa por categoria
-            categorias = df_centro.groupby('categoria_pedido_compra')[metrica].sum()
-            
-            for categoria, total_categoria in categorias.items():
-                # Linha da categoria
-                cols = st.columns([3, 2, 3, 2])
-                cols[1].markdown(f"↳ {categoria}")
-                cols[3].markdown(format_currency(total_categoria))
-                
-                # Verifica se está expandido
-                expanded_cat = st.session_state.get(f"exp_cat_{categoria}", False)
-                
-                # Botão de expansão
-                if cols[1].button("▶", key=f"btn_cat_{categoria}", help="Expandir itens"):
-                    st.session_state[f"exp_cat_{categoria}"] = not expanded_cat
-                
-                if expanded_cat:
-                    # Itens detalhados
-                    df_items = df_centro[df_centro['categoria_pedido_compra'] == categoria]
-                    
-                    # Mostra como tabela
-                    st.table(
-                        df_items[['descricao_pedido_compra', metrica]]
-                        .assign(**{metrica: df_items[metrica].apply(format_currency)})
-                        .rename(columns={
-                            'descricao_pedido_compra': 'Descrição',
-                            metrica: 'Valor Corrigido'
-                        })
-                        .set_index('Descrição')
-                    )
+gb.configure_grid_options(getRowStyle=cellstyle_jscode)
 
-# Renderiza a tabela
-render_pivot_table(df_filtrado)
+# Cria a tabela
+st.subheader("Tabela Hierárquica de Gastos")
+grid_options = gb.build()
 
-# 5. Resumo dos filtros
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Filtros Ativos:**")
-st.sidebar.write(f"Empresas: {', '.join(empresa_selecionada) or 'Todas'}")
-st.sidebar.write(f"Período: {periodo[0].strftime('%d/%m/%Y')} a {periodo[1].strftime('%d/%m/%Y')}")
+AgGrid(
+    df_hierarquico,
+    gridOptions=grid_options,
+    height=600,
+    width="100%",
+    theme="streamlit",
+    allow_unsafe_jscode=True,
+    enable_enterprise_modules=True,
+    update_mode="MODEL_CHANGED",
+    fit_columns_on_grid_load=True,
+)
