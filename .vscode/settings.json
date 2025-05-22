@@ -1,0 +1,15 @@
+{
+    "cSpell.words": [
+        "aggrid",
+        "dateutil",
+        "dotenv",
+        "mysql",
+        "numpy",
+        "plotly",
+        "pytz",
+        "sqlalchemy",
+        "streamlit",
+        "tzdata",
+        "xlsxwriter"
+    ]
+}

@@ -8,6 +8,7 @@ import streamlit as st
 import plotly.express as px
 from datetime import datetime
 from utils.sql_loader import carregar_dados  # agora usamos a função com cache
+import plotly.graph_objects as go
 
 st.title("Dashboard Oportunidades")
 
