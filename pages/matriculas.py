@@ -59,14 +59,15 @@ df_cancelados = df_cancelados[df_cancelados["total_pedido"] != 0]
 df_cancelados = df_cancelados[df_cancelados["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
 df_cancelados["data_referencia"] = pd.to_datetime(df_pagos["data_referencia"])
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2 = st.columns(2)
 with col1:
     st.metric("Total de Pedidos", df_pagos.shape[0])
 with col2:
     st.metric("Total de Cancelados", df_cancelados.shape[0])
-with col3:
+col1, col2 = st.columns(2)
+with col1:
     st.metric("Total Vendido", formatar_reais(df_pagos["total_pedido"].sum()))
-with col4:
+with col2:
     st.metric("Total de Cancelados", formatar_reais(df_cancelados["estorno_cancelamento"].sum()))
 
 # Tabela por unidade
