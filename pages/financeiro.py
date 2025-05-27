@@ -162,7 +162,7 @@ if not df_filtrado.empty:
             }
         }
         grid_options["groupDisplayType"] = "groupRow" # Exibe os grupos como linhas
-        grid_options["groupDefaultExpanded"] = 0  # Expande até o primeiro nível
+        grid_options["groupDefaultExpanded"] = 0 # Expande até o primeiro nível
         grid_options["groupIncludeFooter"] = True
         grid_options["groupIncludeTotalFooter"] = True
         
@@ -186,3 +186,47 @@ if not df_filtrado.empty:
             allow_unsafe_jscode=True,
             fit_columns_on_grid_load=True
         )
+   # --- EXPORTAÇÃO PARA EXCEL ---
+import io
+from pandas import ExcelWriter
+    
+    # Cria uma cópia dos dados para exportação (sem formatação)
+tabela_export = tabela_agrupada.copy()
+tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
+    
+    # Cria buffer para o Excel
+buffer = io.BytesIO()
+with ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        # Exporta a tabela principal
+        tabela_export.to_excel(
+            writer, 
+            index=False, 
+            sheet_name='Despesas Detalhadas',
+            columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total"]
+        )
+        
+        # Adiciona uma aba com totais consolidados
+        totais_cc = tabela_export.groupby("centro_custo")["valor_total"].sum().reset_index()
+        totais_cc.to_excel(
+            writer, 
+            index=False, 
+            sheet_name='Totais por Centro Custo'
+        )
+        
+        # Adiciona uma aba com totais por categoria
+        totais_cat = tabela_export.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
+        totais_cat.to_excel(
+            writer, 
+            index=False, 
+            sheet_name='Totais por Categoria'
+        )
+    
+    # Prepara o botão de download
+buffer.seek(0)
+st.download_button(
+        label="📥 Exportar para Excel",
+        data=buffer,
+        file_name=f"despesas_{periodo[0].strftime('%Y%m%d')}_{periodo[1].strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="Clique para baixar os dados em formato Excel com abas detalhadas"
+    )
