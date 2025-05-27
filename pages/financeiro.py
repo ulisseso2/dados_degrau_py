@@ -24,7 +24,7 @@ hoje = datetime.today().date()
 periodo = st.sidebar.date_input("Período de pagamentos:", [hoje.replace(day=1), hoje])
 data_inicio = pd.to_datetime(periodo[0])
 data_fim = pd.to_datetime(periodo[1]) + pd.Timedelta(days=1)
-    
+
       # Filtros avançados
 with st.sidebar.expander("Filtros Avançados"):
         # Unidades
