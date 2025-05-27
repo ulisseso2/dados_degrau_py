@@ -3,35 +3,30 @@ import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
 from st_aggrid.shared import JsCode
 from datetime import datetime
-
+from utils.sql_loader import carregar_dados
 # Função para formatar valores monetários
 def formatar_reais(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
+df = carregar_dados("consultas/contas/contas_a_pagar.sql")
 # Função principal
-def main():
-    # Carrega seus dados reais
-    df = carregar_dados("consultas/contas/contas_a_pagar.sql")
-    
-    # Converte a coluna de data
-    df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'])
+
+df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'])
     
     # --- SEÇÃO DE FILTROS --- (mantendo sua implementação original)
-    st.sidebar.title("Filtros")
-    
-    # Filtros globais
-    empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
+st.sidebar.title("Filtros")
+
+empresas = df["empresa"].dropna().unique().tolist()
+empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
+df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
     
     # Filtro de período
-    hoje = datetime.today().date()
-    periodo = st.sidebar.date_input("Período de pagamentos:", [hoje.replace(day=1), hoje])
-    data_inicio = pd.to_datetime(periodo[0])
-    data_fim = pd.to_datetime(periodo[1]) + pd.Timedelta(days=1)
+hoje = datetime.today().date()
+periodo = st.sidebar.date_input("Período de pagamentos:", [hoje.replace(day=1), hoje])
+data_inicio = pd.to_datetime(periodo[0])
+data_fim = pd.to_datetime(periodo[1]) + pd.Timedelta(days=1)
     
       # Filtros avançados
-    with st.sidebar.expander("Filtros Avançados"):
+with st.sidebar.expander("Filtros Avançados"):
         # Unidades
         unidades_estrategicas = df_filtrado_empresa["unidade_estrategica"].dropna().unique().tolist()
         unidade_estrategica_selecionada = st.multiselect(
@@ -93,7 +88,7 @@ def main():
                 st.session_state.contas_bancarias_selecionadas.remove(conta)
     
     # Aplicar todos os filtros
-    df_filtrado = df[
+df_filtrado = df[
         (df["empresa"].isin(empresa_selecionada)) &
         (df["unidade_estrategica"].isin(unidade_estrategica_selecionada)) &
         (df["unidade_negocio"].isin(unidade_negocio_selecionada)) &
@@ -105,7 +100,7 @@ def main():
     ]
     
     # --- PREPARAÇÃO DOS DADOS PARA A TABELA HIERÁRQUICA ---
-    if not df_filtrado.empty:
+if not df_filtrado.empty:
         # Agrupa os dados conforme sua estrutura original
         tabela_agrupada = (
             df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
@@ -114,10 +109,10 @@ def main():
         )
         
         # Adiciona a coluna formatada
-        tabela_agrupada["valor_formatado"] = tabela_agrupada["valor_total"].apply(formatar_reais)
-        
+        tabela_agrupada["valor_total_formatado"] = tabela_agrupada["valor_total"].apply(formatar_reais)
+
         # --- CONFIGURAÇÃO DA AG-GRID ---
-        gb = GridOptionsBuilder()
+        gb = GridOptionsBuilder.from_dataframe(tabela_agrupada)
         
         # Configura as colunas para a hierarquia
         gb.configure_column(
@@ -140,32 +135,52 @@ def main():
         )
         
         gb.configure_column(
-            field="valor_formatado",
+            field="valor_total",
             header_name="Valor",
             type=["numericColumn"],
-            aggFunc="sum"
+            aggFunc="sum",
+            valueFormatter=JsCode("""
+                function(params) {
+                if (params.value === undefined || params.value === null) return '';
+                return 'R$ ' + params.value.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).replace('.', '#').replace(',', '.').replace('#', ',');
+                
+            }
+            """)
         )
-        
+
         # Configura o renderizador JavaScript para mostrar totais
         js_code = """
-        function(params) { 
-            if (params.node.group) {
-                return params.node.key + ' - Total: ' + params.node.aggData.valor_formatado;
-            }
-            return params.value;
+    function(params) { 
+        if (params.node.group) {
+            // Formata o valor total do grupo
+            const valorTotal = params.node.aggData.valor_total;
+            const valorFormatado = 'R$ ' + valorTotal.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).replace('.', '#').replace(',', '.').replace('#', ',');
+            
+            return params.node.key + ' - ' + params.node.allChildrenCount + ' itens, Total: ' + valorFormatado;
         }
-        """
+        return params.value;
+    }
+    """
         
         # Configurações adicionais da grid
         grid_options = gb.build()
         grid_options["autoGroupColumnDef"] = {
-            "minWidth": 300,
+            "headerName": "Grupo/Item",
+            "minWidth": 350,
+            "cellRenderer": "agGroupCellRenderer",
             "cellRendererParams": {
-                "suppressCount": True,
+                "suppressCount": False,
                 "innerRenderer": JsCode(js_code)
             }
         }
-        grid_options["groupDefaultExpanded"] = 1  # Expande até o primeiro nível
+        grid_options["groupDisplayType"] = "groupRow" # Exibe os grupos como linhas
+        grid_options["groupDefaultExpanded"] = 0  # Expande até o primeiro nível
         grid_options["groupIncludeFooter"] = True
         grid_options["groupIncludeTotalFooter"] = True
         
@@ -189,69 +204,3 @@ def main():
             allow_unsafe_jscode=True,
             fit_columns_on_grid_load=True
         )
-        
-        # --- TOTAIS CONSOLIDADOS ---
-        st.subheader("Totais Consolidados")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Por Centro de Custo**")
-            totais_cc = tabela_agrupada.groupby("centro_custo")["valor_total"].sum().reset_index()
-            totais_cc["Total"] = totais_cc["valor_total"].apply(formatar_reais)
-            st.dataframe(
-                totais_cc[["centro_custo", "Total"]].sort_values("valor_total", ascending=False),
-                hide_index=True,
-                use_container_width=True
-            )
-        
-        with col2:
-            st.markdown("**Por Categoria**")
-            totais_cat = tabela_agrupada.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
-            totais_cat["Total"] = totais_cat["valor_total"].apply(formatar_reais)
-            st.dataframe(
-                totais_cat.sort_values("valor_total", ascending=False),
-                hide_index=True,
-                use_container_width=True
-            )
-        
-        # --- GRÁFICO DE VISUALIZAÇÃO ---
-        st.subheader("Distribuição das Despesas")
-        
-        try:
-            import plotly.express as px
-            
-            # Gráfico de treemap
-            fig = px.treemap(
-                tabela_agrupada,
-                path=['centro_custo', 'categoria_pedido_compra'],
-                values='valor_total',
-                color='centro_custo',
-                title='Distribuição por Centro de Custo e Categoria'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Gráfico de barras
-            fig2 = px.bar(
-                totais_cc.sort_values("valor_total", ascending=False),
-                x='centro_custo',
-                y='valor_total',
-                title='Total por Centro de Custo',
-                labels={'valor_total': 'Valor Total', 'centro_custo': 'Centro de Custo'}
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-            
-        except ImportError:
-            st.warning("Instale plotly (pip install plotly) para ver as visualizações gráficas.")
-    
-    else:
-        st.warning("Nenhuma despesa encontrada com os filtros selecionados.")
-
-# Substitua esta função pela sua implementação real de carregamento de dados
-def carregar_dados(query_path):
-    # Implemente aqui sua função que carrega os dados do SQL
-    # Esta é apenas uma função placeholder
-    return pd.DataFrame()
-
-if __name__ == "__main__":
-    main()

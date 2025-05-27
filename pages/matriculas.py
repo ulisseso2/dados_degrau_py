@@ -63,12 +63,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.metric("Total de Pedidos", df_pagos.shape[0])
 with col2:
-    st.metric("Total de Cancelados", df_cancelados.shape[0])
-col1, col2 = st.columns(2)
-with col1:
     st.metric("Total Vendido", formatar_reais(df_pagos["total_pedido"].sum()))
-with col2:
-    st.metric("Total de Cancelados", formatar_reais(df_cancelados["estorno_cancelamento"].sum()))
+
 
 # Tabela por unidade
 tabela = (
@@ -186,26 +182,3 @@ st.download_button(
 )
 
 
-tabela_cancelados = (
-    df_cancelados.groupby("unidade")
-    .agg(
-        quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
-        total_estornado=pd.NamedAgg(column="estorno_cancelamento", aggfunc="sum")
-    )
-    .reset_index()
-    .sort_values("total_estornado", ascending=False)
-)
-total_geral_c = pd.DataFrame({
-    "unidade": ["TOTAL GERAL"],
-    "quantidade": [tabela_cancelados["quantidade"].sum()],
-    "total_estornado": [tabela_cancelados["total_estornado"].sum()]
-})
-
-tabela_com_total_c = pd.concat([tabela_cancelados, total_geral_c], ignore_index=True)
-
-tabela_cancelados["total_estornado"] = tabela_cancelados["total_estornado"].apply(formatar_reais)
-
-tabela_com_total_c["total_estornado"] = tabela_com_total_c["total_estornado"].apply(formatar_reais)
-
-st.subheader("Estornos por Unidade")
-st.dataframe(tabela_com_total_c, use_container_width=True)
