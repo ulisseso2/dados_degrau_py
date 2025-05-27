@@ -150,23 +150,6 @@ if not df_filtrado.empty:
             }
             """)
         )
-
-        # Configura o renderizador JavaScript para mostrar totais
-        js_code = """
-    function(params) { 
-        if (params.node.group) {
-            // Formata o valor total do grupo
-            const valorTotal = params.node.aggData.valor_total;
-            const valorFormatado = 'R$ ' + valorTotal.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }).replace('.', '#').replace(',', '.').replace('#', ',');
-            
-            return params.node.key + ' - ' + params.node.allChildrenCount + ' itens, Total: ' + valorFormatado;
-        }
-        return params.value;
-    }
-    """
         
         # Configurações adicionais da grid
         grid_options = gb.build()
@@ -176,7 +159,6 @@ if not df_filtrado.empty:
             "cellRenderer": "agGroupCellRenderer",
             "cellRendererParams": {
                 "suppressCount": False,
-                "innerRenderer": JsCode(js_code)
             }
         }
         grid_options["groupDisplayType"] = "groupRow" # Exibe os grupos como linhas

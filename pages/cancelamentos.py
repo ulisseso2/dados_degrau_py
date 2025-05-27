@@ -185,7 +185,6 @@ fig3.update_traces(
 
 st.plotly_chart(fig3, use_container_width=True)
 
-
 # Tabela de Cencelamentos por Unidade e Categoria
 # Agrupa total vendido por categoria
 valor_pivot = df_cancelados.pivot_table(
@@ -220,10 +219,6 @@ tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1).reset_index()
 # Mostra a tabela final
 st.subheader("Cancelamento por Unidade e Categoria (Valor e Quantidade)")
 st.dataframe(tabela_completa, use_container_width=True)
-
-
-
-
 
 # Tabela detalhada de Cancelamento
 tabela2 = df_cancelados[[
