@@ -10,11 +10,11 @@ def carregar_sql(caminho_arquivo):
     else:
         raise FileNotFoundError(f"Arquivo {caminho} não encontrado.")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600)  # Cache por 10 minutos (600 segundos)
 def carregar_dados(caminho_sql):
     """
     Carrega os dados do banco executando o SQL de um arquivo.
-    O resultado é armazenado em cache por 5 minutos (300 segundos).
+    O resultado é armazenado em cache por 10 minutos (600 segundos).
     """
     query = carregar_sql(caminho_sql)
     conexao = conectar_mysql()
@@ -25,3 +25,4 @@ def carregar_dados(caminho_sql):
     else:
         st.error("Erro ao conectar ao banco de dados.")
         return pd.DataFrame()
+

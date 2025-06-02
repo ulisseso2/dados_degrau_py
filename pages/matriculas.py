@@ -104,20 +104,25 @@ st.plotly_chart(fig, use_container_width=True)
 # Gráfico de pedidos por curso venda quantitativa
 st.subheader("Pedidos por Curso Venda")
 grafico2 = (
-    df_pagos.groupby(["curso_venda", "unidade"])
-    .size()
-    .reset_index(name="quantidade")
+    df_pagos.groupby(["curso_venda"])
+    .agg({'total_pedido': 'sum'})  # Forma explícita de agregação
+    .reset_index()
 )
+
+grafico2['valor_numerico'] = grafico2['total_pedido']
+grafico2["total_formatado"] = grafico2["valor_numerico"].apply(formatar_reais)
+max_value = float(grafico2["valor_numerico"].max())
+
 fig2 = px.bar(
     grafico2,
-    x="quantidade",
+    x="total_pedido",
     y="curso_venda",
-    color="unidade",
     title="Pedidos por Curso (Detalhado por Unidade)",
-    labels={"quantidade": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
+    labels={"total_pedido": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
     orientation="h",
     barmode="stack",
-    text_auto=True,
+    text="total_formatado",  # Use o texto formatado aqui
+    range_x=[0, max_value * 1.1]  # Agora pode multiplicar pois max_value é float
 )
 st.plotly_chart(fig2, use_container_width=True)
 
@@ -149,12 +154,24 @@ for col in valor_formatado.columns:
 valor_formatado.columns = [f"{col} (Valor)" for col in valor_formatado.columns]
 qtd_pivot.columns = [f"{col} (Qtd)" for col in qtd_pivot.columns]
 
-# Junta horizontalmente (eixo=1)
-tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1).reset_index()
+# Junta horizontalmente
+tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1)
+
+# Adiciona total geral de valor (convertendo novamente para float)
+valor_total = valor_pivot.sum(axis=1)
+tabela_completa["Total Geral (Valor)"] = valor_total.apply(formatar_reais)
+
+# Adiciona total geral de quantidade
+qtd_total = qtd_pivot.sum(axis=1)
+tabela_completa["Total Geral (Qtd)"] = qtd_total
+
+# Reset index para mostrar curso_venda como coluna
+tabela_completa = tabela_completa.reset_index()
 
 # Mostra a tabela final
 st.subheader("Vendas por Curso e Categoria (Valor e Quantidade)")
 st.dataframe(tabela_completa, use_container_width=True)
+
 
 # Tabela detalhada de alunos
 tabela2 = df_pagos[[
