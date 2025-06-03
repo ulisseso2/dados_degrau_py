@@ -17,7 +17,6 @@ df = carregar_dados("consultas/oportunidades/oportunidades.sql")
 
 # Pré-filtros
 df["criacao"] = pd.to_datetime(df["criacao"])
-df = df[~df["unidade"].isin(["EAD", "Meier", "Copacabana", "Caxias", "Bonsucesso"])]
 
 # Filtro: empresa
 empresas = df["empresa"].dropna().unique().tolist()

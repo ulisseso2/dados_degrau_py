@@ -175,7 +175,7 @@ st.dataframe(tabela_completa, use_container_width=True)
 
 # Tabela detalhada de alunos
 tabela2 = df_pagos[[
-    "nome_cliente", "email_cliente", "celular_cliente", "curso_venda", "unidade", "total_pedido"
+    "nome_cliente", "email_cliente", "celular_cliente", "curso_venda", "unidade", "total_pedido", "data_referencia"
 ]]
 tabela_alunos = tabela2.copy()
 tabela_alunos["total_pedido"] = tabela_alunos["total_pedido"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
