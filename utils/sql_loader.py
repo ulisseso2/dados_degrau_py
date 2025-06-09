@@ -10,7 +10,7 @@ def carregar_sql(caminho_arquivo):
     else:
         raise FileNotFoundError(f"Arquivo {caminho} não encontrado.")
 
-@st.cache_data(ttl=600)  # Cache por 10 minutos (600 segundos)
+@st.cache_data(ttl=4500)  # Cache por 10 minutos (600 segundos)
 def carregar_dados(caminho_sql):
     """
     Carrega os dados do banco executando o SQL de um arquivo.
