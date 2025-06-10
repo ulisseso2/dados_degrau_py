@@ -10,19 +10,23 @@ def carregar_sql(caminho_arquivo):
     else:
         raise FileNotFoundError(f"Arquivo {caminho} não encontrado.")
 
-@st.cache_data(ttl=600)  # Cache por 10 minutos (600 segundos)
+@st.cache_data(ttl=600)
 def carregar_dados(caminho_sql):
     """
     Carrega os dados do banco executando o SQL de um arquivo.
-    O resultado é armazenado em cache por 10 minutos (600 segundos).
+    Usa um engine do SQLAlchemy para a conexão, como recomendado pelo pandas.
     """
     query = carregar_sql(caminho_sql)
-    conexao = conectar_mysql()
-    if conexao:
-        df = pd.read_sql(query, conexao)
-        conexao.close()
-        return df
+    engine = conectar_mysql() # Agora recebe um engine
+    
+    if engine:
+        try:
+            # pd.read_sql lida com o engine, abrindo e fechando a conexão
+            df = pd.read_sql(query, engine)
+            return df
+        except Exception as e:
+            st.error(f"Erro ao executar a consulta: {e}")
+            return pd.DataFrame()
     else:
         st.error("Erro ao conectar ao banco de dados.")
         return pd.DataFrame()
-
