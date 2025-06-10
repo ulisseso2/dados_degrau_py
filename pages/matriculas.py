@@ -9,7 +9,8 @@ import plotly.express as px
 from datetime import datetime
 from utils.sql_loader import carregar_dados  # agora usamos a função com cache
 
-st.title("Dashboard de Matrículas por Unidade")
+st.set_page_config(layout="wide")
+st.title("🎓 Dashboard de Matrículas por Unidade")
 
 # ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
 df = carregar_dados("consultas/orders/orders.sql")

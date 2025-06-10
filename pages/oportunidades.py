@@ -10,23 +10,26 @@ from datetime import datetime
 from utils.sql_loader import carregar_dados  # agora usamos a função com cache
 import plotly.graph_objects as go
 
-st.title("Dashboard Oportunidades")
+TIMEZONE = 'America/Sao_Paulo'
+
+st.title("🎯 Dashboard Oportunidades")
 
 # ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
 df = carregar_dados("consultas/oportunidades/oportunidades.sql")
 
 # Pré-filtros
-df["criacao"] = pd.to_datetime(df["criacao"])
+df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
 
 # Filtro: empresa
 empresas = df["empresa"].dropna().unique().tolist()
-empresa_selecionada = st.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
+empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
 df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
 
 # Filtro: data (padrão: dia atual)
-hoje = datetime.today().date()
-periodo = st.date_input("Período de vendas:", [hoje, hoje])
-
+hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
+periodo = st.sidebar.date_input(
+    "Período de criação:", [hoje_aware, hoje_aware], key="date_oportunidades"
+)
 
 # Filtros adicionais recolhidos
 with st.expander("Filtros Avançados: Unidades, Etapas, Modalidade e H. Ligar"):
@@ -49,8 +52,8 @@ with st.expander("Filtros Avançados: Unidades, Etapas, Modalidade e H. Ligar"):
         h_ligar_selecionada = st.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
 try:
-    data_inicio = pd.to_datetime(periodo[0])
-    data_fim = pd.to_datetime(periodo[1]) + pd.Timedelta(days=1)
+    data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
+    data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
 except IndexError:
     # Caso o usuário limpe o campo de data, evita o erro
     st.warning("Por favor, selecione um período de datas.")
@@ -78,10 +81,9 @@ if h_ligar_selecionada:
 
 # Filtro de data sempre aplicado
 df_filtrado = df_filtrado[
-    (df_filtrado["criacao"] >= data_inicio) &
-    (df_filtrado["criacao"] < data_fim)
+    (df_filtrado["criacao"] >= data_inicio_aware) &
+    (df_filtrado["criacao"] < data_fim_aware)
 ]
-
 
 st.metric("Total de Oportunidades", df_filtrado.shape[0])
 
