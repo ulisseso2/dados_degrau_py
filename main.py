@@ -29,13 +29,20 @@ PAGES = {
 
 # --- Função para obter o email do usuário ---
 def get_user_email():
-    """Retorna o email do usuário logado ou um email de teste para desenvolvimento local."""
-    # st.user.email SÓ FUNCIONA QUANDO O APP ESTÁ DEPLOYADO no Streamlit Cloud
-    try:
-        return st.user.email
-    except AttributeError:
-        # Para teste local, retorna o primeiro email da lista de acesso
-        return list(ACCESS_CONTROL.keys())[0]
+    """
+    Retorna o email do usuário logado de forma segura.
+    Se não estiver em produção ou o usuário não estiver logado,
+    retorna um email de teste.
+    """
+    # hasattr() checa de forma segura se o atributo 'user' existe em 'st'
+    if hasattr(st, 'user'):
+        # Se existir, verificamos se o email não é nulo
+        if st.user and st.user.email:
+            return st.user.email
+    
+    # Se qualquer uma das checagens acima falhar, estamos em modo local
+    # ou o usuário não está logado. Retornamos o email de teste.
+    return list(ACCESS_CONTROL.keys())[0]
 
 # =====================================================================
 # LÓGICA PRINCIPAL DO APP
