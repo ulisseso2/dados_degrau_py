@@ -24,8 +24,6 @@ def run_page():
     data_minima_aware = pd.Timestamp('2024-01-01', tz=TIMEZONE)
     df_filtrado_empresa = df_filtrado_empresa[df_filtrado_empresa['criacao'] >= data_minima_aware]
 
-    hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-
     min_date_para_filtro = df_filtrado_empresa['criacao'].min().date()
     max_date_para_filtro = df_filtrado_empresa['criacao'].max().date()
 
