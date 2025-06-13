@@ -98,8 +98,13 @@ def run_page():
             contas_selecionadas = st.multiselect("Contas Bancárias:", todas_contas)
 
     # --- Aplicação Final dos Filtros ---
-    data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
-    data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    try:
+            data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
+            data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    except IndexError:
+            # Caso o usuário limpe o campo de data, evita o erro
+            st.warning("Por favor, selecione um período de datas.")
+            st.stop() # Interrompe a execução para evitar erros abaixo
 
     df_filtrado = df[
         (df["empresa"].isin(empresa_selecionada)) &

@@ -32,6 +32,13 @@ def run_page():
     periodo = st.sidebar.date_input(
         "Período de criação:", [hoje_aware, hoje_aware], key="date_oportunidades"
     )
+    try:
+        data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
+        data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    except IndexError:
+        # Caso o usuário limpe o campo de data, evita o erro
+        st.warning("Por favor, selecione um período de datas.")
+        st.stop() # Interrompe a execução para evitar erros abaixo
 
     # Filtros adicionais recolhidos
     with st.expander("Filtros Avançados: Unidades, Etapas, Modalidade e H. Ligar"):
@@ -52,14 +59,6 @@ def run_page():
         with col4:
             hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
             h_ligar_selecionada = st.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
-
-    try:
-        data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
-        data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
-    except IndexError:
-        # Caso o usuário limpe o campo de data, evita o erro
-        st.warning("Por favor, selecione um período de datas.")
-        st.stop() # Interrompe a execução para evitar erros abaixo
 
     # 2. Inicia com o DataFrame completo
     df_filtrado = df
