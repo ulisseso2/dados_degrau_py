@@ -335,3 +335,66 @@ def run_page():
     tabela_campanha_origens = tabela_campanha_origens.sort_values("Total (Qtd)", ascending=False)
 
     st.dataframe(tabela_campanha_origens, use_container_width=True)
+
+
+        # ==============================================================================
+    # NOVA ANÁLISE: DESEMPENHO DE CONCURSOS POR UNIDADE E MODALIDADE
+    # ==============================================================================
+    st.divider()
+    st.subheader("Análise de Concursos por Unidade e Modalidade")
+
+    # --- 1. IDENTIFICAR OS TOP 15 CONCURSOS do período já filtrado ---
+    # Usamos o df_filtrado que já contém os filtros da sidebar (data, empresa, etc.)
+    if not df_filtrado.empty:
+        top_15_concursos_list = df_filtrado['concurso'].value_counts().nlargest(15).index.tolist()
+
+        # --- 2. CRIAR O FILTRO INTERATIVO para o usuário ---
+        st.markdown("Selecione os concursos para análise:")
+        concursos_selecionados = st.multiselect(
+            label="Escolha um ou mais dos Top 15 concursos do período:",
+            options=top_15_concursos_list,
+            # Por padrão, seleciona os 5 primeiros da lista
+            default=top_15_concursos_list[:5], 
+            label_visibility="collapsed"
+        )
+
+        if not concursos_selecionados:
+            st.warning("Por favor, selecione pelo menos um concurso para gerar a análise.")
+            st.stop()
+
+        # --- 3. PREPARAR OS DADOS para o gráfico com base na seleção ---
+        # Filtra o DataFrame para conter apenas os concursos que o usuário selecionou
+        df_para_grafico = df_filtrado[df_filtrado['concurso'].isin(concursos_selecionados)]
+
+        # Agrupa os dados para obter a contagem por concurso, unidade e modalidade
+        df_grafico_final = df_para_grafico.groupby(['concurso', 'unidade']) \
+                                        .agg(Quantidade=('oportunidade', 'count')).reset_index()
+
+        # --- 4. CRIAR O GRÁFICO DE BARRAS FACETADO ---
+        if not df_grafico_final.empty:
+            # Ordena os concursos pelo total de oportunidades para um gráfico mais limpo
+            ordem_concursos = df_grafico_final.groupby('concurso')['Quantidade'].sum().sort_values(ascending=True).index
+
+            fig_concurso_detalhado = px.bar(
+                df_grafico_final,
+                y='concurso',
+                x='Quantidade',
+                orientation='h',
+                text='Quantidade',
+                # A "mágica" acontece aqui: cria um gráfico para cada unidade
+                facet_row='unidade', 
+                labels={'Quantidade': 'Nº de Oportunidades', 'concurso': 'Concurso', 'unidade': 'Unidade'},
+                title='Oportunidades por Concurso e Unidade',
+                category_orders={'concurso': ordem_concursos} # Aplica a ordenação
+            )
+            
+            # Aprimora o layout para remover os títulos repetidos do eixo Y e ajustar a altura
+            fig_concurso_detalhado.update_yaxes(title_text=None) # Remove o título "concurso" de cada sub-gráfico
+            fig_concurso_detalhado.update_layout(height=max(600, len(df_grafico_final['unidade'].unique()) * 200)) # Ajusta a altura dinamicamente
+
+            st.plotly_chart(fig_concurso_detalhado, use_container_width=True)
+        else:
+            st.info("Não há dados para os concursos selecionados.")
+
+    else:
+        st.warning("Não há dados no período selecionado para gerar esta análise.")
