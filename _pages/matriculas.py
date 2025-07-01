@@ -27,6 +27,19 @@ def run_page():
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date() 
     periodo = st.sidebar.date_input("Data Pagamento", [hoje_aware, hoje_aware])
 
+    # Filtro: status (padrão: "Pago")
+    status_list = df["status"].dropna().unique().tolist()
+
+    default_status_name = []
+    if 2 in df['status_id'].values:
+        default_status_name = df[df['status_id'] == 2]['status'].unique().tolist()
+
+    status_selecionado = st.sidebar.multiselect(
+        "Selecione o status do pedido:", 
+        status_list, 
+        default=default_status_name
+    )
+
     try:
         data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
         data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
@@ -35,17 +48,24 @@ def run_page():
         st.warning("👈 Por favor, selecione um período de datas na barra lateral para exibir a análise.")
         st.stop()
 
-    # Filtros adicionais recolhidos
-    with st.expander("Filtros Avançados: Unidades e Categoria"):
-        col1, col2 = st.columns(2)
 
-        with col1:
-            unidades = df_filtrado_empresa["unidade"].dropna().unique().tolist()
-            unidade_selecionada = st.multiselect("Selecione a unidade:", unidades, default=unidades)
+    st.sidebar.subheader("Filtro de Categoria")
+    categorias_disponiveis = df_filtrado_empresa['categoria'].str.split(', ').explode().str.strip().dropna().unique().tolist()
 
-        with col2:
-            categorias = df_filtrado_empresa["categoria"].dropna().unique().tolist()
-            categoria_selecionada = st.multiselect("Selecione a categoria:", categorias, default=categorias)
+    categoria_selecionada = st.sidebar.multiselect(
+        "Selecione a(s) categoria(s):",
+        options=sorted(categorias_disponiveis),
+        default=["Curso Presencial", "Curso Live", "Passaporte"]
+    )
+
+    # O filtro de Unidades agora fica dentro de seu próprio expander
+    with st.sidebar.expander("Filtrar por Unidade"):
+        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique())
+        unidade_selecionada = st.multiselect(
+            "Selecione a(s) unidade(s):", 
+            unidades_list, 
+            default=unidades_list
+        )
 
     # Aplica filtros finais
     df_filtrado = df[
@@ -53,34 +73,26 @@ def run_page():
         (df["unidade"].isin(unidade_selecionada)) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df["data_referencia"] >= data_inicio_aware) &
-        (df["data_referencia"] < data_fim_aware)
+        (df["data_referencia"] < data_fim_aware) &
+        (df["status"].isin(status_selecionado)) &
+        (df["total_pedido"] != 0)
     ]
 
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    # Pré-filtros Pago > Não grátis > Apenas Passaporte, Live e Presencial e Data de PAGAMENTO
-    df_pagos = df_filtrado.copy()
-    df_pagos = df_pagos[df_pagos["status_id"] == 2]
-    df_pagos = df_pagos[df_pagos["total_pedido"] != 0]
-    df_pagos = df_pagos[df_pagos["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
- 
-    df_cancelados = df_filtrado.copy()
-    df_cancelados = df_cancelados[df_filtrado["status_id"].isin([3, 15])]
-    df_cancelados = df_cancelados[df_cancelados["total_pedido"] != 0]
-    df_cancelados = df_cancelados[df_cancelados["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
 
     # Tabela de resumo
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total de Pedidos", df_pagos.shape[0])
+        st.metric("Total de Pedidos", df_filtrado.shape[0])
     with col2:
-        st.metric("Total Vendido", formatar_reais(df_pagos["total_pedido"].sum()))
+        st.metric("Total Vendido", formatar_reais(df_filtrado["total_pedido"].sum()))
 
     # Tabela por unidade
     tabela = (
-        df_pagos.groupby("unidade")
+        df_filtrado.groupby("unidade")
         .agg(
             quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
             total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
@@ -98,7 +110,7 @@ def run_page():
     # Gráfico de pedidos por unidade e categoria
     st.subheader("Gráfico de Pedidos por Unidade e Categoria")
     grafico = (
-        df_pagos.groupby(["unidade", "categoria"])
+        df_filtrado.groupby(["unidade", "categoria"])
         .size()
         .reset_index(name="quantidade")
     )
@@ -117,7 +129,7 @@ def run_page():
     # Gráfico de pedidos por curso venda quantitativa
     st.subheader("Pedidos por Curso Venda")
     grafico2 = (
-        df_pagos.groupby(["curso_venda"])
+        df_filtrado.groupby(["curso_venda"])
         .agg({'total_pedido': 'sum'})
         .reset_index()
     )
@@ -141,7 +153,7 @@ def run_page():
 
     # Tabela de venda por curso venda
     # Agrupa total vendido por categoria
-    valor_pivot = df_pagos.pivot_table(
+    valor_pivot = df_filtrado.pivot_table(
         index="curso_venda",
         columns="categoria",
         values="total_pedido",
@@ -150,7 +162,7 @@ def run_page():
     )
 
     # Agrupa quantidade por categoria
-    qtd_pivot = df_pagos.pivot_table(
+    qtd_pivot = df_filtrado.pivot_table(
         index="curso_venda",
         columns="categoria",
         values="ordem_id",
@@ -185,7 +197,7 @@ def run_page():
     st.dataframe(tabela_completa, use_container_width=True)
 
     # --- Tabela detalhada de alunos ---
-    tabela_base = df_pagos[[
+    tabela_base = df_filtrado[[
         "nome_cliente", "email_cliente", "celular_cliente", "curso_venda", "unidade", "total_pedido", "data_referencia"
     ]]
 
