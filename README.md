@@ -11,7 +11,7 @@ Ferramenta de Business Intelligence para análise de performance comercial e fin
 
 ## 📌 Sobre o Projeto
 
-Este projeto oferece um dashboard interativo e seguro que centraliza análises de dados cruciais para a tomada de decisão estratégica. A aplicação conta com um sistema de autenticação próprio, garantindo que diferentes perfis de usuário (vendas, financeiro, diretoria) tenham acesso apenas aos relatórios pertinentes às suas funções.
+Este projeto oferece um dashboard interativo e seguro qsue centraliza análises de dados cruciais para a tomada de decisão estratégica. A aplicação conta com um sistema de autenticação próprio, garantindo que diferentes perfis de usuário (vendas, financeiro, diretoria) tenham acesso apenas aos relatórios pertinentes às suas funções.
 
 ## ✨ Funcionalidades Principais
 
