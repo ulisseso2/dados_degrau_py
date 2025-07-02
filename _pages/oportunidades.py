@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from datetime import datetime
-from utils.sql_loader import carregar_dados  # agora usamos a função com cache
+from utils.sql_loader import carregar_dados
 import plotly.graph_objects as go
 
 def run_page():
@@ -16,7 +16,6 @@ def run_page():
 
     st.title("🎯 Dashboard Oportunidades")
 
-    # ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
     df = carregar_dados("consultas/oportunidades/oportunidades.sql")
 
     # Pré-filtros
@@ -253,7 +252,6 @@ def run_page():
             'categoryarray': ordem_categorias
         }
     )
-    # --- FIM DA MUDANÇA ---
 
     fig_top_n.update_traces(textposition='outside', marker_color='#457B9D')
 
@@ -293,7 +291,6 @@ def run_page():
     tabela_concurso_origens = tabela_concurso_origens.sort_values("Total (Qtd)", ascending=False)
 
     st.dataframe(tabela_concurso_origens, use_container_width=True)
-
 
     # Gráfico de barras de donos da oportunidade
     st.subheader("Oportunidades por Dono")
@@ -337,7 +334,7 @@ def run_page():
     st.dataframe(tabela_campanha_origens, use_container_width=True)
 
 
-        # ==============================================================================
+    # ==============================================================================
     # NOVA ANÁLISE: DESEMPENHO DE CONCURSOS POR UNIDADE E MODALIDADE
     # ==============================================================================
     st.divider()

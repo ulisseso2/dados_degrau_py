@@ -36,7 +36,7 @@ def run_page():
         # Adicionamos 1 dia ao fim e usamos '<' para incluir o dia final inteiro
         data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
 
-        # --- PASSO D: Filtrar o DataFrame usando os Timestamps 'aware' ---
+        # Filtrar o DataFrame usando os Timestamps 'aware'
         df_filtrado = df_filtrado_empresa[
             (df_filtrado_empresa['criacao'] >= data_inicio_aware) & 
             (df_filtrado_empresa['criacao'] < data_fim_aware)
@@ -45,7 +45,7 @@ def run_page():
         # Se o usuário limpar o filtro de data, usamos o DataFrame completo
         df_filtrado = df.copy()
 
-    # --- INÍCIO DA ANÁLISE MENSAL CORRIGIDA ---
+    # --- INÍCIO DA ANÁLISE MENSAL
     st.header("Análise Mensal de Oportunidades")
     st.markdown("Comparativo do desempenho mensal e a tendência ao longo do tempo.")
 
@@ -102,7 +102,7 @@ def run_page():
 
     st.divider()
 
-    # --- Gráfico de Barras Mensal (continua igual) ---
+    # --- Gráfico de Barras Mensal ---
     st.subheader("Evolução Mensal de Oportunidades")
     df_mensal = df_filtrado.groupby(df_filtrado['criacao'].dt.tz_convert(None).dt.to_period('M')).agg(
         Quantidade=('oportunidade', 'count')
@@ -138,7 +138,6 @@ def run_page():
     )
 
     if data_final_selecionada:
-        # --- 2. PREPARAÇÃO DOS DADOS PARA A ANÁLISE ---
         # Define a janela de 7 dias selecionada pelo usuário
         data_fim_janela = pd.Timestamp(data_final_selecionada, tz=TIMEZONE)
         data_inicio_janela = data_fim_janela - pd.Timedelta(days=6)

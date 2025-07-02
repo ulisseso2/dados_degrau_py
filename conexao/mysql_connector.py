@@ -1,5 +1,4 @@
 # conexao/mysql_connector.py - Versão Híbrida (st.secrets + .env)
-
 import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
@@ -18,7 +17,6 @@ def conectar_mysql():
         # Tenta usar as credenciais do Streamlit Secrets (para produção)
         creds = st.secrets["database"]
     
-    # AQUI ESTÁ A CORREÇÃO: Capturamos o erro específico do Streamlit
     except st.errors.StreamlitAPIException:
         # Se falhar (estamos localmente), usa as variáveis de ambiente do .env
         creds = {

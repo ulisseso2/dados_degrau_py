@@ -34,14 +34,11 @@ def run_page():
     if 2 in df['status_id'].values:
         default_status_name = df[df['status_id'].isin ([2, 3, 14, 15])]['status'].unique().tolist()
 
-
     status_selecionado = st.sidebar.multiselect(
         "Selecione o status do pedido:", 
         status_list, 
         default=default_status_name
     )
-
-    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]
 
     try:
         data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
@@ -61,25 +58,19 @@ def run_page():
         default=["Curso Presencial", "Curso Live", "Passaporte"]
     )
 
-    # O filtro de Unidades agora fica dentro de seu próprio expander
-    with st.sidebar.expander("Filtrar por Unidade"):
-        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique())
-        unidade_selecionada = st.multiselect(
-            "Selecione a(s) unidade(s):", 
-            unidades_list, 
-            default=unidades_list
-        )
 
     # Aplica filtros finais
     df_filtrado = df[
         (df["empresa"].isin(empresa_selecionada)) &
-        (df["unidade"].isin(unidade_selecionada)) &
+        (df["unidade"] == "Madureira") &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df["data_pagamento"] >= data_inicio_aware) &
         (df["data_pagamento"] < data_fim_aware) &
         (df["status"].isin(status_selecionado)) &
         (df["total_pedido"] != 0)
     ]
+
+    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]
 
     # Função para formatar valores em reais
     def formatar_reais(valor):
@@ -203,7 +194,7 @@ def run_page():
 
     # --- Tabela detalhada de alunos ---
     tabela_base = df_filtrado[[
-        "nome_cliente", "email_cliente", "celular_cliente","status", "curso_venda", "unidade", "total_pedido", "data_pagamento"
+        "nome_cliente", "email_cliente", "celular_cliente", "status", "curso_venda", "unidade", "total_pedido", "data_pagamento"
     ]]
 
     # Cria a VERSÃO PARA EXIBIÇÃO na tela (com R$ formatado)

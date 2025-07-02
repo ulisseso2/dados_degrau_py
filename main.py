@@ -1,14 +1,10 @@
-# =====================================================================
-# main.py - Versão Final com Login Seguro e Roteador Dinâmico
-# =====================================================================
-
 import streamlit as st
 import os
 import json
 import ast
 
 # Importa os módulos de cada página da aplicação
-from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas
+from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, madureira
 
 # Configuração da página (deve ser o primeiro comando Streamlit)
 st.set_page_config(layout="wide", page_title="Dashboard Seducar")
@@ -24,11 +20,12 @@ PAGES = {
     "Financeiro": financeiro,
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
+    "Matriculas Madureira": madureira,
 }
 
 def check_credentials(username, password):
     """
-    Verifica as credenciais de forma híbrida e robusta, lidando com
+    Verifica as credenciais de forma híbrida, lidando com
     diferentes tipos de dados de 'pages'.
     """
     users_db = {}
@@ -47,13 +44,12 @@ def check_credentials(username, password):
         stored_password = user_data.get("password")
         
         if stored_password == password:
-            # AQUI ESTÁ A LÓGICA CORRIGIDA E ROBUSTA
             pages_value = user_data.get("pages", [])
             
             # Se o valor for uma string (vem do st.secrets), converte para lista
             if isinstance(pages_value, str):
                 allowed_pages = ast.literal_eval(pages_value)
-            # Se já for uma lista (vem do .env/json), usa diretamente
+            # Se já for uma lista (vem do .env/json), usa diretamente para ser possível o acesso local
             elif isinstance(pages_value, list):
                 allowed_pages = pages_value
             # Caso contrário, fallback para uma lista vazia
