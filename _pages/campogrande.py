@@ -17,7 +17,7 @@ def run_page():
     df = carregar_dados("consultas/orders/orders.sql")
 
     # UNIDADE FILTRADA
-    unidade_filtrada = "Madureira"
+    unidade_filtrada = "Campo Grande"
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()

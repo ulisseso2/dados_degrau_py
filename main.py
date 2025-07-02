@@ -4,7 +4,7 @@ import json
 import ast
 
 # Importa os módulos de cada página da aplicação
-from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, madureira
+from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, madureira, madureira_cancelamento, campogrande, campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, centro_cancelamento
 
 # Configuração da página (deve ser o primeiro comando Streamlit)
 st.set_page_config(layout="wide", page_title="Dashboard Seducar")
@@ -21,6 +21,13 @@ PAGES = {
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
     "Matriculas Madureira": madureira,
+    "Cancelamentos Madureira": madureira_cancelamento,
+    "Matriculas Campo Grande": campogrande,
+    "Cancelamentos Campo Grande": campogrande_cancelamento,
+    "Matriculas Niterói": niteroi,
+    "Cancelamentos Niterói": niteroi_cancelamento,
+    "Matriculas Centro": centro,
+    "Cancelamentos Centro": centro_cancelamento,
 }
 
 def check_credentials(username, password):
