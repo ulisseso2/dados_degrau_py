@@ -82,9 +82,9 @@ def run_page():
     with col1:
         st.metric("Total de Pedidos", df_filtrado.shape[0])
     with col2:
-        st.metric("Pedidos Cancelados", df_cancelados.shape[0])
+        st.metric("Cancelados", df_cancelados.shape[0])
     with col3:
-        st.metric("Valor", formatar_reais(df_filtrado["total_pedido"].sum()))
+        st.metric("Faturado no Período", formatar_reais(df_filtrado["total_pedido"].sum()))
 
     # Tabela por unidade
     tabela = (

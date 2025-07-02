@@ -41,7 +41,6 @@ def run_page():
         default=default_status_name
     )
 
-    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]
 
     try:
         data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
@@ -81,6 +80,7 @@ def run_page():
         (df["total_pedido"] != 0)
     ]
 
+    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
