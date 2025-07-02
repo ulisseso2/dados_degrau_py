@@ -82,26 +82,9 @@ def run_page():
     with col1:
         st.metric("Total de Pedidos", df_filtrado.shape[0])
     with col2:
-        st.metric("Cancelados", df_cancelados.shape[0])
-    with col3:
         st.metric("Faturado no Período", formatar_reais(df_filtrado["total_pedido"].sum()))
-
-    # Tabela por unidade
-    tabela = (
-        df_filtrado.groupby("unidade")
-        .agg(
-            quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
-            total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
-        )
-        .reset_index()
-        .sort_values("total_vendido", ascending=False)
-    )
-    tabela["ticket_medio"] = tabela["total_vendido"] / tabela["quantidade"]
-    tabela["ticket_medio"] = tabela["ticket_medio"].apply(formatar_reais)
-    tabela["total_vendido"] = tabela["total_vendido"].apply(formatar_reais)
-
-    st.subheader("Vendas por Unidade")
-    st.dataframe(tabela, use_container_width=True)
+    with col3:
+        st.metric("Ticket Médio", formatar_reais(df_filtrado["total_pedido"].mean()))
 
     # Gráfico de pedidos por unidade e categoria
     st.subheader("Gráfico de Pedidos por Unidade e Categoria")
@@ -223,3 +206,53 @@ def run_page():
         file_name="pedidos_detalhados.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    st.divider()
+    # --- Tabela cancelados---
+    tabela_cancelados = df_cancelados[[
+        "nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
+    ]]
+
+    # Cria a VERSÃO PARA EXIBIÇÃO na tela (com R$ formatado)
+    tabela_para_cancelados = tabela_cancelados.copy()
+    tabela_para_cancelados["total_pedido"] = tabela_para_cancelados["total_pedido"].apply(formatar_reais)
+    tabela_para_cancelados["estorno_cancelamento"] = tabela_para_cancelados["estorno_cancelamento"].apply(formatar_reais)
+
+
+
+    st.subheader("Cancelamentos Detalhados")
+        # Tabela de resumo
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total de Pedidos Cancelados", df_cancelados.shape[0])
+    with col2:
+        st.metric("Valor Total de Estornos", formatar_reais(df_cancelados["estorno_cancelamento"].sum()))
+
+    st.subheader("Lista de Cancelados")
+    st.dataframe(tabela_para_cancelados, use_container_width=True)
+
+    st.divider()
+
+    st.subheader("Cancelamento por Tipo")
+
+    # 1. Prepara os dados: agrupa por situação e soma o valor
+    df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index()
+    # 3. Cria o gráfico de pizza
+    if not df_cancelados.empty:
+        fig_pizza_cancelados = px.pie(
+            df_cancelados,
+            names='tipo_cancelamento',
+            values='estorno_cancelamento',
+            title='Valor de Cancelamentos por Tipo',
+            color='tipo_cancelamento',
+        )
+        
+        # Atualiza para mostrar o valor (R$) e o percentual
+        fig_pizza_cancelados.update_traces(
+            textinfo='percent+value',
+            texttemplate='%{percent:,.1%} <br>R$ %{value:,.2f}' # Formata o texto
+        )
+
+        st.plotly_chart(fig_pizza_cancelados, use_container_width=True)
+    else:
+        st.info("Não há dados de cancelamento para exibir com os filtros atuais.")
