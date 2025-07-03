@@ -12,6 +12,7 @@ from utils.sql_loader import carregar_dados  # agora usamos a função com cache
 
 def run_page():
     st.title("📉 Dashboard de Cancelamentos por Unidade")
+    TIMEZONE = 'America/Sao_Paulo'
 
     # ✅ Carrega os dados com cache (1h por padrão, pode ajustar no sql_loader.py)
     df = carregar_dados("consultas/orders/orders.sql")
@@ -29,57 +30,79 @@ def run_page():
     empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
     df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
 
+
+    df["data_referencia"] = pd.to_datetime(df["data_referencia"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+
     # Filtro: data (padrão: Hoje)
    
-    hoje = datetime.today().date()
-    periodo = st.sidebar.date_input("Data Pagamento", [hoje, hoje])
- 
+    hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date() 
+    periodo = st.sidebar.date_input("Data Referência", [hoje_aware, hoje_aware])
+
+
+    try:
+        data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
+        data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    except IndexError:
+        # Se o usuário limpar o campo de data, mostramos o aviso
+        st.warning("👈 Por favor, selecione um período de datas na barra lateral para exibir a análise.")
+        st.stop()
+
+    st.sidebar.subheader("Filtro de Categoria")
+    categorias_disponiveis = df_filtrado_empresa['categoria'].str.split(', ').explode().str.strip().dropna().unique().tolist()
+
+    categoria_selecionada = st.sidebar.multiselect(
+        "Selecione a(s) categoria(s):",
+        options=sorted(categorias_disponiveis),
+        default=["Curso Presencial", "Curso Live", "Passaporte"]
+    )
+
+    st.sidebar.subheader("Tipos de Cancelamento")
+    tipos_disponiveis = df_filtrado_empresa['tipo_cancelamento'].dropna().unique().tolist()
+
+    opcoes_ordenadas = sorted(tipos_disponiveis)
+
+    tipo_selecionado = st.sidebar.multiselect(
+        "Selecione o(s) tipo(s) de cancelamento:",
+        options=opcoes_ordenadas,
+        default=opcoes_ordenadas
+    )
 
     # Filtros adicionais recolhidos
-    with st.expander("Filtros Avançados: Unidades e Categoria"):
-        col1, col2 = st.columns(2)
+    # O filtro de Unidades agora fica dentro de seu próprio expander
+    with st.sidebar.expander("Filtrar por Unidade"):
+        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique())
+        unidade_selecionada = st.multiselect(
+            "Selecione a(s) unidade(s):", 
+            unidades_list, 
+            default=unidades_list
+        )
 
-        with col1:
-            unidades = df_filtrado_empresa["unidade"].dropna().unique().tolist()
-            unidade_selecionada = st.multiselect("Selecione a unidade:", unidades, default=unidades)
+    def formatar_reais(valor):
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    
 
-        with col2:
-            categorias = df_filtrado_empresa["categoria"].dropna().unique().tolist()
-            categoria_selecionada = st.multiselect("Selecione a categoria:", categorias, default=categorias)
 
-    # Aplica filtros finais
     df_filtrado = df[
         (df["empresa"].isin(empresa_selecionada)) &
         (df["unidade"].isin(unidade_selecionada)) &
-        (df["categoria"].isin(categoria_selecionada)) &
-        (df["data_referencia"] >= pd.to_datetime(periodo[0])) &
-        (df["data_referencia"] <= pd.to_datetime(periodo[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+        (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
+        (df['tipo_cancelamento'].isin(tipo_selecionado)) &
+        (df["data_referencia"] >= data_inicio_aware) &
+        (df["data_referencia"] < data_fim_aware) &
+        (df["status_id"].isin([3, 15])) &
+        (~df["metodo_pagamento"].isin([5, 8])) & 
+        (df["total_pedido"] != 0)
     ]
-    def formatar_reais(valor):
-        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-    # Pré-filtros Pago > Não grátis > Apenas Passaporte, Live e Presencial e Data de PAGAMENTO
-    df_pagos = df_filtrado.copy()
-    df_pagos = df_pagos[df_pagos["status_id"] == 2]
-    df_pagos = df_pagos[df_pagos["total_pedido"] != 0]
-    df_pagos = df_pagos[df_pagos["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
-    df_pagos["data_referencia"] = pd.to_datetime(df_pagos["data_referencia"])
-
-    df_cancelados = df_filtrado.copy()
-    df_cancelados = df_cancelados[df_filtrado["status_id"].isin([3, 15])]
-    df_cancelados = df_cancelados[df_cancelados["total_pedido"] != 0]
-    df_cancelados = df_cancelados[df_cancelados["categoria"].isin(["Passaporte", "Curso Live", "Curso Presencial"])]
-    df_cancelados["data_referencia"] = pd.to_datetime(df_pagos["data_referencia"])
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total de Cancelados", df_cancelados.shape[0])
+        st.metric("Total de Cancelados", df_filtrado.shape[0])
     with col2:
-        st.metric("Total de Cancelados", formatar_reais(df_cancelados["estorno_cancelamento"].sum()))
+        st.metric("Total de Cancelados", formatar_reais(df_filtrado["estorno_cancelamento"].sum()))
 
 
     tabela_cancelados = (
-        df_cancelados.groupby("unidade")
+        df_filtrado.groupby("unidade")
         .agg(
             quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
             total_estornado=pd.NamedAgg(column="estorno_cancelamento", aggfunc="sum")
@@ -101,7 +124,7 @@ def run_page():
     # Gráficos
     st.subheader("Gráfico de Estorno por Unidade e Categoria")
     grafico = (
-        df_cancelados.groupby(["unidade", "categoria"])
+        df_filtrado.groupby(["unidade", "categoria"])
         .size()
         .reset_index(name="quantidade")
     )
@@ -120,10 +143,10 @@ def run_page():
 
     # Gráfico de estornos por categoria e unidade
     st.subheader("Estornos por Categoria e Unidade")
-    df_cancelados['estorno_cancelamento'] = pd.to_numeric(df_cancelados['estorno_cancelamento'], errors='coerce')
+    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     grafico2 = (
-        df_cancelados.groupby(["categoria", "unidade"])
+        df_filtrado.groupby(["categoria", "unidade"])
         .agg({'estorno_cancelamento': 'sum'})  # Forma explícita de agregação
         .reset_index()
     )
@@ -153,12 +176,14 @@ def run_page():
 
     st.plotly_chart(fig2, use_container_width=True)
 
+    st.divider()
+
     ## Gráfico de estornos por categoria
     st.subheader("Estornos por Categoria")
-    df_cancelados['estorno_cancelamento'] = pd.to_numeric(df_cancelados['estorno_cancelamento'], errors='coerce')
+    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     grafico3 = (
-        df_cancelados.groupby("categoria")
+        df_filtrado.groupby("categoria")
         .agg({'estorno_cancelamento': 'sum'})  # Forma explícita de agregação
         .reset_index()
     )
@@ -189,9 +214,46 @@ def run_page():
 
     st.plotly_chart(fig3, use_container_width=True)
 
-    # Tabela de Cencelamentos por Unidade e Categoria
+
+    st.divider()
+    ## Gráfico de estornos por curso venda
+    st.subheader("Estornos por Curso Venda")
+    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
+
+    grafico3 = (
+        df_filtrado.groupby("curso_venda")
+        .agg({'estorno_cancelamento': 'sum'})  # Forma explícita de agregação
+        .reset_index()
+    )
+    grafico3['valor_numerico'] = grafico3['estorno_cancelamento']
+
+    grafico3["estorno_formatado"] = grafico3["valor_numerico"].apply(formatar_reais)
+
+    max_value = float(grafico3["valor_numerico"].max())
+
+    fig3 = px.bar(
+        grafico3,
+        x="valor_numerico",
+        y="curso_venda",
+        title="Cancelamento por Curso Venda",
+        labels={"valor_numerico": "Valor Estornado", "curso_venda": "Curso Venda"},
+        orientation="h",
+        barmode="stack",
+        text="estorno_formatado",  # Use o texto formatado aqui
+        range_x=[0, max_value * 1.1]  # Agora pode multiplicar pois max_value é float
+    )
+
+    fig3.update_traces(
+        textposition='inside',
+        hovertemplate="<b>%{y}</b><br>Curso Venda: %{customdata[0]}<br>Valor: %{x:,.2f}<extra></extra>",
+        customdata=grafico3[['curso_venda']]
+    )
+
+    st.plotly_chart(fig3, use_container_width=True)
+
+    # Tabela de Cancelamentos por Unidade e Categoria
     # Agrupa total vendido por categoria
-    valor_pivot = df_cancelados.pivot_table(
+    valor_pivot = df_filtrado.pivot_table(
         index="unidade",
         columns="categoria",
         values="estorno_cancelamento",
@@ -200,7 +262,7 @@ def run_page():
     )
 
     # Agrupa quantidade por categoria
-    qtd_pivot = df_cancelados.pivot_table(
+    qtd_pivot = df_filtrado.pivot_table(
         index="unidade",
         columns="categoria",
         values="ordem_id",
@@ -224,9 +286,36 @@ def run_page():
     st.subheader("Cancelamento por Unidade e Categoria (Valor e Quantidade)")
     st.dataframe(tabela_completa, use_container_width=True)
 
+
+    st.divider()
+
+    st.subheader("Cancelamento por Tipo")
+
+    # 1. Prepara os dados: agrupa por situação e soma o valor
+    df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index()
+    # 3. Cria o gráfico de pizza
+    if not df_cancelados.empty:
+        fig_pizza_cancelados = px.pie(
+            df_cancelados,
+            names='tipo_cancelamento',
+            values='estorno_cancelamento',
+            title='Valor de Cancelamentos por Tipo',
+            color='tipo_cancelamento',
+        )
+        
+        # Atualiza para mostrar o valor (R$) e o percentual
+        fig_pizza_cancelados.update_traces(
+            textinfo='percent+value',
+            texttemplate='%{percent:,.1%} <br>R$ %{value:,.2f}' # Formata o texto
+        )
+
+        st.plotly_chart(fig_pizza_cancelados, use_container_width=True)
+    else:
+        st.info("Não há dados de cancelamento para exibir com os filtros atuais.")
+
     # Tabela detalhada de Cancelamento
-    tabela2 = df_cancelados[[
-        "solicitacao_cancelamento","data_pagamento","nome_cliente", "email_cliente", "celular_cliente", "curso_venda", "unidade", "estorno_cancelamento"
+    tabela2 = df_filtrado[[
+        "nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
     ]]
     tabela_alunos = tabela2.copy()
     tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)

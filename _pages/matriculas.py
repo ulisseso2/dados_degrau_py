@@ -77,7 +77,8 @@ def run_page():
         (df["data_pagamento"] >= data_inicio_aware) &
         (df["data_pagamento"] < data_fim_aware) &
         (df["status"].isin(status_selecionado)) &
-        (df["total_pedido"] != 0)
+        (df["total_pedido"] != 0) &
+        (~df["metodo_pagamento"].isin([5, 8]))
     ]
 
     df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]

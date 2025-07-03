@@ -10,7 +10,7 @@ from datetime import datetime
 from utils.sql_loader import carregar_dados
 
 def run_page():
-    st.title("Cancelamentos Madureira")
+    st.title("Cancelamentos")
     TIMEZONE = 'America/Sao_Paulo'
 
     # ✅ Carrega os dados com cache (10 min por padrão, pode ajustar no sql_loader.py)
