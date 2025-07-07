@@ -19,6 +19,7 @@ def run_page():
     # UNIDADE FILTRADA
     unidade_filtrada = "Niterói"
 
+
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
     empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
@@ -51,6 +52,12 @@ def run_page():
         default=["Curso Presencial", "Curso Live", "Passaporte"]
     )
 
+    cores_padronizadas = {
+        'Curso Live': '#FF0000',        # Vermelho
+        'Curso Presencial': '#1F77B4',  # Azul padrão do Plotly
+        'Passaporte': '#2CA02C',  # Verde padrão do Plotly
+        # Adicione outras categorias conforme necessário
+    }
 
     # Aplica filtros finais
     df_filtrado = df[
@@ -95,23 +102,103 @@ def run_page():
     st.subheader("Cancelamento por Tipo")
 
     # 1. Prepara os dados: agrupa por situação e soma o valor
-    df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index()
-    # 3. Cria o gráfico de pizza
-    if not df_cancelados.empty:
-        fig_pizza_cancelados = px.pie(
-            df_cancelados,
-            names='tipo_cancelamento',
-            values='estorno_cancelamento',
-            title='Valor de Cancelamentos por Tipo',
-            color='tipo_cancelamento',
+    tipos_cancelamentos = (
+        df_filtrado.groupby(['tipo_cancelamento'])
+        .agg(
+            total_estornado=('estorno_cancelamento', 'sum'),
+            quantidade=('ordem_id', 'count')
         )
-        
-        # Atualiza para mostrar o valor (R$) e o percentual
-        fig_pizza_cancelados.update_traces(
-            textinfo='percent+value',
-            texttemplate='%{percent:,.1%} <br>R$ %{value:,.2f}' # Formata o texto
+        .reset_index()
+    )
+
+    tipos_cancelamentos["texto_barra"] = tipos_cancelamentos.apply(
+        lambda row: f"{formatar_reais(row['total_estornado'])} | {row['quantidade']} pedidos",
+        axis=1
+    )
+
+    # 3. Cria o gráfico de barra
+    if not tipos_cancelamentos.empty:
+        fig_barra_cancelados = px.bar(
+            tipos_cancelamentos,
+            y='tipo_cancelamento',
+            x='total_estornado',
+            orientation="h",
+            text='texto_barra',
+            title='Valor e Quantidade de Cancelamentos por Tipo',
+            labels={
+                "tipo_cancelamento": "Tipo de Cancelamento",
+                "total_estornado": "Valor Estornado"
+            },
+            range_x=[0, tipos_cancelamentos["total_estornado"].max() * 1.1]
         )
 
-        st.plotly_chart(fig_pizza_cancelados, use_container_width=True)
+        # 4. Aumentar tamanho da fonte dos textos nas barras
+        fig_barra_cancelados.update_traces(
+            textfont_size=14,  # aumenta o tamanho da fonte
+            textposition="outside"  # coloca o texto fora da barra,
+        )
+
+        fig_barra_cancelados.update_layout(
+            yaxis_title=None,
+            xaxis_title="Valor Estornado (R$)",
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        st.plotly_chart(fig_barra_cancelados, use_container_width=True)
+    else:
+        st.info("Não há dados de cancelamento para exibir com os filtros atuais.")
+
+
+    st.divider()
+
+    st.subheader("Cancelamento por Produto")
+
+    # 1. Prepara os dados: agrupa por situação e soma o valor
+    tipos_cancelamentos = (
+        df_filtrado.groupby(['categoria'])
+        .agg(
+            total_estornado=('estorno_cancelamento', 'sum'),
+            quantidade=('ordem_id', 'count')
+        )
+        .reset_index()
+    )
+
+    tipos_cancelamentos["texto_barra"] = tipos_cancelamentos.apply(
+        lambda row: f"{formatar_reais(row['total_estornado'])} | {row['quantidade']} pedidos",
+        axis=1
+    )
+
+    tipos_cancelamentos["cor_personalizada"] = tipos_cancelamentos["categoria"].map(
+        lambda x: cores_padronizadas.get(x, "#AAAAAA")  # Cor padrão cinza para categorias não mapeadas
+    )
+
+    # 3. Cria o gráfico de barra
+    if not tipos_cancelamentos.empty:
+        fig_barra_cancelados = px.bar(
+            tipos_cancelamentos,
+            y='categoria',
+            x='total_estornado',
+            orientation="h",
+            text='texto_barra',
+            title='Valor e Quantidade de Cancelamentos por Produto',
+            labels={
+                "categoria": "Categoria do Produto",
+                "total_estornado": "Valor Estornado"
+            },
+            range_x=[0, tipos_cancelamentos["total_estornado"].max() * 1.1]
+        )
+
+        # 4. Aumentar tamanho da fonte dos textos nas barras
+        fig_barra_cancelados.update_traces(
+            marker_color=tipos_cancelamentos["cor_personalizada"],
+            textfont_size=14,  # aumenta o tamanho da fonte
+            textposition="outside"  # coloca o texto fora da barra,
+        )
+
+        fig_barra_cancelados.update_layout(
+            yaxis_title=None,
+            xaxis_title="Valor Estornado (R$)",
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        st.plotly_chart(fig_barra_cancelados, use_container_width=True)
     else:
         st.info("Não há dados de cancelamento para exibir com os filtros atuais.")
