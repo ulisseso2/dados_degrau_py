@@ -244,9 +244,10 @@ def run_page():
     )
 
     fig3.update_traces(
-        textposition='inside',
+        textposition='outside',
         hovertemplate="<b>%{y}</b><br>Curso Venda: %{customdata[0]}<br>Valor: %{x:,.2f}<extra></extra>",
-        customdata=grafico3[['curso_venda']]
+        customdata=grafico3[['curso_venda']],
+        textfont_size=14,  # Aumenta o tamanho da fonte dos textos
     )
 
     st.plotly_chart(fig3, use_container_width=True)

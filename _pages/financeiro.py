@@ -24,6 +24,7 @@ def run_page():
 
     # Converte para datetime, trata erros e ATRIBUI o fuso horário correto
     df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df['data_vencimento_parcela'] = pd.to_datetime(df['data_vencimento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer') # <-- LINHA ADICIONADA
 
     # --- Seção de Filtros na Barra Lateral ---
     st.sidebar.header("Filtros da Análise")
@@ -283,4 +284,225 @@ def run_page():
     else:
         st.info("Não há dados de situação para exibir com os filtros atuais.")
 
-    st.divider() # Adiciona uma linha para separar as seções
+    st.divider()
+    st.subheader("Análises Detalhadas por Categoria")
+
+    if not df_filtrado.empty:
+        # --- Gráfico 1: Despesas por Centro de Custo ---
+        st.markdown("#### Total por Centro de Custo")
+        df_cc = df_filtrado.groupby('centro_custo')['valor_corrigido'].sum().reset_index()
+        # Remove valores zerados para um gráfico mais limpo
+        df_cc = df_cc[df_cc['valor_corrigido'] > 0].sort_values('valor_corrigido', ascending=True)
+        
+        if not df_cc.empty:
+            fig_cc = px.bar(
+                df_cc,
+                x='valor_corrigido',
+                y='centro_custo',
+                orientation='h',
+                text=df_cc['valor_corrigido'].apply(formatar_reais),
+                labels={'valor_corrigido': 'Valor Total (R$)', 'centro_custo': 'Centro de Custo'},
+                title="Despesas Agrupadas por Centro de Custo"
+            )
+            fig_cc.update_traces(textposition='outside')
+            st.plotly_chart(fig_cc, use_container_width=True)
+        else:
+            st.info("Não há dados de Centro de Custo para os filtros selecionados.")
+        
+        st.divider()
+
+        # --- Gráfico 2: Despesas por Conta Bancária ---
+        st.markdown("#### Total por Conta Bancária")
+        df_cb = df_filtrado.groupby('conta_bancaria')['valor_corrigido'].sum().reset_index()
+        df_cb = df_cb[df_cb['valor_corrigido'] > 0].sort_values('valor_corrigido', ascending=True)
+
+        if not df_cb.empty:
+            fig_cb = px.bar(
+                df_cb,
+                x='valor_corrigido',
+                y='conta_bancaria',
+                orientation='h',
+                text=df_cb['valor_corrigido'].apply(formatar_reais),
+                labels={'valor_corrigido': 'Valor Total (R$)', 'conta_bancaria': 'Conta Bancária'},
+                title="Despesas Agrupadas por Conta Bancária"
+            )
+            fig_cb.update_traces(textposition='outside', marker_color='#ff7f0e')
+            st.plotly_chart(fig_cb, use_container_width=True)
+        else:
+            st.info("Não há dados de Conta Bancária para os filtros selecionados.")
+            
+        st.divider()
+
+        # --- Gráfico 3: Despesas por Unidade de Negócio ---
+        st.markdown("#### Total por Unidade de Negócio")
+        df_un = df_filtrado.groupby('unidade_negocio')['valor_corrigido'].sum().reset_index()
+        df_un = df_un[df_un['valor_corrigido'] > 0].sort_values('valor_corrigido', ascending=True)
+
+        if not df_un.empty:
+            fig_un = px.bar(
+                df_un,
+                x='valor_corrigido',
+                y='unidade_negocio',
+                orientation='h',
+                text=df_un['valor_corrigido'].apply(formatar_reais),
+                labels={'valor_corrigido': 'Valor Total (R$)', 'unidade_negocio': 'Unidade de Negócio'},
+                title="Despesas Agrupadas por Unidade de Negócio"
+            )
+            fig_un.update_traces(textposition='outside', marker_color='#2ca02c')
+            st.plotly_chart(fig_un, use_container_width=True)
+        else:
+            st.info("Não há dados de Unidade de Negócio para os filtros selecionados.")
+            
+        st.divider()
+            
+        # --- Gráfico 4: Despesas por Unidade Estratégica ---
+        st.markdown("#### Total por Unidade Estratégica")
+        df_ue = df_filtrado.groupby('unidade_estrategica')['valor_corrigido'].sum().reset_index()
+        df_ue = df_ue[df_ue['valor_corrigido'] > 0].sort_values('valor_corrigido', ascending=True)
+
+        if not df_ue.empty:
+            fig_ue = px.bar(
+                df_ue,
+                x='valor_corrigido',
+                y='unidade_estrategica',
+                orientation='h',
+                text=df_ue['valor_corrigido'].apply(formatar_reais),
+                labels={'valor_corrigido': 'Valor Total (R$)', 'unidade_estrategica': 'Unidade Estratégica'},
+                title="Despesas Agrupadas por Unidade Estratégica"
+            )
+            fig_ue.update_traces(textposition='outside', marker_color='#d62728')
+            st.plotly_chart(fig_ue, use_container_width=True)
+        else:
+            st.info("Não há dados de Unidade Estratégica para os filtros selecionados.")
+
+    else:
+        st.warning("Não há dados para os filtros selecionados para gerar os gráficos.")
+
+    # ==============================================================================
+    # NOVA ANÁLISE: CONTAS A PAGAR POR VENCIMENTO
+    # Esta análise usa filtros independentes, respeitando apenas a seleção de EMPRESA.
+    # ==============================================================================
+    st.divider()
+    st.header("🗓️ Análise de Contas a Pagar (por Vencimento)")
+
+    # --- 1. FILTROS INDEPENDENTES PARA ESTA ANÁLISE ---
+    # O DataFrame base é o 'df_filtrado_empresa', que já respeita o filtro da sidebar.
+    base_df_apagar = df_para_opcoes.copy()
+
+    df_apagar = base_df_apagar[base_df_apagar['situacao'].isin(['Em Atraso', 'A Vencer'])]
+
+    # --- 1. FILTROS INDEPENDENTES DENTRO DE UM EXPANDER ---
+    with st.expander("Aplicar Filtros para a Análise de Contas a Pagar (Os Filtros de Previsão de Vencimento são independentes da Análise Geral)", expanded=True):
+        col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
+
+        # --- Filtro de Data de Vencimento com Mês Atual como Padrão ---
+        with col_filtro1:
+            hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
+            data_min_venc = df_apagar['data_vencimento_parcela'].min().date()
+            data_max_venc = df_apagar['data_vencimento_parcela'].max().date()
+
+            primeiro_dia_mes_atual = hoje_aware.replace(day=1)
+            ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+            data_fim_padrao = min(ultimo_dia_mes_atual_ts.date(), data_max_venc)
+            
+            periodo_vencimento = st.date_input(
+                "Período de Vencimento:",
+                value=[primeiro_dia_mes_atual, data_fim_padrao],
+                min_value=data_min_venc, max_value=data_max_venc,
+                key="filtro_vencimento_apagar"
+            )
+        
+        # --- NOVO FILTRO: Situação ---
+        with col_filtro2:
+            situacao_list = df_apagar['situacao'].dropna().unique().tolist()
+            situacao_selecionada = st.multiselect(
+                "Situação da Parcela:",
+                options=sorted(situacao_list),
+                default=situacao_list, # Padrão: todas as situações de não pagos
+                key="filtro_situacao_apagar"
+            )
+
+        # --- NOVO FILTRO: Status da Parcela ---
+        with col_filtro3:
+            status_list = df_apagar['status_parcela'].dropna().unique().tolist()
+            status_selecionado = st.multiselect(
+                "Status da Parcela:",
+                options=sorted(status_list),
+                default=["A pagar", "Aprovado"], # Padrão: todos os status de parcelas
+                key="filtro_status_apagar"
+            )
+            
+        # Filtro de Centro de Custo (movido para dentro do expander)
+        cc_list_apagar = base_df_apagar['centro_custo'].dropna().unique().tolist()
+        cc_selecionado_apagar = st.multiselect(
+            "Centro de Custo:",
+            options=sorted(cc_list_apagar),
+            default=cc_list_apagar,
+            key="filtro_cc_apagar"
+        )
+
+        conta_lista = base_df_apagar['conta_bancaria'].dropna().unique().tolist()
+        contas_selecionadas_apagar = st.multiselect(
+            "Conta Bancária:",
+            options=sorted(conta_lista),
+            default=conta_lista,
+            key="filtro_conta_apagar"
+        )
+
+    # --- Aplicação dos Filtros da Seção ---
+    df_apagar_filtrado = pd.DataFrame() # Inicia um DF vazio
+    if len(periodo_vencimento) == 2:
+        inicio_venc_aware = pd.Timestamp(periodo_vencimento[0], tz=TIMEZONE)
+        fim_venc_aware = pd.Timestamp(periodo_vencimento[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+        
+        df_apagar_filtrado = df_apagar[
+            (df_apagar['data_vencimento_parcela'] >= inicio_venc_aware) &
+            (df_apagar['data_vencimento_parcela'] < fim_venc_aware) &
+            (df_apagar['centro_custo'].isin(cc_selecionado_apagar)) &
+            (df_apagar['situacao'].isin(situacao_selecionada)) &
+            (df_apagar['status_parcela'].isin(status_selecionado)) &
+            (df_apagar['conta_bancaria'].isin(contas_selecionadas_apagar))
+        ]
+
+    # --- EXIBIÇÃO DOS KPIs E TABELA ---
+    if not df_apagar_filtrado.empty:
+        valor_vencido = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'Em Atraso']['valor_corrigido'].sum()
+        valor_a_vencer = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'A Vencer']['valor_corrigido'].sum()
+        total_apagar = df_apagar_filtrado['valor_corrigido'].sum()
+
+        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1.metric("Total a Pagar", formatar_reais(total_apagar))
+        kpi2.metric("Valor Vencido (Em Atraso)", formatar_reais(valor_vencido))
+        kpi3.metric("A Vencer no Período", formatar_reais(valor_a_vencer))
+
+        st.divider()
+        
+        st.markdown("#### Detalhamento das Contas")
+        tabela_apagar = df_apagar_filtrado[[
+            'pedido_compra_id', 'parcelas_de', 'fornecedor', 'data_vencimento_parcela', 
+            'situacao', 'status_parcela', 'descricao_pedido_compra', 
+            'unidade_negocio', 'valor_corrigido'
+        ]].sort_values(by='data_vencimento_parcela')  # Ordena por vencimento
+
+        tabela_apagar.rename(columns={
+            'pedido_compra_id': 'ID Pedido',
+            'parcelas_de': 'Parcela',
+            'data_vencimento_parcela': 'Vencimento',
+            'status_parcela': 'Status',
+            'descricao_pedido_compra': 'Histórico',
+            'unidade_negocio': 'Unidade de Negócio',
+            'valor_corrigido': 'Valor (R$)'
+        }, inplace=True)
+
+        st.dataframe(
+            tabela_apagar,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Valor (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Vencimento": st.column_config.DateColumn(format="DD/MM/YYYY")
+            }
+        )
+        
+    else:
+        st.info("Não há contas a pagar para os filtros selecionados.")
