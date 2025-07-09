@@ -1,125 +1,66 @@
+# _pages/analise_ga.py - Versão Final Refatorada e Unificada
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Dimension, Metric
+from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Dimension, Metric, OrderBy
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 # Carrega as variáveis do .env (só terá efeito no ambiente local)
 load_dotenv()
 
-
 # ==============================================================================
-# 2. FUNÇÕES DE DADOS (LÓGICA DE ACESSO À API)
+# 1. FUNÇÕES AUXILIARES
 # ==============================================================================
 
 def get_ga_credentials():
-    """
-    Carrega as credenciais de forma híbrida: de st.secrets (produção) 
-    ou de um arquivo JSON local (desenvolvimento).
-    """
+    """Carrega as credenciais de forma híbrida e segura."""
     try:
-        # Tenta carregar do Streamlit Secrets (para produção)
         creds_dict = st.secrets["gcp_service_account"]
-        credentials = service_account.Credentials.from_service_account_info(creds_dict)
+        return service_account.Credentials.from_service_account_info(creds_dict)
     except (st.errors.StreamlitAPIException, KeyError):
-        # Se falhar (ambiente local), carrega do arquivo .env
         file_path = os.getenv("GCP_SERVICE_ACCOUNT_FILE")
         if file_path and os.path.exists(file_path):
-            credentials = service_account.Credentials.from_service_account_file(file_path)
-        else:
-            credentials = None
-    return credentials
+            return service_account.Credentials.from_service_account_file(file_path)
+    return None
 
-def run_ga_report(client, property_id, dimensions, metrics, date_ranges, limit=10):
-    """Função genérica para executar um relatório na API do GA4."""
+def run_ga_report(client, property_id, dimensions, metrics, start_date, end_date, limit=15, order_bys=None):
+    """Função ÚNICA e robusta para executar qualquer relatório no GA4."""
     try:
         request = RunReportRequest(
             property=f"properties/{property_id}",
             dimensions=dimensions,
             metrics=metrics,
-            date_ranges=date_ranges,
-            limit=limit
+            date_ranges=[DateRange(start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'))],
+            limit=limit, # <-- PARÂMETRO ADICIONADO DE VOLTA
+            order_bys=order_bys if order_bys else []
         )
-        response = client.run_report(request)
-        return response
+        return client.run_report(request)
     except Exception as e:
         st.warning(f"Atenção: A consulta ao Google Analytics falhou. Erro: {e}")
         return None
 
-def mostrar_kpis_validacao(client, property_id):
-    """Busca as métricas principais do GA4 para um período e as exibe em cards."""
-    st.subheader("Métricas Principais (Últimos 28 dias)")
-    
-    response = run_ga_report(
-        client=client,
-        property_id=property_id,
-        dimensions=[], # Sem dimensão para totais
-        metrics=[Metric(name="activeUsers"), Metric(name="sessions"), Metric(name="screenPageViews"), Metric(name="conversions")],
-        date_ranges=[DateRange(start_date="28daysAgo", end_date="today")],
-        limit=1
-    )
-    
-    if response and response.rows:
-        row = response.rows[0]
-        usuarios = int(row.metric_values[0].value)
-        sessoes = int(row.metric_values[1].value)
-        visualizacoes = int(row.metric_values[2].value)
-        conversoes = int(row.metric_values[3].value)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Usuários Ativos", f"{usuarios:,}".replace(",", "."))
-        col2.metric("Sessões", f"{sessoes:,}".replace(",", "."))
-        col3.metric("Visualizações de Página", f"{visualizacoes:,}".replace(",", "."))
-        col4.metric("Conversões", f"{conversoes:,}".replace(",", "."))
-    else:
-        st.info("Não foi possível carregar os KPIs de validação.")
+def formatar_reais(valor):
+    """Formata um número para o padrão monetário brasileiro."""
+    if pd.isna(valor) or valor == 0: return "R$ 0,00"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def get_top_pages(client, property_id, days):
-    """Busca e formata as 10 páginas mais vistas."""
-    response = run_ga_report(
-        client, property_id,
-        dimensions=[Dimension(name="pageTitle")],
-        metrics=[Metric(name="screenPageViews")],
-        date_ranges=[DateRange(start_date=days, end_date="today")],
-        limit=10
-    )
-    if response:
-        rows = [{'Título da Página': r.dimension_values[0].value, 'Visualizações': int(r.metric_values[0].value)} for r in response.rows]
-        return pd.DataFrame(rows)
-    return pd.DataFrame()
-
-def get_sessions_by_campaign(client, property_id, days):
-    """Busca e formata as 15 campanhas com mais sessões."""
-    response = run_ga_report(
-        client, property_id,
-        dimensions=[Dimension(name="sessionCampaignName")],
-        metrics=[Metric(name="sessions")],
-        date_ranges=[DateRange(start_date=days, end_date="today")],
-        limit=15
-    )
-    if response:
-        rows = []
-        for r in response.rows:
-            name = r.dimension_values[0].value
-            name = "Acesso Direto / Desconhecido" if name in ["(not set)", "(direct)"] else name
-            rows.append({'Campanha': name, 'Sessões': int(r.metric_values[0].value)})
-        
-        df = pd.DataFrame(rows)
-        if not df.empty:
-            df = df.groupby('Campanha')['Sessões'].sum().sort_values(ascending=False).reset_index()
-        return df
-    return pd.DataFrame()
 
 # ==============================================================================
-# 3. FUNÇÃO PRINCIPAL DA PÁGINA (run_page)
+# 2. FUNÇÃO PRINCIPAL DA PÁGINA (run_page)
 # ==============================================================================
 
 def run_page():
-    st.title("📊 Análise do Google Analytics (GA4)")
-    st.markdown("Visão geral de aquisição e engajamento de usuários.")
+    st.title("📊 Análise de Performance Digital (GA4)")
+    
+    # Adicionamos a função auxiliar aqui para ficar disponível para as métricas
+    def formatar_reais(valor):
+        if pd.isna(valor) or valor == 0: return "R$ 0,00"
+        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     PROPERTY_ID = "327463413"
     credentials = get_ga_credentials()
@@ -129,45 +70,90 @@ def run_page():
         st.stop()
         
     client = BetaAnalyticsDataClient(credentials=credentials)
-    
-    st.success("🎉 Conexão com a API do Google Analytics bem-sucedida!")
-    
-    # --- Seção de Validação ---
-    mostrar_kpis_validacao(client, PROPERTY_ID)
-    st.divider()
 
-    # --- Seção de Análises de Aquisição e Engajamento ---
-    st.header("Visão Geral de Aquisição e Engajamento")
+    # --- FILTRO DE DATA ÚNICO E GLOBAL PARA A PÁGINA ---
+    st.sidebar.header("Filtro de Período")
+    hoje = datetime.now().date()
+    data_inicio_padrao = hoje - pd.Timedelta(days=27)
     
-    periodo_dias = st.selectbox(
-        "Selecione o período para as análises abaixo:",
-        options=[7, 28, 90],
-        format_func=lambda x: f"Últimos {x} dias",
-        index=1
+    periodo_selecionado = st.sidebar.date_input(
+        "Selecione o Período de Análise:",
+        [data_inicio_padrao, hoje],
+        key="ga_date_range"
     )
-    periodo_ga = f"{periodo_dias}daysAgo"
+
+    if len(periodo_selecionado) != 2:
+        st.warning("Por favor, selecione um período de datas válido na barra lateral.")
+        st.stop()
     
-    # --- Análise de Páginas Populares ---
-    st.subheader("Top 10 Páginas Mais Vistas")
-    df_pages = get_top_pages(client, PROPERTY_ID, days=periodo_ga)
-    if not df_pages.empty:
-        st.dataframe(df_pages, use_container_width=True, hide_index=True)
+    start_date, end_date = periodo_selecionado
+    st.info(f"Exibindo dados de **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}**")
+    st.divider()
+
+    # --- ANÁLISE 1: CUSTO E PERFORMANCE DE CAMPANHAS ---
+    st.header("💸 Análise de Custo e Performance de Campanhas")
+    
+    cost_response = run_ga_report(
+        client, PROPERTY_ID,
+        dimensions=[Dimension(name="sessionCampaignName")],
+        metrics=[Metric(name="advertiserAdCost"), Metric(name="conversions")],
+        start_date=start_date, end_date=end_date,
+        order_bys=[{'metric': {'metric_name': 'advertiserAdCost'}, 'desc': True}]
+    )
+
+    if cost_response and cost_response.rows:
+        rows = []
+        for r in cost_response.rows:
+            cost = float(r.metric_values[0].value)
+            conversions = float(r.metric_values[1].value)
+            cpa = (cost / conversions) if conversions > 0 else 0
+            rows.append({'Campanha': r.dimension_values[0].value, 'Custo': cost, 'Conversões': int(conversions), 'CPA (Custo por Conversão)': cpa})
+        
+        df_performance = pd.DataFrame(rows)
+        df_performance = df_performance[df_performance['Custo'] > 0].reset_index(drop=True)
+
+        # --- ADICIONADO: Métrica de Custo Total ---
+        custo_total_periodo = df_performance['Custo'].sum()
+        st.metric("Custo Total no Período", formatar_reais(custo_total_periodo))
+        
+        st.info("CPA (Custo por Conversão) mostra quanto você investiu em média para gerar uma conversão registrada no GA4.")
+        st.dataframe(df_performance, use_container_width=True, hide_index=True,
+            column_config={
+                "Custo": st.column_config.NumberColumn("Custo Total", format="R$ %.2f"),
+                "CPA (Custo por Conversão)": st.column_config.NumberColumn("CPA (R$)", format="R$ %.2f"),
+                "Conversões": st.column_config.NumberColumn("Nº de Conversões", format="%d")
+            })
     else:
-        st.info("Não há dados de páginas para o período selecionado.")
+        st.info("Não foram encontrados dados de custo para o período selecionado.")
 
     st.divider()
 
-    # --- Análise de Sessões por Campanha ---
-    st.subheader("Top 15 Campanhas por Sessões")
-    df_campaigns = get_sessions_by_campaign(client, PROPERTY_ID, days=periodo_ga)
-    if not df_campaigns.empty:
-        fig_campaigns = px.bar(
-            df_campaigns.sort_values("Sessões", ascending=True),
-            x="Sessões", y="Campanha", orientation='h', text="Sessões",
-            title="Sessões por Campanha"
+    # --- ADICIONADO: ANÁLISE 2: PÁGINAS MAIS ACESSADAS ---
+    st.header("📄 Análise de Páginas Mais Acessadas")
+
+    pages_response = run_ga_report(
+        client, PROPERTY_ID,
+        dimensions=[Dimension(name="pageTitle")],
+        metrics=[Metric(name="screenPageViews")],
+        start_date=start_date, end_date=end_date,
+        limit=15, # Limita às Top 15 páginas
+        order_bys=[{'metric': {'metric_name': 'screenPageViews'}, 'desc': True}]
+    )
+
+    if pages_response and pages_response.rows:
+        page_rows = [{'Página': r.dimension_values[0].value, 'Visualizações': int(r.metric_values[0].value)} for r in pages_response.rows]
+        df_pages = pd.DataFrame(page_rows)
+        
+        fig_pages = px.bar(
+            df_pages.sort_values("Visualizações", ascending=True),
+            x="Visualizações",
+            y="Página",
+            orientation='h',
+            text="Visualizações",
+            title="Top 15 Páginas Mais Vistas no Período"
         )
-        fig_campaigns.update_traces(textposition='outside', marker_color='#ff7f0e')
-        fig_campaigns.update_layout(yaxis_title=None, height=500, margin=dict(l=10, r=10, t=40, b=10))
-        st.plotly_chart(fig_campaigns, use_container_width=True)
+        fig_pages.update_traces(textposition='outside', marker_color='#2ca02c')
+        fig_pages.update_layout(yaxis_title=None, height=500)
+        st.plotly_chart(fig_pages, use_container_width=True)
     else:
-        st.info("Não há dados de campanhas para o período selecionado.")
+        st.info("Não há dados de visualização de páginas para o período.")
