@@ -169,7 +169,8 @@ def run_page():
     )
 
     fig2.update_traces(
-        textposition='inside',
+        textposition='outside',
+        textfont_size=14,  # Aumenta o tamanho da fonte dos textos
         hovertemplate="<b>%{y}</b><br>Categoria: %{customdata[0]}<br>Valor: %{x:,.2f}<extra></extra>",
         customdata=grafico2[['categoria']]
     )
@@ -207,50 +208,61 @@ def run_page():
     )
 
     fig3.update_traces(
-        textposition='inside',
+        textposition='outside',
+        textfont_size=14,  # Aumenta o tamanho da fonte dos textos
         hovertemplate="<b>%{y}</b><br>Categoria: %{customdata[0]}<br>Valor: %{x:,.2f}<extra></extra>",
         customdata=grafico3[['categoria']]
     )
 
     st.plotly_chart(fig3, use_container_width=True)
 
-
+    # ==============================================================================
+    # GRÁFICO DE ESTORNOS POR CURSO VENDA E TIPO DE CANCELAMENTO
+    # ==============================================================================
     st.divider()
-    ## Gráfico de estornos por curso venda
-    st.subheader("Estornos por Curso Venda")
+    st.subheader("Estornos por Curso Venda e Tipo de Cancelamento")
+
+    # Garante que a coluna de estorno é numérica, tratando possíveis erros
     df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
-    grafico3 = (
-        df_filtrado.groupby("curso_venda")
-        .agg({'estorno_cancelamento': 'sum'})  # Forma explícita de agregação
+    # 1. CORREÇÃO: Agrupamos por 'curso_venda' E 'tipo_cancelamento'
+    grafico_estornos = (
+        df_filtrado.groupby(["curso_venda", "tipo_cancelamento"])
+        .agg(Valor_Estornado=('estorno_cancelamento', 'sum'))
         .reset_index()
     )
-    grafico3['valor_numerico'] = grafico3['estorno_cancelamento']
 
-    grafico3["estorno_formatado"] = grafico3["valor_numerico"].apply(formatar_reais)
+    # Remove valores zerados ou nulos para um gráfico mais limpo
+    grafico_estornos = grafico_estornos[grafico_estornos['Valor_Estornado'] > 0]
 
-    max_value = float(grafico3["valor_numerico"].max())
+    if not grafico_estornos.empty:
+        # Ordena os cursos pelo valor total de estorno para um gráfico mais organizado
+        ordem_cursos = grafico_estornos.groupby('curso_venda')['Valor_Estornado'].sum().sort_values(ascending=True).index
 
-    fig3 = px.bar(
-        grafico3,
-        x="valor_numerico",
-        y="curso_venda",
-        title="Cancelamento por Curso Venda",
-        labels={"valor_numerico": "Valor Estornado", "curso_venda": "Curso Venda"},
-        orientation="h",
-        barmode="stack",
-        text="estorno_formatado",  # Use o texto formatado aqui
-        range_x=[0, max_value * 1.1]  # Agora pode multiplicar pois max_value é float
-    )
+        # 2. CRIA O GRÁFICO com os dados já preparados
+        fig_estornos = px.bar(
+            grafico_estornos,
+            x="Valor_Estornado",
+            y="curso_venda",
+            color="tipo_cancelamento", # Agora esta coluna existe nos dados!
+            title="Valor de Cancelamento por Curso e Tipo",
+            labels={"Valor_Estornado": "Valor Total Estornado (R$)", "curso_venda": "Curso Venda"},
+            orientation='h',
+            barmode='stack', # Empilha as barras pela dimensão de cor
+            text_auto='.2s', # Deixa o Plotly formatar o texto dos segmentos de forma inteligente
+            category_orders={'curso_venda': ordem_cursos} # Aplica a ordenação
+        )
 
-    fig3.update_traces(
-        textposition='outside',
-        hovertemplate="<b>%{y}</b><br>Curso Venda: %{customdata[0]}<br>Valor: %{x:,.2f}<extra></extra>",
-        customdata=grafico3[['curso_venda']],
-        textfont_size=14,  # Aumenta o tamanho da fonte dos textos
-    )
-
-    st.plotly_chart(fig3, use_container_width=True)
+        # Melhora a aparência do gráfico
+        fig_estornos.update_layout(
+            yaxis_title=None, 
+            height=600,
+            legend_title_text='Tipo de Cancelamento'
+        )
+        
+        st.plotly_chart(fig_estornos, use_container_width=True)
+    else:
+        st.info("Não há dados de estorno para os filtros selecionados.")
 
     # Tabela de Cancelamentos por Unidade e Categoria
     # Agrupa total vendido por categoria
