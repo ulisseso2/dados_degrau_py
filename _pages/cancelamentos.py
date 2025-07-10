@@ -328,7 +328,7 @@ def run_page():
 
     # Tabela detalhada de Cancelamento
     tabela2 = df_filtrado[[
-        "nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
+        "unidade","turma","nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
     ]]
     tabela_alunos = tabela2.copy()
     tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)
