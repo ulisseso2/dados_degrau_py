@@ -12,11 +12,9 @@ st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 # =====================================================================
 # 1. MAPEAMENTO E AUTENTICAÇÃO
 # =====================================================================
-
-# Mapeia o nome amigável da página para o módulo Python correspondente
 PAGES = {
     "Oportunidades": oportunidades,
-    "Tendencias": tendencias,
+    "Tendências": tendencias,
     "Financeiro": financeiro,
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
@@ -28,7 +26,7 @@ PAGES = {
     "Cancelamentos Niterói": niteroi_cancelamento,
     "Matriculas Centro": centro,
     "Cancelamentos Centro": centro_cancelamento,
-    "Analise GA": analise_ga,
+    "Análise GA": analise_ga,
     "Análise Facebook": analise_facebook,
 }
 
