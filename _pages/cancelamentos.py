@@ -332,6 +332,8 @@ def run_page():
     ]]
     tabela_alunos = tabela2.copy()
     tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)
+    tabela_alunos["data_pagamento"] = pd.to_datetime(tabela_alunos["data_pagamento"]).dt.strftime('%d/%m/%Y')
+    tabela_alunos["solicitacao_cancelamento"] = pd.to_datetime(tabela_alunos["solicitacao_cancelamento"], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
 
     st.subheader("Lista de Cancelamentos Detalhada")
     st.dataframe(tabela_alunos, use_container_width=True)

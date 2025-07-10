@@ -135,11 +135,12 @@ def run_page():
         gb.configure_column("Campanha", header_name="Nome da Campanha")
         gb.configure_column(
             "Custo", header_name="Custo", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-            aggFunc='sum'
+            aggFunc='sum',
         )
         gb.configure_column(
             "Conversões", header_name="Conversões", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
-            aggFunc='sum'
+            aggFunc='sum',
+
         )
         gb.configure_column(
             "CPA (Custo por Conversão)", header_name="CPA", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
@@ -172,45 +173,6 @@ def run_page():
 
     st.divider()
 
-
-    report_response = run_ga_report(
-        client, PROPERTY_ID,
-        dimensions=[Dimension(name="campaignName")],
-        metrics=[
-            Metric(name="advertiserAdCost"),
-            Metric(name="conversions"),
-            Metric(name="purchaseRevenue"), # Adiciona a receita
-            Metric(name="engagementRate")   # Adiciona a taxa de engajamento
-        ],
-        start_date=start_date, end_date=end_date,
-        order_bys=[{'metric': {'metric_name': 'purchaseRevenue'}, 'desc': True}] # Ordena por receita
-    )
-
-    if report_response and report_response.rows:
-        rows = []
-        for r in report_response.rows:
-            cost = float(r.metric_values[0].value)
-            conversions = float(r.metric_values[1].value)
-            revenue = float(r.metric_values[2].value)
-            engagement = float(r.metric_values[3].value)
-
-            cpa = (cost / conversions) if conversions > 0 else 0
-            roas = (revenue / cost) if cost > 0 else 0
-
-            rows.append({
-                'Campanha': r.dimension_values[0].value,
-                'Custo': cost,
-                'Conversões': int(conversions),
-                'Receita': revenue,
-                'Taxa de Engajamento': engagement,
-                'CPA': cpa,
-                'ROAS': roas
-            })
-
-        df_performance_avancado = pd.DataFrame(rows)
-        df_performance_avancado = df_performance_avancado[df_performance_avancado['Custo'] > 0].reset_index(drop=True)
-
-        st.dataframe(df_performance_avancado)
         # --- NOVA SEÇÃO: KPIs GERAIS DE ENGAJAMENTO ---
     st.header("Visão Geral do Período")
     
@@ -249,7 +211,7 @@ def run_page():
         [Dimension(name="sessionDefaultChannelGroup")], 
         [Metric(name="sessions"), Metric(name="activeUsers"), Metric(name="conversions"), Metric(name="purchaseRevenue")], 
         start_date, end_date)
-    
+ 
     if acq_response and acq_response.rows:
         rows = []
         for r in acq_response.rows:
