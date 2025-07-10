@@ -8,6 +8,7 @@ from facebook_business.adobjects.adsinsights import AdsInsights
 from dotenv import load_dotenv
 import os
 from datetime import datetime
+import plotly.express as px
 
 # Carrega as variáveis do .env (só terá efeito no ambiente local)
 load_dotenv()
@@ -92,6 +93,44 @@ def get_facebook_campaign_insights(account, start_date, end_date):
         st.error(f"Erro ao buscar insights de campanhas do Facebook: {e}")
         return pd.DataFrame()
     
+
+def get_facebook_breakdown_insights(account, start_date, end_date, breakdown):
+    """
+    Busca insights de Custo segmentados por um 'breakdown' específico (ex: age, gender).
+    """
+    try:
+        fields = [
+            AdsInsights.Field.spend,
+        ]
+        params = {
+            'level': 'campaign',
+            'time_range': {
+                'since': start_date.strftime('%Y-%m-%d'),
+                'until': end_date.strftime('%Y-%m-%d'),
+            },
+            # O parâmetro chave que segmenta os dados
+            'breakdowns': [breakdown],
+        }
+
+        insights = account.get_insights(fields=fields, params=params)
+        
+        rows = []
+        for insight in insights:
+            rows.append({
+                'Segmento': insight[breakdown],
+                'Custo': float(insight[AdsInsights.Field.spend]),
+            })
+        
+        df = pd.DataFrame(rows)
+        # Agrupa os resultados, pois a API retorna uma linha por dia por segmento
+        if not df.empty:
+            df = df.groupby('Segmento')['Custo'].sum().sort_values(ascending=False).reset_index()
+        return df
+
+    except Exception as e:
+        st.error(f"Erro ao buscar dados com breakdown '{breakdown}': {e}")
+        return pd.DataFrame()
+    
 def formatar_reais(valor):
     """Formata um número para o padrão monetário brasileiro."""
     if pd.isna(valor) or valor == 0: return "R$ 0,00"
@@ -156,3 +195,52 @@ def run_page():
             
     else:
         st.warning("A conexão com a API do Facebook não pôde ser estabelecida.")
+
+    st.divider()
+    # ==============================================================================
+    # NOVA SEÇÃO: PERFIL DE PÚBLICO E PLATAFORMA
+    # ==============================================================================
+    st.header("👤 Perfil do Público e Plataformas")
+
+    # --- Análise Demográfica ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("##### Gênero")
+        df_gender = get_facebook_breakdown_insights(account, start_date, end_date, 'gender')
+        if not df_gender.empty:
+            fig_gender = px.pie(df_gender, names='Segmento', values='Custo', hole=0.4)
+            st.plotly_chart(fig_gender, use_container_width=True)
+
+    with col2:
+        st.markdown("##### Faixa Etária")
+        df_age = get_facebook_breakdown_insights(account, start_date, end_date, 'age')
+        if not df_age.empty:
+            fig_age = px.bar(df_age, x='Custo', y='Segmento', orientation='h', text_auto='.2s')
+            fig_age.update_layout(yaxis_title=None, xaxis_title="Custo (R$)")
+            st.plotly_chart(fig_age, use_container_width=True)
+
+    with col3:
+        st.markdown("##### Top 5 Regiões (Estados)")
+        df_region = get_facebook_breakdown_insights(account, start_date, end_date, 'region')
+        if not df_region.empty:
+            fig_region = px.bar(df_region.head(5).sort_values("Custo", ascending=True), x='Custo', y='Segmento', orientation='h', text_auto='.2s')
+            fig_region.update_layout(yaxis_title=None, xaxis_title="Custo (R$)")
+            st.plotly_chart(fig_region, use_container_width=True)
+
+    st.divider()
+
+    # --- Análise de Tecnologia e Plataforma ---
+    colA, colB = st.columns(2)
+    with colA:
+        st.markdown("##### Plataforma (Facebook, Instagram, etc.)")
+        df_platform = get_facebook_breakdown_insights(account, start_date, end_date, 'publisher_platform')
+        if not df_platform.empty:
+            fig_platform = px.pie(df_platform, names='Segmento', values='Custo', hole=0.4)
+            st.plotly_chart(fig_platform, use_container_width=True)
+
+    with colB:
+        st.markdown("##### Tipo de Dispositivo")
+        df_device = get_facebook_breakdown_insights(account, start_date, end_date, 'impression_device')
+        if not df_device.empty:
+            fig_device = px.pie(df_device, names='Segmento', values='Custo', hole=0.4)
+            st.plotly_chart(fig_device, use_container_width=True)
