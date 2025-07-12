@@ -53,11 +53,6 @@ def formatar_reais(valor):
 
 def run_page():
     st.title("📊 Análise de Performance Digital (GA4)")
-    
-    # Adicionamos a função auxiliar aqui para ficar disponível para as métricas
-    def formatar_reais(valor):
-        if pd.isna(valor) or valor == 0: return "R$ 0,00"
-        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     PROPERTY_ID = "327463413"
     credentials = get_ga_credentials()
