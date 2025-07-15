@@ -202,35 +202,71 @@ def run_page():
     st.subheader("Vendas por Curso e Categoria (Valor e Quantidade)")
     st.dataframe(tabela_completa, use_container_width=True)
 
-    # --- Tabela detalhada de alunos ---
+    st.divider()
+    st.subheader("Lista de Alunos Matriculados")
+
+    # 1. Cria a tabela base com os dados que já passaram pelos filtros da sidebar
     tabela_base = df_filtrado[[
-       "curso_venda", "turma", "turno", "nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento"
-    ]]
+       "curso_venda", "turma", "turno", "nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento","cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente"
+    ]].copy() # Usamos .copy() para garantir que é um novo DataFrame
 
-    # Cria a VERSÃO PARA EXIBIÇÃO na tela (com R$ formatado)
-    tabela_para_exibir = tabela_base.copy()
-    tabela_para_exibir["total_pedido"] = tabela_para_exibir["total_pedido"].apply(formatar_reais)
-    tabela_para_exibir["data_pagamento"] = pd.to_datetime(tabela_para_exibir["data_pagamento"]).dt.strftime('%d/%m/%Y')
+    # --- 2. CRIAÇÃO DOS FILTROS ESPECÍFICOS PARA A TABELA ---
+    st.markdown("Filtre a lista de alunos abaixo:")
+    col1, col2 = st.columns([2, 1]) # Duas colunas para os filtros
 
-    st.subheader("Lista de Alunos")
-    st.dataframe(tabela_para_exibir, use_container_width=True)
+    with col1:
+        # Filtro para Curso Venda
+        cursos_venda_disponiveis = sorted(tabela_base['curso_venda'].dropna().unique().tolist())
+        curso_venda_selecionado = st.multiselect(
+            "Filtrar por Curso Venda:",
+            options=cursos_venda_disponiveis,
+            default=cursos_venda_disponiveis,
+            key="filtro_curso_venda_tabela"
+        )
 
-    # --- Exportação para Excel ---
-    st.subheader("Exportar Relatório Detalhado")
+    with col2:
+        # Filtro para Turno
+        turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
+        turno_selecionado = st.multiselect(
+            "Filtrar por Turno:",
+            options=turnos_disponiveis,
+            default=turnos_disponiveis,
+            key="filtro_turno_tabela"
+        )
+        
+    # --- 3. APLICAÇÃO DOS NOVOS FILTROS ---
+    tabela_final = tabela_base[
+        (tabela_base['curso_venda'].isin(curso_venda_selecionado)) &
+        (tabela_base['turno'].isin(turno_selecionado))
+    ]
 
-    # Cria a VERSÃO PARA EXPORTAÇÃO (com dados numéricos e sem timezone)
-    tabela_para_exportar = tabela_base.copy()
 
-    if 'data_pagamento' in tabela_para_exportar.columns:
-        tabela_para_exportar['data_pagamento'] = tabela_para_exportar['data_pagamento'].dt.tz_localize(None)
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        tabela_para_exportar.to_excel(writer, index=False, sheet_name='Pedidos')
-    buffer.seek(0)
+    # --- 4. EXIBIÇÃO E EXPORTAÇÃO DA TABELA JÁ FILTRADA ---
+    if not tabela_final.empty:
+        # Prepara a versão para exibição na tela (com R$ formatado)
+        tabela_para_exibir = tabela_final.copy()
+        tabela_para_exibir["total_pedido"] = tabela_para_exibir["total_pedido"].apply(formatar_reais)
+        
+        # Formata a data para o padrão brasileiro APENAS para exibição
+        tabela_para_exibir["data_pagamento"] = pd.to_datetime(tabela_para_exibir["data_pagamento"]).dt.strftime('%d/%m/%Y')
+        
+        st.dataframe(tabela_para_exibir, use_container_width=True, hide_index=True)
 
-    st.download_button(
-        label="📥 Baixar Lista de Alunos",
-        data=buffer,
-        file_name="pedidos_detalhados.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        # Prepara a versão para exportação (com dados numéricos e sem timezone)
+        tabela_para_exportar = tabela_final.copy()
+        if 'data_pagamento' in tabela_para_exportar.columns:
+            tabela_para_exportar['data_pagamento'] = tabela_para_exportar['data_pagamento'].dt.tz_localize(None)
+
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            tabela_para_exportar.to_excel(writer, index=False, sheet_name='Matriculas Detalhadas')
+        buffer.seek(0)
+
+        st.download_button(
+            label="📥 Baixar Lista Filtrada",
+            data=buffer,
+            file_name="matriculas_detalhadas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Nenhum aluno encontrado para os filtros de Curso Venda e Turno selecionados.")

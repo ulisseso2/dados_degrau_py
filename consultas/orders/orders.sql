@@ -18,6 +18,10 @@ SELECT
     c.full_name AS nome_cliente,
     c.email AS email_cliente,
     c.cellphone AS celular_cliente,
+    ca.cep AS cep_cliente,
+    ca.address AS endereco_cliente,
+    ca.neighborhood AS bairro_cliente,
+    ca.city AS cidade_cliente,
     IFNULL(v.full_name, 'Indefinido') AS vendedor,
     pm.name AS metodo_pagamento,
     GROUP_CONCAT(DISTINCT t.name SEPARATOR ', ') AS turma,
@@ -60,6 +64,7 @@ FROM seducar.orders o
 LEFT JOIN seducar.order_status os ON os.id = o.order_status_id
 LEFT JOIN seducar.payment_methods pm ON pm.id = o.payment_method_id
 LEFT JOIN seducar.customers c ON c.id = o.customer_id
+LEFT JOIN seducar.customer_addresses ca ON ca.customer_id = c.id
 LEFT JOIN seducar.users v ON v.id = o.user_id
 LEFT JOIN seducar.order_items oi ON oi.order_id = o.id
 LEFT JOIN seducar.product_categories pc ON pc.id = oi.product_category_id
