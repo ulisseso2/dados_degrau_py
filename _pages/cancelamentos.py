@@ -67,6 +67,22 @@ def run_page():
         default=opcoes_ordenadas
     )
 
+    st.sidebar.subheader("Filtro de Turno")
+    turnos_disponiveis = df_filtrado_empresa['turno'].dropna().unique().tolist()
+    turno_selecionado = st.sidebar.multiselect(
+        "Selecione o(s) turno(s):",
+        options=sorted(turnos_disponiveis),
+        default=sorted(turnos_disponiveis)
+    )
+
+    st.sidebar.subheader("Filtro de Curso Venda")
+    cursos_venda_disponiveis = df_filtrado_empresa['curso_venda'].dropna().unique().tolist()
+    curso_venda_selecionado = st.sidebar.multiselect(
+        "Selecione o(s) curso(s) de venda:",
+        options=sorted(cursos_venda_disponiveis),
+        default=sorted(cursos_venda_disponiveis)
+    )
+
     # Filtros adicionais recolhidos
     # O filtro de Unidades agora fica dentro de seu próprio expander
     with st.sidebar.expander("Filtrar por Unidade"):
@@ -86,6 +102,8 @@ def run_page():
         (df["unidade"].isin(unidade_selecionada)) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df['tipo_cancelamento'].isin(tipo_selecionado)) &
+        (df['turno'].isin(turno_selecionado)) &
+        (df['curso_venda'].isin(curso_venda_selecionado)) &
         (df["data_referencia"] >= data_inicio_aware) &
         (df["data_referencia"] < data_fim_aware) &
         (df["status_id"].isin([3, 15])) &
@@ -327,7 +345,7 @@ def run_page():
 
     # Tabela detalhada de Cancelamento
     tabela2 = df_filtrado[[
-        "unidade","turma","nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
+        "unidade","turma","turno","nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento" 
     ]]
     tabela_alunos = tabela2.copy()
     tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)

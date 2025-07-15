@@ -204,12 +204,13 @@ def run_page():
 
     # --- Tabela detalhada de alunos ---
     tabela_base = df_filtrado[[
-        "nome_cliente", "email_cliente", "celular_cliente","status", "curso_venda", "unidade", "total_pedido", "data_pagamento"
+       "curso_venda", "turma", "turno", "nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento"
     ]]
 
     # Cria a VERSÃO PARA EXIBIÇÃO na tela (com R$ formatado)
     tabela_para_exibir = tabela_base.copy()
     tabela_para_exibir["total_pedido"] = tabela_para_exibir["total_pedido"].apply(formatar_reais)
+    tabela_para_exibir["data_pagamento"] = pd.to_datetime(tabela_para_exibir["data_pagamento"]).dt.strftime('%d/%m/%Y')
 
     st.subheader("Lista de Alunos")
     st.dataframe(tabela_para_exibir, use_container_width=True)

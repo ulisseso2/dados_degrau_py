@@ -22,6 +22,7 @@ SELECT
     pm.name AS metodo_pagamento,
     GROUP_CONCAT(DISTINCT t.name SEPARATOR ', ') AS turma,
     GROUP_CONCAT(DISTINCT t.id SEPARATOR ', ') AS turma_id,
+    GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') AS turno,
     GROUP_CONCAT(DISTINCT 
         CASE 
             WHEN cu.title IS NULL AND oi.product_category_id = 7 THEN 'Passaporte'
@@ -63,6 +64,7 @@ LEFT JOIN seducar.users v ON v.id = o.user_id
 LEFT JOIN seducar.order_items oi ON oi.order_id = o.id
 LEFT JOIN seducar.product_categories pc ON pc.id = oi.product_category_id
 LEFT JOIN seducar.classrooms t ON t.id = oi.classroom_id
+LEFT JOIN seducar.shifts s ON s.id = t.shift_id
 LEFT JOIN seducar.units u ON u.id = t.unit_id
 LEFT JOIN seducar.units u3 ON u3.id = o.unit_id
 LEFT JOIN seducar.courses cu ON cu.id = t.course_id
