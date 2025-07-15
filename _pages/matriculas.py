@@ -81,7 +81,7 @@ def run_page():
         (~df["metodo_pagamento"].isin([5, 8]))
     ]
 
-    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])]
+    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])].copy()
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

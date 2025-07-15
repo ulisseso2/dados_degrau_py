@@ -1,7 +1,3 @@
-# =======================================
-# Dependências Principais do Projeto
-# =======================================
-
 # --- Core do Streamlit e Interface ---
 streamlit
 streamlit-aggrid

@@ -1,5 +1,3 @@
-# _pages/analise_facebook.py
-
 import streamlit as st
 import pandas as pd
 from facebook_business.api import FacebookAdsApi
@@ -95,7 +93,7 @@ def get_facebook_campaign_insights(account, start_date, end_date):
             # 2. Limpa o nome do Curso Venda e preenche vazios
             df['Curso Venda'] = df['Curso Venda'].str.strip()
             df['Curso Venda'].fillna('Não Especificado', inplace=True)
-        # <-- FIM DAS NOVAS LINHAS -->
+
         return df
 
     except Exception as e:
@@ -220,9 +218,9 @@ def run_page():
         st.warning("A conexão com a API do Facebook não pôde ser estabelecida.")
 
     st.divider()
-    # ==============================================================================
-    # NOVA SEÇÃO: PERFIL DE PÚBLICO E PLATAFORMA
-    # ==============================================================================
+
+    # SEÇÃO: PERFIL DE PÚBLICO E PLATAFORMA
+
     st.header("👤 Perfil do Público e Plataformas")
 
     # --- Análise Demográfica ---

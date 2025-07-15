@@ -24,7 +24,7 @@ def run_page():
 
     # Converte para datetime, trata erros e ATRIBUI o fuso horário correto
     df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
-    df['data_vencimento_parcela'] = pd.to_datetime(df['data_vencimento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer') # <-- LINHA ADICIONADA
+    df['data_vencimento_parcela'] = pd.to_datetime(df['data_vencimento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer') # 
 
     # --- Seção de Filtros na Barra Lateral ---
     st.sidebar.header("Filtros da Análise")
@@ -379,7 +379,7 @@ def run_page():
         st.warning("Não há dados para os filtros selecionados para gerar os gráficos.")
 
     # ==============================================================================
-    # NOVA ANÁLISE: CONTAS A PAGAR POR VENCIMENTO
+    # CONTAS A PAGAR POR VENCIMENTO
     # Esta análise usa filtros independentes, respeitando apenas a seleção de EMPRESA.
     # ==============================================================================
     st.divider()

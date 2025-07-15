@@ -9,11 +9,12 @@ import os
 from datetime import datetime
 from st_aggrid import GridOptionsBuilder, AgGrid
 
+# Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# ==============================================================================
 # 1. FUNÇÕES AUXILIARES
-# ==============================================================================
+
+# Carrega as credenciais do Google Analytics de forma híbrida
 def get_ga_credentials():
     """Carrega as credenciais de forma híbrida"""
     try:
@@ -25,6 +26,7 @@ def get_ga_credentials():
             return service_account.Credentials.from_service_account_file(file_path)
     return None
 
+# Função para executar relatórios no GA4
 def run_ga_report(client, property_id, dimensions, metrics, start_date, end_date, limit=15, order_bys=None):
     """Função ÚNICA para executar qualquer relatório no GA4."""
     try:
@@ -47,9 +49,7 @@ def formatar_reais(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-# ==============================================================================
 # 2. FUNÇÃO PRINCIPAL DA PÁGINA (run_page)
-# ==============================================================================
 
 def run_page():
     st.title("📊 Análise de Performance Digital (GA4)")
@@ -101,7 +101,7 @@ def run_page():
         df_performance = pd.DataFrame(rows)
         df_performance = df_performance[df_performance['Custo'] > 0].reset_index(drop=True)
 
-        # --- ADICIONADO: Métrica de Custo Total ---
+        # Métrica de Custo Total ---
         custo_total_periodo = df_performance['Custo'].sum()
         st.metric("Custo Total no Período", formatar_reais(custo_total_periodo))
 
@@ -168,7 +168,7 @@ def run_page():
 
     st.divider()
 
-        # --- NOVA SEÇÃO: KPIs GERAIS DE ENGAJAMENTO ---
+        # SEÇÃO: KPIs GERAIS DE ENGAJAMENTO ---
     st.header("Visão Geral do Período")
     
     kpi_response = run_ga_report(client, PROPERTY_ID, [], 
@@ -199,7 +199,7 @@ def run_page():
 
     st.divider()
 
-    # --- NOVA SEÇÃO: TABELA DE AQUISIÇÃO DE TRÁFEGO ---
+    # SEÇÃO: TABELA DE AQUISIÇÃO DE TRÁFEGO ---
     st.header("📈 Aquisição de Tráfego por Canal")
 
     acq_response = run_ga_report(client, PROPERTY_ID, 
@@ -227,8 +227,6 @@ def run_page():
     else:
         st.info("Não há dados de aquisição para o período.")
     
-
-    # Em _pages/analise_ga.py, dentro de run_page()
 
     st.header("Demografia do Público")
     col1, col2, col3 = st.columns(3)

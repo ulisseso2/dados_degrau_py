@@ -81,7 +81,6 @@ def run_page():
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     
 
-
     df_filtrado = df[
         (df["empresa"].isin(empresa_selecionada)) &
         (df["unidade"].isin(unidade_selecionada)) &
@@ -92,7 +91,12 @@ def run_page():
         (df["status_id"].isin([3, 15])) &
         (~df["metodo_pagamento"].isin([5, 8])) & 
         (df["total_pedido"] != 0)
-    ]
+    ].copy()
+
+    df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index().copy()
+    df_cancelados['estorno_cancelamento'] = pd.to_numeric(df_cancelados['estorno_cancelamento'], errors='coerce')
+
+    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     col1, col2 = st.columns(2)
     with col1:
@@ -143,7 +147,6 @@ def run_page():
 
     # Gráfico de estornos por categoria e unidade
     st.subheader("Estornos por Categoria e Unidade")
-    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     grafico2 = (
         df_filtrado.groupby(["categoria", "unidade"])
@@ -181,7 +184,6 @@ def run_page():
 
     ## Gráfico de estornos por categoria
     st.subheader("Estornos por Categoria")
-    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     grafico3 = (
         df_filtrado.groupby("categoria")
@@ -221,9 +223,6 @@ def run_page():
     # ==============================================================================
     st.divider()
     st.subheader("Estornos por Curso Venda e Tipo de Cancelamento")
-
-    # Garante que a coluna de estorno é numérica, tratando possíveis erros
-    df_filtrado['estorno_cancelamento'] = pd.to_numeric(df_filtrado['estorno_cancelamento'], errors='coerce')
 
     # 1. CORREÇÃO: Agrupamos por 'curso_venda' E 'tipo_cancelamento'
     grafico_estornos = (
@@ -305,7 +304,7 @@ def run_page():
     st.subheader("Cancelamento por Tipo")
 
     # 1. Prepara os dados: agrupa por situação e soma o valor
-    df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index()
+
     # 3. Cria o gráfico de pizza
     if not df_cancelados.empty:
         fig_pizza_cancelados = px.pie(

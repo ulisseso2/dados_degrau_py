@@ -9,9 +9,8 @@ from _pages import oportunidades, financeiro, tendencias, cancelamentos, matricu
 # Configuração da página (deve ser o primeiro comando Streamlit)
 st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 
-# =====================================================================
 # 1. MAPEAMENTO E AUTENTICAÇÃO
-# =====================================================================
+
 PAGES = {
     "Oportunidades": oportunidades,
     "Tendências": tendencias,
@@ -71,9 +70,8 @@ def check_credentials(username, password):
         return False, None
         
     return False, None # Senha incorreta
-# =====================================================================
+
 # 2. LÓGICA DE INTERFACE (UI) E SESSÃO
-# =====================================================================
 
 # Inicializa o estado da sessão se ainda não existir
 if 'authenticated' not in st.session_state:
