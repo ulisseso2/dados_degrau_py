@@ -1,66 +1,24 @@
-aiohappyeyeballs==2.6.1
-aiohttp==3.12.14
-aiosignal==1.4.0
-altair==5.5.0
-attrs==25.3.0
-blinker==1.9.0
-cachetools==5.5.2
-certifi==2025.6.15
-charset-normalizer==3.4.2
-click==8.2.1
-curlify==3.0.0
-facebook_business==23.0.0
-frozenlist==1.7.0
-gitdb==4.0.12
-GitPython==3.1.44
-google-analytics-data==0.18.19
-google-api-core==2.25.1
-google-auth==2.40.3
-googleapis-common-protos==1.70.0
-greenlet==3.2.3
-grpcio==1.73.1
-grpcio-status==1.73.1
-idna==3.10
-Jinja2==3.1.6
-jsonschema==4.24.0
-jsonschema-specifications==2025.4.1
-MarkupSafe==3.0.2
-multidict==6.6.3
-mysql-connector-python==9.3.0
-narwhals==1.43.1
-numpy==2.2.5
-packaging==24.2
-pandas==2.3.0
-pillow==11.2.1
-plotly==6.1.2
-propcache==0.3.2
-proto-plus==1.26.1
-protobuf==6.31.1
-pyarrow==20.0.0
-pyasn1==0.6.1
-pyasn1_modules==0.4.2
-pycountry==24.6.1
-pydeck==0.9.1
-python-dateutil==2.9.0.post0
-python-decouple==3.8
-python-dotenv==1.1.0
-pytz==2025.2
-referencing==0.36.2
-requests==2.32.4
-rpds-py==0.25.1
-rsa==4.9.1
-scipy==1.15.3
-six==1.17.0
-smmap==5.0.2
-SQLAlchemy==2.0.41
-streamlit==1.45.1
-streamlit-aggrid==1.1.4.post1
-tenacity==9.1.2
-toml==0.10.2
-tornado==6.5.1
-typing_extensions==4.14.0
-tzdata==2025.2
-urllib3==2.5.0
-watchdog==6.0.0
-XlsxWriter==3.2.3
-yarl==1.20.1
+# =======================================
+# Dependências Principais do Projeto
+# =======================================
+
+# --- Core do Streamlit e Interface ---
+streamlit
+streamlit-aggrid
+
+# --- Manipulação e Análise de Dados ---
+pandas
+numpy
+
+# --- Visualização de Dados ---
+plotly
+
+# --- Conexões com Banco de Dados e APIs ---
+SQLAlchemy
+mysql-connector-python
+google-analytics-data
+facebook-business
+
+# --- Utilitários ---
+python-dotenv
+XlsxWriter

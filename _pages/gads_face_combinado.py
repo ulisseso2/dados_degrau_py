@@ -32,6 +32,7 @@ def get_ga_credentials():
     return None
 
 #função para inicializar o cliente do GA4
+
 def run_ga_report(client, property_id, dimensions, metrics, start_date, end_date, limit=15, order_bys=None):
     """Função ÚNICA para executar qualquer relatório no GA4."""
     try:
@@ -85,6 +86,7 @@ def init_facebook_api():
         return None
 
 #função para buscar insights de campanhas do Facebook
+
 def get_facebook_campaign_insights(account, start_date, end_date):
     """
     Busca insights de performance para todas as campanhas em um período.
@@ -122,13 +124,23 @@ def get_facebook_campaign_insights(account, start_date, end_date):
                 'CPC': float(insight[AdsInsights.Field.cpc]),
             })
             
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
 
+        if not df.empty:
+            # 1. Usa regex para extrair o conteúdo dentro de {}
+            df['Curso Venda'] = df['Campanha'].str.extract(r'\{(.*?)\}')
+            # 2. Limpa o nome do Curso Venda e preenche vazios
+            df['Curso Venda'] = df['Curso Venda'].str.strip()
+            df['Curso Venda'].fillna('Não Especificado', inplace=True)
+        # <-- FIM DAS NOVAS LINHAS -->
+        return df
+    
     except Exception as e:
         st.error(f"Erro ao buscar insights de campanhas do Facebook: {e}")
         return pd.DataFrame()
     
 #função para buscar insights com breakdowns do Facebook
+
 def get_facebook_breakdown_insights(account, start_date, end_date, breakdown):
     """
     Busca insights de Custo segmentados por um 'breakdown' específico (ex: age, gender).
@@ -239,6 +251,56 @@ def run_page():
             col1.metric("Custo Total no Período (FB)", formatar_reais(total_custo_fb))
             col2.metric("Custo Total no Período (GA4)", formatar_reais(custo_total_periodo))
             col3.metric("Investimento Total", formatar_reais(total_custo_fb + custo_total_periodo))
+    
+    st.divider()
+
+    # NOVA ANÁLISE: TABELA UNIFICADA DE CUSTOS POR CURSO VENDA
+    # 
+    st.header("Investimento por Curso Venda (Google Ads + Meta Ads)")
+
+    # Verifica se os dois dataframes foram carregados com sucesso
+    if 'df_performance' in locals() and 'df_insights' in locals() and not df_performance.empty and not df_insights.empty:
+
+        # --- 1. Prepara os dados do Google ---
+        df_google = df_performance.copy()
+        df_google['Curso Venda'] = df_google['Campanha'].str.extract(r'\{(.*?)\}')
+        df_google['Curso Venda'].fillna('Não Especificado', inplace=True)
+        df_google_agg = df_google.groupby('Curso Venda').agg(Custo_Google=('Custo', 'sum')).reset_index()
+
+        # --- 2. Prepara os dados do Facebook ---
+        # O df_insights já tem a coluna 'Curso Venda' da nossa função
+        df_facebook_agg = df_insights.groupby('Curso Venda').agg(Custo_Facebook=('Custo', 'sum')).reset_index()
+
+        # --- 3. Une as duas tabelas ---
+        # Usamos um 'outer' merge para garantir que nenhum curso venda seja perdido,
+        # caso ele só tenha custo em uma das plataformas.
+        df_unificado = pd.merge(
+            df_google_agg,
+            df_facebook_agg,
+            on='Curso Venda',
+            how='outer'
+        )
+
+        # Substitui valores NaN (que aparecem no merge) por 0
+        df_unificado.fillna(0, inplace=True)
+
+        # --- 4. Calcula o Custo Agregado ---
+        df_unificado['Custo Agregado'] = df_unificado['Custo_Google'] + df_unificado['Custo_Facebook']
+
+        # --- 5. Exibe a Tabela Final ---
+        st.dataframe(
+            df_unificado.sort_values('Custo Agregado', ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Custo_Google": st.column_config.NumberColumn("Custo Google (R$)", format="R$ %.2f"),
+                "Custo_Facebook": st.column_config.NumberColumn("Custo Facebook (R$)", format="R$ %.2f"),
+                "Custo Agregado": st.column_config.NumberColumn("Custo Total (R$)", format="R$ %.2f"),
+            }
+        )
+    else:
+        st.info("Não foi possível carregar os dados de ambas as fontes para gerar a análise unificada.")
+
 
 
 

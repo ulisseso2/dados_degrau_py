@@ -87,7 +87,16 @@ def get_facebook_campaign_insights(account, start_date, end_date):
                 'CPC': float(insight[AdsInsights.Field.cpc]),
             })
             
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
+        
+        if not df.empty:
+            # 1. Usa regex para extrair o conteúdo dentro de {}
+            df['Curso Venda'] = df['Campanha'].str.extract(r'\{(.*?)\}')
+            # 2. Limpa o nome do Curso Venda e preenche vazios
+            df['Curso Venda'] = df['Curso Venda'].str.strip()
+            df['Curso Venda'].fillna('Não Especificado', inplace=True)
+        # <-- FIM DAS NOVAS LINHAS -->
+        return df
 
     except Exception as e:
         st.error(f"Erro ao buscar insights de campanhas do Facebook: {e}")
@@ -177,12 +186,26 @@ def run_page():
             col1.metric("Custo Total no Período", formatar_reais(total_custo))
             col2.metric("Total de Cliques", f"{total_cliques:,}".replace(",", "."))
 
+            ordem_das_colunas = [
+                'Curso Venda',
+                'Campanha',
+                'Custo',
+                'Impressões',
+                'Cliques',
+                'CPC',
+                'CTR (%)'
+            ]
+
+            df_para_exibir = df_insights[ordem_das_colunas]
+
             # Exibe a tabela detalhada
             st.dataframe(
-                df_insights.sort_values("Custo", ascending=False),
+                df_para_exibir.sort_values("Custo", ascending=False),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
+                    "curso_venda": st.column_config.TextColumn("Curso Venda"),
+                    "Campanha": st.column_config.TextColumn("Campanha"),
                     "Custo": st.column_config.NumberColumn("Custo (R$)", format="R$ %.2f"),
                     "CPC": st.column_config.NumberColumn("Custo por Clique (R$)", format="R$ %.2f"),
                     "CTR (%)": st.column_config.ProgressColumn(
