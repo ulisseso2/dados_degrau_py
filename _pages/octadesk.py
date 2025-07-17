@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime
 import plotly.express as px
+import json
 
 load_dotenv()
 TIMEZONE = 'America/Sao_Paulo'
@@ -27,33 +28,55 @@ def get_octadesk_token():
     return token
 
 @st.cache_data(ttl=1800)
-def get_recent_octadesk_chats(api_token):
-    """
-    Busca os 100 chats mais recentes, ignorando o filtro de data para garantir o funcionamento.
-    """
+def get_octadesk_chats(api_token, start_date, end_date, max_pages=20):
     base_url = "https://o198470-a5c.api001.octadesk.services"
     url = f"{base_url}/chat"
     headers = {"accept": "application/json", "X-API-KEY": api_token}
-    
-    # Parâmetros simplificados, sem filtro de data, que sabemos que funciona.
-    params = {
-        "limit": 100,
-        "sort[direction]": "desc"
-    }
-    
-    try:
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data:
-            return pd.json_normalize(data)
-        return pd.DataFrame()
+    all_results = []
+    page = 1
 
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao buscar dados do Octadesk: {e}")
+    while page <= max_pages:
+        params = {
+            "page": page,
+            "limit": 100
+        }
+
+        try:
+            response = requests.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            if not data:
+                break
+
+            all_results.extend(data)
+
+            if len(data) < 100:
+                break
+
+            page += 1
+
+        except requests.exceptions.HTTPError as http_err:
+            st.error(f"Erro na API do Octadesk na página {page}: {http_err.response.status_code} - {http_err.response.text}")
+            return pd.DataFrame()
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao buscar dados do Octadesk: {e}")
+            return pd.DataFrame()
+
+    if page > max_pages:
+        st.warning(f"Limite de {max_pages} páginas atingido. Pode haver mais dados não carregados.")
+
+    if all_results:
+        df = pd.json_normalize(all_results)
+        df['createdAt'] = pd.to_datetime(df['createdAt'])
+
+        # Filtro local por data
+        df = df[(df['createdAt'].dt.date >= start_date) & (df['createdAt'].dt.date <= end_date)]
+        df['createdAt'] = df['createdAt'].dt.tz_convert(TIMEZONE)
+
+        return df
+
     return pd.DataFrame()
-
 # ==============================================================================
 # 2. FUNÇÃO PRINCIPAL DA PÁGINA (run_page)
 # ==============================================================================
@@ -83,7 +106,7 @@ def run_page():
     st.divider()
 
     # --- Tabela de Validação ---
-    df_chats = get_recent_octadesk_chats(api_token)
+    df_chats = get_octadesk_chats(api_token, data_inicio_padrao, hoje)
 
     if df_chats is not None and not df_chats.empty:
         st.success(f"Sucesso! {len(df_chats)} chats recentes encontrados e analisados.")

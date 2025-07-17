@@ -227,18 +227,33 @@ def run_page():
     with col2:
         # Filtro para Turno
         turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
+        placeholder_nulo = "Sem turno"
+
+        opcoes_turno = turnos_disponiveis
+
+        if tabela_base['turno'].isna().any():
+            opcoes_turno = [placeholder_nulo] + opcoes_turno
+
         turno_selecionado = st.multiselect(
             "Filtrar por Turno:",
-            options=turnos_disponiveis,
-            default=turnos_disponiveis,
+            options=opcoes_turno,
+            default=opcoes_turno,
             key="filtro_turno_tabela"
         )
         
-    # --- 3. APLICAÇÃO DOS NOVOS FILTROS ---
-    tabela_final = tabela_base[
-        (tabela_base['curso_venda'].isin(curso_venda_selecionado)) &
-        (tabela_base['turno'].isin(turno_selecionado))
-    ]
+
+        mascara_curso = tabela_base['curso_venda'].isin(curso_venda_selecionado)
+
+        # Lógica de filtragem condicional para o turno
+        turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_nulo]
+        mascara_turno = tabela_base['turno'].isin(turnos_reais_selecionados)
+
+        if placeholder_nulo in turno_selecionado:
+            # Se "Sem Turno" estiver selecionado, inclui as linhas onde o turno é nulo
+            mascara_turno = mascara_turno | tabela_base['turno'].isna()
+
+        # Combina as máscaras de filtro
+        tabela_final = tabela_base[mascara_curso & mascara_turno]
 
 
     # --- 4. EXIBIÇÃO E EXPORTAÇÃO DA TABELA JÁ FILTRADA ---

@@ -30,32 +30,23 @@ SELECT
     GROUP_CONCAT(DISTINCT 
         CASE 
             WHEN cu.title IS NULL AND oi.product_category_id = 7 THEN 'Passaporte'
+            WHEN cu.title IS NULL AND oi.product_category_id = 10 THEN 'Degrau Smart'
             ELSE cu.title
         END SEPARATOR ', '
     ) AS curso,
     GROUP_CONCAT(DISTINCT 
         CASE 
-            WHEN cu.id IS NULL AND oi.product_category_id = 7 THEN 'Passaporte'
-            ELSE cu.id
-        END SEPARATOR ', '
-    ) AS curso_id,
-    GROUP_CONCAT(DISTINCT 
-        CASE 
             WHEN cs.name IS NULL AND oi.product_category_id = 7 THEN 'Passaporte'
+            WHEN cs.name IS NULL AND oi.product_category_id = 10 THEN 'Degrau Smart'
             ELSE cs.name
         END SEPARATOR ', '
     ) AS curso_venda,
-    GROUP_CONCAT(DISTINCT 
-        CASE 
-            WHEN cs.id IS NULL AND oi.product_category_id = 7 THEN 'Passaporte'
-            ELSE cs.id
-        END SEPARATOR ', '
-    ) AS curso_venda_id,
     GROUP_CONCAT(DISTINCT oi.id SEPARATOR ', ') AS item_id,
     GROUP_CONCAT(DISTINCT pc.name SEPARATOR ', ') AS categoria,
     IFNULL(u.name,
         CASE 
             WHEN pc.id = 3 THEN 'Live'
+            WHEN pc.id = 10 THEN 'Degrau Smart'
             WHEN pc.id = 7 AND o.unit_id IS NOT NULL THEN COALESCE(u3.name, 'Indefinido')
             ELSE 'Indefinido'
         END
