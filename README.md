@@ -18,41 +18,41 @@ A aplicação conta com um **sistema de autenticação próprio**, garantindo qu
 
 ## ✨ Funcionalidades Principais
 
--   **Sistema de Login Seguro:** Autenticação de usuários e senhas com permissões de acesso por página gerenciadas centralmente.
--   **Análise de Oportunidades:**
-    -   Visão geral de leads com filtros avançados.
-    -   Funil de Vendas para análise de conversão entre etapas.
-    -   Análise "Top N" de concursos para identificar os mais relevantes.
-    -   Tabelas dinâmicas (Pivot Tables) cruzando dados de concursos e origens.
--   **Análise Financeira:**
-    -   Tabela hierárquica e interativa (AG-Grid) para análise detalhada de despesas.
-    -   Filtros em cascata por Unidades, Centro de Custo e Categorias.
-    -   Gráficos de resumo de custos por diversas dimensões.
-    -   Exportação de relatórios customizados para Excel com múltiplas abas.
--   **Análise de Tendências:**
-    -   Análise comparativa de performance Mês a Mês.
-    -   Gráficos de "zoom" em janelas de tempo específicas para os principais concursos.
--   **Performance de Marketing Digital (Google & Facebook):**
-    -   KPIs de saúde do site (Usuários, Sessões, Engajamento).
-    -   Tabela de Aquisição de Tráfego por Canal.
-    -   Análise de Custo, CPA e ROAS por campanha.
-    -   Visão unificada do investimento por "Curso Venda" entre as plataformas.
-    -   Gráficos de perfil de público (Demografia e Tecnologia).
-    -   Tabela de consultas do Google Search Console.
+- **Sistema de Login Seguro:** Autenticação de usuários e senhas com permissões de acesso por página gerenciadas centralmente.
+- **Análise de Oportunidades:**
+  - Visão geral de leads com filtros avançados.
+  - Funil de Vendas para análise de conversão entre etapas.
+  - Análise "Top N" de concursos para identificar os mais relevantes.
+  - Tabelas dinâmicas (Pivot Tables) cruzando dados de concursos e origens.
+- **Análise Financeira:**
+  - Tabela hierárquica e interativa (AG-Grid) para análise detalhada de despesas.
+  - Filtros em cascata por Unidades, Centro de Custo e Categorias.
+  - Gráficos de resumo de custos por diversas dimensões.
+  - Exportação de relatórios customizados para Excel com múltiplas abas.
+- **Análise de Tendências:**
+  - Análise comparativa de performance Mês a Mês.
+  - Gráficos de "zoom" em janelas de tempo específicas para os principais concursos.
+- **Performance de Marketing Digital (Google & Facebook):**
+  - KPIs de saúde do site (Usuários, Sessões, Engajamento).
+  - Tabela de Aquisição de Tráfego por Canal.
+  - Análise de Custo, CPA e ROAS por campanha.
+  - Visão unificada do investimento por "Curso Venda" entre as plataformas.
+  - Gráficos de perfil de público (Demografia e Tecnologia).
+  - Tabela de consultas do Google Search Console.
 
 ## 🛠️ Tecnologias Utilizadas
 
--   **Interface e Dashboard:** Streamlit
--   **Manipulação de Dados:** Pandas, NumPy
--   **Visualização de Dados:** Plotly
--   **Tabelas Avançadas:** Streamlit-AgGrid
--   **Conexões com APIs:**
-    -   **Banco de Dados:** SQLAlchemy, MySQL Connector
-    -   **Google Analytics:** `google-analytics-data`
-    -   **Facebook Ads:** `facebook-business`
--   **Gerenciamento de Segredos e Ambiente:**
-    -   Streamlit Secrets (para produção)
-    -   Python-dotenv (para ambiente local)
+- **Interface e Dashboard:** Streamlit
+- **Manipulação de Dados:** Pandas, NumPy
+- **Visualização de Dados:** Plotly
+- **Tabelas Avançadas:** Streamlit-AgGrid
+- **Conexões com APIs:**
+  - **Banco de Dados:** SQLAlchemy, MySQL Connector
+  - **Google Analytics:** `google-analytics-data`
+  - **Facebook Ads:** `facebook-business`
+- **Gerenciamento de Segredos e Ambiente:**
+  - Streamlit Secrets (para produção)
+  - Python-dotenv (para ambiente local)
 
 ## 🚀 Guia de Instalação e Configuração
 
@@ -60,8 +60,8 @@ Siga os passos para configurar e executar o projeto.
 
 ### 1. Configuração do Ambiente de Produção (Streamlit Cloud)
 
-1.  **Crie um App no Streamlit Cloud** e conecte seu repositório GitHub. Configure o app como **Private**.
-2.  No painel do seu app, vá em **Settings > Secrets** e cole todas as suas credenciais, seguindo o formato abaixo:
+1. **Crie um App no Streamlit Cloud** e conecte seu repositório GitHub. Configure o app como **Private**.
+2. No painel do seu app, vá em **Settings > Secrets** e cole todas as suas credenciais, seguindo o formato abaixo:
 
     ```toml
     # Segredos para a Conexão com o Banco de Dados
@@ -88,6 +88,16 @@ Siga os passos para configurar e executar o projeto.
     client_email = "..."
     # ... resto das chaves do arquivo JSON
 
+    # Credenciais para a API do Google Ads (baseado no google-ads.yaml)
+    [google_ads]
+    developer_token = "SEU_DEVELOPER_TOKEN"
+    client_id = "SEU_CLIENT_ID"
+    client_secret = "SEU_CLIENT_SECRET"
+    refresh_token = "SEU_REFRESH_TOKEN"
+    login_customer_id = "SEU_LOGIN_CUSTOMER_ID_DA_MCC"
+    customer_id = "SEU_CUSTOMER_ID_DA_CONTA"
+    use_proto_plus = true
+
     # Credenciais de Usuários para o Login do Dashboard
     [users]
     [users.nome_de_usuario_1]
@@ -101,12 +111,15 @@ Siga os passos para configurar e executar o projeto.
 
 ### 2. Configuração do Ambiente Local (Desenvolvimento)
 
-1.  **Clone o repositório:**
+1. **Clone o repositório:**
+
     ```bash
     git clone [https://github.com/ulisseso2/dados_degrau_py.git](https://github.com/ulisseso2/dados_degrau_py.git)
     cd dados_degrau_py
     ```
-2.  **Crie e ative o ambiente virtual:**
+
+2. **Crie e ative o ambiente virtual:**
+
     ```bash
     # Use python3 se o comando python não for encontrado
     python -m venv .venv
@@ -115,11 +128,15 @@ Siga os passos para configurar e executar o projeto.
     # Linux/Mac
     source .venv/bin/activate
     ```
-3.  **Instale as dependências:**
+
+3. **Instale as dependências:**
+
     ```bash
     pip install -r requirements.txt
     ```
-4.  **Crie e configure o arquivo `.env`:** Na raiz do projeto, crie um arquivo `.env` com todas as credenciais para o ambiente local.
+
+4. **Crie e configure o arquivo `.env`:** Na raiz do projeto, crie um arquivo `.env` com todas as credenciais para o ambiente local.
+
     ```env
     # Credenciais do Banco de Dados
     DB_HOST=seu_host_local
@@ -140,14 +157,17 @@ Siga os passos para configurar e executar o projeto.
     # Usuários de teste para o login (JSON em uma única linha)
     LOCAL_USERS_DB='{"ulisses": {"password": "123", "pages": ["all"]}, "vendedor": {"password": "456", "pages": ["Oportunidades"]}}'
     ```
-5.  **Adicione o arquivo de credenciais do Google:** Coloque o arquivo `gcp_credentials.json` que você baixou na raiz do projeto.
+
+5. **Adicione o arquivo de credenciais do Google:** Coloque o arquivo `gcp_credentials.json` que você baixou na raiz do projeto.
 
 ## 🖥️ Executando o Projeto
 
 Com o ambiente virtual ativado e o `.env` configurado, execute:
+
 ```bash
 streamlit run main.py
 ```
+
 A aplicação abrirá no seu navegador, começando pela tela de login.
 
 ## ⚠️ Manutenção e Observações Importantes
@@ -163,14 +183,15 @@ Isso significa que, após esse período, a conexão com a API do Facebook irá f
 Para garantir o funcionamento contínuo, o token precisa ser renovado manualmente. **É fortemente recomendado criar um lembrete recorrente no calendário para realizar este processo.**
 
 O passo a passo para a renovação é:
-1.  Acessar o **Explorador da Graph API** no [Painel de Desenvolvedores da Meta](https://developers.facebook.com/tools/explorer/).
-2.  No canto superior direito, garantir que o aplicativo `dadosBi` esteja selecionado.
-3.  No campo "Usuário ou Página", gerar um novo **"Token de Acesso do Usuário"**, garantindo que as permissões `ads_read` e `read_insights` estejam concedidas.
-4.  Copiar o token gerado (de curta duração).
-5.  Levar este novo token para a **[Ferramenta de Depuração de Token](https://developers.facebook.com/tools/debug/accesstoken/)**.
-6.  Clicar no botão **"Estender Token de Acesso"** para gerar o token de longa duração.
-7.  Copiar o novo token de longa duração gerado.
-8.  Ir às configurações (**Settings > Secrets**) do seu app no Streamlit Cloud e **atualizar o valor** da chave `access_token` na seção `[facebook_api]`.
+
+1. Acessar o **Explorador da Graph API** no [Painel de Desenvolvedores da Meta](https://developers.facebook.com/tools/explorer/).
+2. No canto superior direito, garantir que o aplicativo `dadosBi` esteja selecionado.
+3. No campo "Usuário ou Página", gerar um novo **"Token de Acesso do Usuário"**, garantindo que as permissões `ads_read` e `read_insights` estejam concedidas.
+4. Copiar o token gerado (de curta duração).
+5. Levar este novo token para a **[Ferramenta de Depuração de Token](https://developers.facebook.com/tools/debug/accesstoken/)**.
+6. Clicar no botão **"Estender Token de Acesso"** para gerar o token de longa duração.
+7. Copiar o novo token de longa duração gerado.
+8. Ir às configurações (**Settings > Secrets**) do seu app no Streamlit Cloud e **atualizar o valor** da chave `access_token` na seção `[facebook_api]`.
 
 #### Solução Definitiva (Longo Prazo)
 
@@ -181,8 +202,8 @@ Este tipo de token é projetado para integrações de servidor (server-to-server
 ## 🏗️ Estrutura do Projeto
 
 A aplicação utiliza uma arquitetura de roteamento manual para controlar o acesso às páginas.
-```
-.
+
+```markdown
 ├── conexao
 │   ├── __init__.py
 │   └── mysql_connector.py
@@ -216,7 +237,6 @@ A aplicação utiliza uma arquitetura de roteamento manual para controlar o aces
 ├── requirements.txt
 └── utils
     └── sql_loader.py
-
 ```
 
 ## ✉️ Contato

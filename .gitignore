@@ -7,3 +7,5 @@ data/
 notebooks/
 venv/
 *.json
+*.yaml
+google-ads.yamlgoogle-ads.yaml

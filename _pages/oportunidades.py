@@ -6,7 +6,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-from datetime import datetime
 from utils.sql_loader import carregar_dados
 import plotly.graph_objects as go
 
@@ -40,24 +39,23 @@ def run_page():
         st.stop() # Interrompe a execução para evitar erros abaixo
 
     # Filtros adicionais recolhidos
-    with st.expander("Filtros Avançados: Unidades, Etapas, Modalidade e H. Ligar"):
-        col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            unidades = sorted(df_filtrado_empresa["unidade"].dropna().unique())
-            unidade_selecionada = st.multiselect("Selecione a unidade:", unidades, default=unidades)
+ 
 
-        with col2:
-            etapas = sorted(df_filtrado_empresa["etapa"].dropna().unique()) # Ordenado
-            etapa_selecionada = st.multiselect("Selecione a etapa:", etapas, default=etapas)
+   
+    unidades = sorted(df_filtrado_empresa["unidade"].dropna().unique())
+    unidade_selecionada = st.sidebar.multiselect("Selecione a unidade:", unidades, default=unidades)
+
+       
+    etapas = sorted(df_filtrado_empresa["etapa"].dropna().unique()) # Ordenado
+    etapa_selecionada = st.sidebar.multiselect("Selecione a etapa:", etapas, default=etapas)
         
-        with col3:
-            modalidades = sorted(df_filtrado_empresa["modalidade"].dropna().unique()) # Ordenado
-            modalidade_selecionada = st.multiselect("Selecione a modalidade:", modalidades, default=modalidades)
+      
+    modalidades = sorted(df_filtrado_empresa["modalidade"].dropna().unique()) # Ordenado
+    modalidade_selecionada = st.sidebar.multiselect("Selecione a modalidade:", modalidades, default=modalidades)
 
-        with col4:
-            hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
-            h_ligar_selecionada = st.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
+    hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
+    h_ligar_selecionada = st.sidebar.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
     # 2. Inicia com o DataFrame completo
     df_filtrado = df
@@ -395,3 +393,70 @@ def run_page():
 
     else:
         st.warning("Não há dados no período selecionado para gerar esta análise.")
+
+
+    # ==============================================================================
+    # ANÁLISE DINÂMICA COM FILTROS DE DRILL-DOWN
+    # ==============================================================================
+    st.divider()
+    st.header("🔎 Análise Detalhada com Filtros Dinâmicos")
+    st.info("Use os filtros abaixo para explorar os dados. Todos os gráficos e tabelas nesta seção serão atualizados com a sua seleção.")
+
+    # --- 1. FILTROS DE DRILL-DOWN ---
+    # Estes filtros agora controlam todo o conteúdo abaixo deles.
+    drill_cols = st.columns(3)
+
+    # Prepara as listas de opções para os filtros, incluindo uma opção "Todos"
+    concursos_list = ["Todos"] + sorted(df_filtrado['concurso'].dropna().unique().tolist())
+    etapas_list = ["Todas"] + sorted(df_filtrado['etapa'].dropna().unique().tolist())
+    unidades_list = ["Todas"] + sorted(df_filtrado['unidade'].dropna().unique().tolist())
+
+    # Cria os widgets de filtro
+    concurso_selecionado_drill = drill_cols[0].selectbox("Filtrar por Concurso:", concursos_list)
+    etapa_selecionada_drill = drill_cols[1].selectbox("Filtrar por Etapa:", etapas_list)
+    unidade_selecionada_drill = drill_cols[2].selectbox("Filtrar por Unidade:", unidades_list)
+
+    # --- 2. APLICAÇÃO DOS FILTROS ---
+    # Começamos com os dados já filtrados pela sidebar
+    df_dinamico = df_filtrado.copy()
+
+    if concurso_selecionado_drill != "Todos":
+        df_dinamico = df_dinamico[df_dinamico['concurso'] == concurso_selecionado_drill]
+    if etapa_selecionada_drill != "Todas":
+        df_dinamico = df_dinamico[df_dinamico['etapa'] == etapa_selecionada_drill]
+    if unidade_selecionada_drill != "Todas":
+        df_dinamico = df_dinamico[df_dinamico['unidade'] == unidade_selecionada_drill]
+
+    # --- 3. EXIBIÇÃO DOS GRÁFICOS E TABELAS (AGORA REATIVOS) ---
+    if not df_dinamico.empty:
+        col1, col2 = st.columns(2)
+        with col1:
+            # Gráfico de Barras de Concursos (agora reativo)
+            df_concursos = df_dinamico['concurso'].value_counts().nlargest(20).reset_index()
+            df_concursos.columns = ['Concurso', 'Quantidade']
+            fig_bar = px.bar(
+                df_concursos.sort_values('Quantidade'),
+                x='Quantidade', 
+                y='Concurso', 
+                orientation='h',
+                text='Quantidade',
+                title='Oportunidades por Concurso', 
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        with col2:
+            # Gráfico de Pizza de Etapas (agora reativo)
+            df_etapa = df_dinamico.groupby("etapa")['oportunidade'].count().reset_index()
+            fig_pie = px.pie(
+                df_etapa, names="etapa", values="oportunidade",
+                title="Distribuição por Etapa",
+            )
+            fig_pie.update_traces(textinfo='value')
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        # Tabela de Unidades
+        tabela_unidades = df_dinamico.groupby("unidade")["oportunidade"].count().reset_index()
+        st.dataframe(tabela_unidades, use_container_width=True)
+
+    else:
+        st.warning("Nenhum dado encontrado para a combinação de filtros selecionada.")

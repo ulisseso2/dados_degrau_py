@@ -47,6 +47,7 @@ SELECT
         CASE 
             WHEN pc.id = 3 THEN 'Live'
             WHEN pc.id = 10 THEN 'Degrau Smart'
+            WHEN pc.id = 2 THEN 'EAD'
             WHEN pc.id = 7 AND o.unit_id IS NOT NULL THEN COALESCE(u3.name, 'Indefinido')
             ELSE 'Indefinido'
         END

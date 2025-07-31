@@ -2,7 +2,6 @@ import sys
 import os
 import io
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -34,13 +33,11 @@ def run_page():
     if 2 in df['status_id'].values:
         default_status_name = df[df['status_id'].isin ([2, 3, 14, 15])]['status'].unique().tolist()
 
-
     status_selecionado = st.sidebar.multiselect(
         "Selecione o status do pedido:", 
         status_list, 
         default=default_status_name
     )
-
 
     try:
         data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
@@ -57,7 +54,7 @@ def run_page():
     categoria_selecionada = st.sidebar.multiselect(
         "Selecione a(s) categoria(s):",
         options=sorted(categorias_disponiveis),
-        default=["Curso Presencial", "Curso Live", "Passaporte"]
+        default=["Curso Presencial", "Curso Live", "Passaporte", "Smart"]
     )
 
     # O filtro de Unidades agora fica dentro de seu próprio expander
@@ -85,7 +82,6 @@ def run_page():
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 
     # Tabela de resumo
     col1, col2, col3 = st.columns(3)
@@ -207,32 +203,37 @@ def run_page():
 
     # 1. Cria a tabela base com os dados que já passaram pelos filtros da sidebar
     tabela_base = df_filtrado[[
-       "curso_venda", "turma", "turno", "nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento","cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente"
+      "ordem_id", "curso_venda", "turma", "turno", "cpf","nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento","cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"
     ]].copy() # Usamos .copy() para garantir que é um novo DataFrame
 
     # --- 2. CRIAÇÃO DOS FILTROS ESPECÍFICOS PARA A TABELA ---
     st.markdown("Filtre a lista de alunos abaixo:")
-    col1, col2 = st.columns([2, 1]) # Duas colunas para os filtros
+    col1, col2, col3 = st.columns([1, 1, 1]) # Duas colunas para os filtros
 
     with col1:
         # Filtro para Curso Venda
         cursos_venda_disponiveis = sorted(tabela_base['curso_venda'].dropna().unique().tolist())
+        placeholder_curso_nulo = "Online/Passaporte/Smart" # Placeholder para cursos nulos
+
+        opcoes_cv = cursos_venda_disponiveis
+        if tabela_base['curso_venda'].isna().any():
+            opcoes_cv = [placeholder_curso_nulo] + opcoes_cv
+
         curso_venda_selecionado = st.multiselect(
             "Filtrar por Curso Venda:",
-            options=cursos_venda_disponiveis,
-            default=cursos_venda_disponiveis,
+            options=opcoes_cv,
+            default=opcoes_cv,
             key="filtro_curso_venda_tabela"
         )
 
     with col2:
         # Filtro para Turno
         turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
-        placeholder_nulo = "Sem turno"
+        placeholder_turno_nulo = "Sem Turno" # Placeholder para turnos nulos
 
         opcoes_turno = turnos_disponiveis
-
         if tabela_base['turno'].isna().any():
-            opcoes_turno = [placeholder_nulo] + opcoes_turno
+            opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
 
         turno_selecionado = st.multiselect(
             "Filtrar por Turno:",
@@ -240,29 +241,39 @@ def run_page():
             default=opcoes_turno,
             key="filtro_turno_tabela"
         )
-        
+    
+    with col3:
+        #Filtro Vendedor
+        vendedores_disponiveis = sorted(tabela_base['vendedor'].dropna().unique().tolist())
+        vendedor_selecionado = st.multiselect(
+            "Filtrar por Vendedor:",
+            options=vendedores_disponiveis,
+            default=vendedores_disponiveis
+        )
+    
 
-        mascara_curso = tabela_base['curso_venda'].isin(curso_venda_selecionado)
+        # Lógica para o filtro de Curso Venda
+        cursos_reais_selecionados = [c for c in curso_venda_selecionado if c != placeholder_curso_nulo]
+        mascara_curso = tabela_base['curso_venda'].isin(cursos_reais_selecionados)
+        if placeholder_curso_nulo in curso_venda_selecionado:
+            mascara_curso = mascara_curso | tabela_base['curso_venda'].isna()
 
-        # Lógica de filtragem condicional para o turno
-        turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_nulo]
+        # Lógica para o filtro de Turno
+        turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_turno_nulo]
         mascara_turno = tabela_base['turno'].isin(turnos_reais_selecionados)
-
-        if placeholder_nulo in turno_selecionado:
-            # Se "Sem Turno" estiver selecionado, inclui as linhas onde o turno é nulo
+        if placeholder_turno_nulo in turno_selecionado:
             mascara_turno = mascara_turno | tabela_base['turno'].isna()
 
-        # Combina as máscaras de filtro
-        tabela_final = tabela_base[mascara_curso & mascara_turno]
 
+        mascara_vendedor = tabela_base['vendedor'].isin(vendedor_selecionado)
+
+        # Combina as máscaras de filtro
+        tabela_final = tabela_base[mascara_curso & mascara_turno & mascara_vendedor]
 
     # --- 4. EXIBIÇÃO E EXPORTAÇÃO DA TABELA JÁ FILTRADA ---
     if not tabela_final.empty:
-        # Prepara a versão para exibição na tela (com R$ formatado)
         tabela_para_exibir = tabela_final.copy()
         tabela_para_exibir["total_pedido"] = tabela_para_exibir["total_pedido"].apply(formatar_reais)
-        
-        # Formata a data para o padrão brasileiro APENAS para exibição
         tabela_para_exibir["data_pagamento"] = pd.to_datetime(tabela_para_exibir["data_pagamento"]).dt.strftime('%d/%m/%Y')
         
         st.dataframe(tabela_para_exibir, use_container_width=True, hide_index=True)

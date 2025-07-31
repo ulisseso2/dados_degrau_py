@@ -1,20 +1,47 @@
-# --- Core do Streamlit e Interface ---
-streamlit
-streamlit-aggrid
+# Framework e Interface
+streamlit==1.46.1
+streamlit-aggrid==1.1.6
 
-# --- Manipulação e Análise de Dados ---
-pandas
-numpy
+# Manipulação e Visualização de Dados
+pandas==2.3.1
+numpy==2.3.1
+plotly==6.2.0
 
-# --- Visualização de Dados ---
-plotly
+# Conexão com Banco de Dados
+SQLAlchemy==2.0.41
+mysql-connector-python==9.3.0
 
-# --- Conexões com Banco de Dados e APIs ---
-SQLAlchemy
-mysql-connector-python
-google-analytics-data
-facebook-business
+# APIs do Google
+google-analytics-data==0.18.19
+google-ads==27.0.0
+google-auth-oauthlib==1.2.2
 
-# --- Utilitários ---
-python-dotenv
-XlsxWriter
+# API da Meta (Facebook)
+facebook_business==23.0.0
+
+# Utilitários
+python-dotenv==1.1.1
+PyYAML==6.0.2
+xlsxwriter==3.2.5
+
+# Dependências principais (resolvidas pelo pip)
+aiohttp
+altair
+blinker
+cachetools
+certifi
+click
+Jinja2
+packaging
+pillow
+protobuf
+pyarrow
+pydeck
+python-dateutil
+pytz
+requests
+tenacity
+toml
+tornado
+typing_extensions
+watchdog
