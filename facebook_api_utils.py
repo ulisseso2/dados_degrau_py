@@ -99,9 +99,17 @@ def get_campaigns_for_fbclids(account, fbclid_list, empresa="degrau", batch_size
     """
     Busca informações de campanhas para uma lista de FBclids
     
-    Obs: Atualmente a API do Facebook não permite busca direta por FBclid.
-    Esta função é um placeholder para quando essa funcionalidade estiver disponível
-    ou quando implementarmos uma solução alternativa.
+    LIMITAÇÃO ATUAL: A API do Facebook/Meta não permite busca direta por FBclid.
+    Esta função marca todos os FBclids como "Não encontrado" e serve como placeholder
+    para quando a Meta disponibilizar uma API para consulta de FBclids no futuro.
+    
+    ALTERNATIVAS:
+    1. Use parâmetros UTM em seus links do Facebook para rastrear campanhas
+    2. Configure o Facebook Pixel para rastreamento avançado de conversões
+    3. Exporte relatórios da plataforma do Facebook Ads e faça o cruzamento manual
+    
+    Nota: Não utilize o script simulate_fbclid_lookup.py em produção, pois ele
+    gera dados simulados que não refletem as campanhas reais.
     """
     if not account or not fbclid_list:
         return {}
@@ -119,21 +127,26 @@ def get_campaigns_for_fbclids(account, fbclid_list, empresa="degrau", batch_size
         st.info("Todos os FBclids já foram consultados anteriormente.")
         return {}
     
-    # Placeholder para resultados
+    # Resultados - sempre "Não encontrado" pois não há API para consulta
     fbclid_campaign_map = {}
     
-    # Placeholder para a chamada de API - atualmente a Meta não oferece API para buscar por FBclid
-    # Esta parte será implementada quando houver um método para consultar FBclids
+    # Aviso para o usuário sobre a limitação atual
+    st.warning("""
+        ⚠️ LIMITAÇÃO DA API: Atualmente, o Facebook/Meta não disponibiliza uma API 
+        para consulta direta de informações de campanha a partir de FBclids. 
+        Todos os FBclids serão marcados como "Não encontrado".
+        
+        Para rastreamento de campanhas, considere utilizar parâmetros UTM em seus links.
+    """)
     
-    # Marca FBclids não encontrados
+    # Marca todos os FBclids como "Não encontrado"
     for fbclid in fbclids_to_query:
-        if fbclid not in fbclid_campaign_map:
-            fbclid_campaign_map[fbclid] = {
-                'campaign_name': 'Não encontrado',
-                'campaign_id': None,
-                'adset_name': None,
-                'ad_name': None
-            }
+        fbclid_campaign_map[fbclid] = {
+            'campaign_name': 'Não encontrado',
+            'campaign_id': None,
+            'adset_name': None,
+            'ad_name': None
+        }
     
     # Salva no banco de dados
     save_fbclid_cache_batch(fbclid_campaign_map, empresa)

@@ -1,7 +1,7 @@
 SELECT
   pi.id AS id_parcela,
   po.id AS pedido_compra_id,
-  if(po.school_id = 1, "Degrau", "Central") AS empresa,
+  CASE WHEN po.school_id = 1 THEN 'Degrau' ELSE 'Central' END as empresa, 
 
   -- Dados financeiros e temporais
   pi.total_final AS total_parcela,

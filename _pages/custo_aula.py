@@ -37,8 +37,8 @@ def run_page():
     st.sidebar.header("Filtros de Análise")
 
     empresas_list = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Empresa:", empresas_list, default=["Degrau"])
-    df_opcoes_empresa = df[df["empresa"].isin(empresa_selecionada)]
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas_list, index=0)
+    df_opcoes_empresa = df[df["empresa"] == empresa_selecionada]
 
     # Pega a data de "hoje" já com o fuso horário correto
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
@@ -91,7 +91,7 @@ def run_page():
         st.stop()
 
     df_filtrado = df[
-        (df['empresa'].isin(empresa_selecionada)) &
+        (df['empresa'] == empresa_selecionada) &
         (df['data_aula'] >= data_inicio_aware) &
         (df['data_aula'] < data_fim_aware) &
         (df['unidade'].isin(unidades_selecionadas)) &

@@ -22,8 +22,8 @@ def run_page():
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas)
+    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
     # Filtro: data (padrão: dia atual)
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
@@ -62,7 +62,7 @@ def run_page():
 
     # 3. Aplica os filtros sequencialmente
     if empresa_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["empresa"].isin(empresa_selecionada)]
+        df_filtrado = df_filtrado[df_filtrado["empresa"] == empresa_selecionada]
 
     if unidade_selecionada:
         # A lógica com .isna() é mantida para incluir valores nulos

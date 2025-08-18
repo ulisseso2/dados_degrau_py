@@ -4,7 +4,7 @@ import json
 import ast
 
 # Importa os módulos de cada página da aplicação
-from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, madureira, madureira_cancelamento, campogrande, campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, octadesk, custo_aula
+from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, madureira, madureira_cancelamento, campogrande, campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, octadesk, custo_aula, analise_ga_central
 
 # Configuração da página (deve ser o primeiro comando Streamlit)
 st.set_page_config(layout="wide", page_title="Dashboard Seducar")
@@ -18,7 +18,8 @@ PAGES = {
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
     "Análise Combinada MKT":gads_face_combinado,
-    "Análise GA": analise_ga,
+    "Análise GA Degrau": analise_ga,
+    "Análise GA Central": analise_ga_central,
     "Análise Facebook": analise_facebook,
     "Previsão Custo Pedagógico": custo_aula,
     "Matriculas Madureira": madureira,

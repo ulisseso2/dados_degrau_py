@@ -14,8 +14,8 @@ def run_page():
     df = carregar_dados("consultas/oportunidades/oportunidades.sql")
 
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)].copy()
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas)
+    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
     # Filtro utilizando data de criação da oportunidade
     df_filtrado_empresa["criacao"] = pd.to_datetime(df_filtrado_empresa["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer').copy()

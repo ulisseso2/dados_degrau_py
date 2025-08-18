@@ -12,6 +12,19 @@ import os
 from datetime import datetime
 from st_aggrid import GridOptionsBuilder, AgGrid
 from utils.sql_loader import carregar_dados
+import time
+from gclid_db import (
+    load_gclid_cache,
+    save_gclid_cache_batch,
+    get_campaign_for_gclid,
+)
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+BATCH_SIZE = 1000  # Aumentamos o tamanho do lote
+REQUEST_DELAY = 1  # Delay entre requests em segundos
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -83,72 +96,122 @@ def get_google_ads_client():
         st.error(f"Falha ao inicializar o cliente do Google Ads com as credenciais de '{source}': {e}")
         return None, None
 
-def get_campaigns_for_gclids(client, customer_id, gclid_list, batch_size=500):
+def get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict):
     """
-    Recebe uma LISTA de GCLIDs e retorna um dicionário mapeando 
-    cada GCLID para o seu nome de campanha, processando em lotes para evitar erros de query muito longa.
+    Versão otimizada com:
+    - Rate limiting
+    - Cache integrado
+    - Batch processing eficiente
     """
-    if not gclid_list:
+    if not isinstance(gclid_date_dict, dict) or not gclid_date_dict:
         return {}
 
     ga_service = client.get_service("GoogleAdsService")
     gclid_campaign_map = {}
+    batches_processed = 0
+    total_gclids = len(gclid_date_dict)
+
+    # Carrega cache existente
+    cache = st.session_state.gclid_cache
     
-    # Divide a lista de GCLIDs em lotes menores
-    for i in range(0, len(gclid_list), batch_size):
-        batch_gclids = gclid_list[i:i + batch_size]
-        
-        # Garante que não há GCLIDs duplicados ou vazios no lote
-        unique_gclids = list(set(filter(None, batch_gclids)))
-        if not unique_gclids:
-            continue
+    # Filtra apenas GCLIDs não consultados
+    gclids_to_query = {
+        gclid: date for gclid, date in gclid_date_dict.items() 
+        if gclid not in cache or cache[gclid] == 'Não encontrado'
+    }
+    
+    if not gclids_to_query:
+        st.info("Todos os GCLIDs já foram consultados anteriormente.")
+        return {}
 
-        formatted_gclids = "','".join(unique_gclids)
-        
-        # Adiciona filtro para um único dia (hoje)
-        from datetime import datetime
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        query = f"""
-            SELECT campaign.name, click_view.gclid
-            FROM click_view
-            WHERE click_view.gclid IN ('{formatted_gclids}')
-            AND segments.date = '{today_str}'
-        """
-        
-        try:
-            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    # Agrupa por data para otimizar consultas
+    date_groups = {}
+    for gclid, date in gclids_to_query.items():
+        date_str = date.strftime('%Y-%m-%d')
+        date_groups.setdefault(date_str, []).append(gclid)
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    try:
+        for date_str, gclids in date_groups.items():
+            for i in range(0, len(gclids), BATCH_SIZE):
+                batch = gclids[i:i + BATCH_SIZE]
+                unique_gclids = list(set(filter(None, batch)))
+                
+                if not unique_gclids:
+                    continue
+
+                # Rate limiting
+                if batches_processed > 0 and batches_processed % 50 == 0:
+                    time.sleep(60)  # Pausa a cada 50 batches
+                
+                # Atualiza UI
+                progress = (batches_processed * BATCH_SIZE) / total_gclids
+                progress_bar.progress(min(progress, 1.0))
+                status_text.text(f"Processando {batches_processed * BATCH_SIZE}/{total_gclids} GCLIDs...")
+                
+                query = f"""
+                    SELECT 
+                        campaign.name, 
+                        click_view.gclid
+                    FROM click_view
+                    WHERE click_view.gclid IN ('{"','".join(unique_gclids)}')
+                    AND segments.date = '{date_str}'
+                    LIMIT {len(unique_gclids)}
+                """
+
+                try:
+                    stream = ga_service.search_stream(
+                        customer_id=customer_id, 
+                        query=query
+                    )
+
+                    for response in stream:
+                        for row in response.results:
+                            gclid = row.click_view.gclid
+                            campaign_name = row.campaign.name
+                            if gclid and campaign_name:  # Validação adicional
+                                gclid_campaign_map[gclid] = campaign_name
+                                st.session_state.gclid_cache[gclid] = campaign_name  # Atualiza cache
+
+                    batches_processed += 1
+                    time.sleep(REQUEST_DELAY)  # Delay entre requests
+
+                except GoogleAdsException as ex:
+                    st.error(f"Erro no lote {batches_processed}:")
+                    for error in ex.failure.errors:
+                        st.error(f"{error.message}")
+                    continue
+
+        # Atualiza cache para GCLIDs não encontrados
+        for gclid in gclids_to_query:
+            if gclid not in gclid_campaign_map:
+                cache[gclid] = 'Não encontrado'
+
+        # Salva cache no banco de dados
+        if gclid_campaign_map:
+            save_gclid_cache_batch(gclid_campaign_map)
             
-            for batch in stream:
-                for row in batch.results:
-                    gclid = row.click_view.gclid
-                    campaign_name = row.campaign.name
-                    gclid_campaign_map[gclid] = campaign_name
-            
-            st.write(f"Processado lote de {len(unique_gclids)} GCLIDs...") # Feedback visual para o usuário
+        not_found = {
+            gclid: 'Não encontrado' 
+            for gclid in gclids_to_query 
+            if gclid not in gclid_campaign_map
+        }
+        if not_found:
+            save_gclid_cache_batch(not_found)
+            for gclid in not_found:
+                st.session_state.gclid_cache[gclid] = 'Não encontrado'
 
-        except GoogleAdsException as ex:
-            st.error(f"Erro na API do Google Ads ao buscar um lote de GCLIDs:")
-            for error in ex.failure.errors:
-                # CORREÇÃO: O objeto error.error_code é um container. Acessar .name
-                # diretamente nele causa o AttributeError, como visto no traceback.
-                # A forma correta é inspecionar o container para encontrar o erro real.
-                error_code = error.error_code
-                # CORREÇÃO FINAL: Acessamos o método do protobuf subjacente (_pb)
-                # com o nome correto em PascalCase (WhichOneof). As tentativas anteriores
-                # falharam por usar o nome em minúsculas (which_oneof).
-                error_code_name = error_code._pb.WhichOneof("error_code")
-                if error_code_name:
-                    enum_value = getattr(error_code, error_code_name)
-                    st.error(f'\tCódigo do Erro: {enum_value.name} - Mensagem: "{error.message}"')
+        return gclid_campaign_map
 
-            # Continua para o próximo lote em vez de parar tudo
-            continue
-        except Exception as e:
-            st.error(f"Um erro inesperado ocorreu durante a busca de GCLIDs: {e}")
-            # Pode ser melhor parar se o erro for inesperado
-            return None # Retorna None em caso de erro
-
-    return gclid_campaign_map
+    except Exception as e:
+        logger.error(f"Erro na consulta: {str(e)}", exc_info=True)
+        st.error(f"Erro na consulta: {str(e)}")
+        return None
+    finally:
+        progress_bar.empty()
+        status_text.empty()
 
 def get_individual_conversion_report(client, property_id, start_date, end_date):
     """
@@ -537,131 +600,136 @@ def run_page():
 
     st.divider()
 
-
     # ==============================================================================
     # NOVA ANÁLISE: AUDITORIA DE CAMPANHAS (CRM vs GA4)
     # ==============================================================================
     TIMEZONE = 'America/Sao_Paulo'
     st.header("🕵️ Auditoria de Conversões com GCLID (Fonte: CRM)")
-    st.info("Esta tabela mostra as oportunidades do seu CRM que possuem um GCLID registrado. Use a busca para encontrar um GCLID específico.")
+    st.info("Esta tabela mostra as oportunidades do seu CRM que possuem um GCLID registrado.")
+
+    # Inicializa cache
+    if 'gclid_cache' not in st.session_state:
+        try:
+            st.session_state.gclid_cache = load_gclid_cache()
+            
+            # Adicione esta verificação
+            if not st.session_state.gclid_cache:
+                st.warning("⚠️ Cache de GCLIDs vazio - verifique o banco de dados")
+                st.stop()
+                
+        except Exception as e:
+            st.error(f"❌ Falha ao carregar cache: {str(e)}")
+            st.stop()
 
     try:
         # 1. Carrega os dados do banco de dados
         df_conversoes_db = carregar_dados("consultas/oportunidades/oportunidades.sql")
         df_conversoes_db['criacao'] = pd.to_datetime(df_conversoes_db['criacao']).dt.tz_localize(TIMEZONE, ambiguous='infer')
 
-        # 2. Aplica o filtro de data global da página
+        # 2. Aplica filtros
         start_date_aware = pd.Timestamp(start_date, tz=TIMEZONE)
         end_date_aware = pd.Timestamp(end_date, tz=TIMEZONE) + pd.Timedelta(days=1)
 
         df_conversoes_filtrado = df_conversoes_db[
             (df_conversoes_db['criacao'] >= start_date_aware) &
             (df_conversoes_db['criacao'] < end_date_aware) &
-            (df_conversoes_db['empresa']== "Degrau")& # Filtro de empresa
-            (df_conversoes_db['gclid'].notnull()) & # Garante que o GCLID não seja nulo
-            (df_conversoes_db['gclid'] != '')  # Garante que o GCLID não seja uma string vazia
-        ]
-
+            (df_conversoes_db['empresa'] == "Degrau") &
+            (df_conversoes_db['gclid'].notnull()) & 
+            (df_conversoes_db['gclid'] != '')
+        ].copy()
+        
         if not df_conversoes_filtrado.empty:
-            # 4. Seleciona, renomeia e prepara as colunas para exibição
-            colunas_desejadas = {
+            # Prepara DataFrame para exibição
+            df_display = df_conversoes_filtrado[[
+                'criacao', 'campanha', 'gclid', 'etapa', 
+                'oportunidade', 'cliente_id', 'name',
+                'telefone', 'email', 'origem',
+                'modalidade', 'unidade'
+            ]].rename(columns={
                 'criacao': 'Data da Conversão',
                 'campanha': 'Campanha (UTM)',
                 'gclid': 'GCLID',
-                'etapa': 'Etapa da Oportunidade'
-            }
-            df_display_gclid = df_conversoes_filtrado[colunas_desejadas.keys()].rename(columns=colunas_desejadas)
-
-            # Reordena as colunas para melhor visualização
-            df_display_gclid = df_display_gclid[[
-                'Data da Conversão',
-                'Campanha (UTM)',
-                'GCLID',
-                'Etapa da Oportunidade'
-            ]]
-
-            # Filtro para o usuário poder encontrar um GCLID específico
-            gclid_search = st.text_input("Pesquisar por GCLID específico:", key="gclid_search")
-            if gclid_search:
-                df_display_gclid = df_display_gclid[df_display_gclid['GCLID'].str.contains(gclid_search, na=False)]
-
-            # 5. Exibe a tabela
+                'etapa': 'Etapa',
+                'oportunidade': 'ID Oportunidade',
+                'name': 'Nome Cliente',
+                'unidade': 'Unidade'
+            })
+            
+            # Adiciona coluna de campanha do Google Ads
+            df_display['Campanha (Google Ads)'] = df_display['GCLID'].map(
+                lambda x: get_campaign_for_gclid(x) or 'Não consultado'
+            )
+            
+            # Exibe tabela
             st.dataframe(
-                df_display_gclid.sort_values(by="Data da Conversão", ascending=False),
+                df_display.sort_values('Data da Conversão', ascending=False),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Data da Conversão": st.column_config.DatetimeColumn(format="D/MM/YYYY HH:mm")
+                    "Data da Conversão": st.column_config.DatetimeColumn(
+                        format="D/MM/YYYY HH:mm"
+                    )
                 }
             )
+            
+            # Botão de consulta
+            if st.button("📡 Consultar Campanhas no Google Ads", type="primary"):
+                gclid_date_dict = {
+                    row['gclid']: row['criacao'].date()
+                    for _, row in df_conversoes_filtrado.iterrows()
+                    if pd.notna(row['gclid']) and row['gclid'] != ''
+                }
+                
+                gads_client, customer_id = get_google_ads_client()
+                if gads_client:
+                    with st.spinner(f"Consultando {len(gclid_date_dict)} GCLIDs..."):
+                        result = get_campaigns_for_gclids_with_date(
+                            gads_client, customer_id, gclid_date_dict
+                        )
+                        
+                        if result is not None:
+                            st.success("Consulta concluída! Atualizando tabela...")
+                            st.rerun()
+                else:
+                    st.error("Falha na conexão com Google Ads")
 
-            # --- NOVO GRÁFICO DE BARRAS ---
             st.divider()
-            st.subheader("Contagem de GCLIDs por Campanha (UTM)")
+            st.header("📊 Análise de Campanhas por Etapa do Funil")
+            st.info("Esta análise utiliza os dados do CRM com GCLID para mostrar a distribuição de oportunidades por etapa para cada campanha do Google Ads. Campanhas com GCLID não consultado ou não encontrado são omitidas.")
 
-            # 1. Prepara os dados para o gráfico
-            df_chart_data = df_conversoes_filtrado.copy()
-            # Substitui valores nulos ou vazios por 'Sem UTM'
-            df_chart_data['campanha'] = df_chart_data['campanha'].fillna('Sem UTM').replace('', 'Sem UTM')
-            
-            # 2. Agrupa por campanha e conta os GCLIDs
-            df_agrupado = df_chart_data.groupby('campanha')['gclid'].count().reset_index()
-            df_agrupado.rename(columns={'gclid': 'Quantidade'}, inplace=True)
+            # Filtra para usar apenas campanhas que foram encontradas no Google Ads
+            df_analise_etapas = df_display.copy()
 
-            # 3. Cria e exibe o gráfico
-            fig_gclid_por_campanha = px.bar(
-                df_agrupado.sort_values('Quantidade', ascending=True), # Ordena ascendente para o maior ficar no topo
-                y='campanha',
-                x='Quantidade',
-                orientation='h',
-                title='GCLIDs Gerados por Campanha (UTM)',
-                text='Quantidade',
-                labels={'campanha': 'Campanha (UTM)', 'Quantidade': 'Nº de GCLIDs'}
-            )
-            # AQUI ESTÁ A RESPOSTA: use textposition='outside' para mover o texto para fora da barra.
-            fig_gclid_por_campanha.update_traces(textposition='outside')
-            
-            # Também é uma boa prática ajustar o eixo para garantir que o texto não seja cortado.
-            fig_gclid_por_campanha.update_layout(xaxis_range=[0, df_agrupado['Quantidade'].max() * 1.15])
+            if not df_analise_etapas.empty:
+                # Cria a tabela pivotada
+                tabela_etapas = pd.pivot_table(
+                    df_analise_etapas,
+                    index='Campanha (Google Ads)',
+                    columns='Etapa',
+                    values='GCLID',
+                    aggfunc='count',
+                    fill_value=0
+                )
 
-            st.plotly_chart(fig_gclid_por_campanha, use_container_width=True)
-        else:
-            st.info("Nenhuma conversão com GCLID encontrada no período selecionado.")
+                # Adiciona uma coluna de Total
+                tabela_etapas['Total'] = tabela_etapas.sum(axis=1)
+
+                # Ordena pela coluna Total, do maior para o menor
+                tabela_etapas_ordenada = tabela_etapas.sort_values(by='Campanha (Google Ads)', ascending=False)
+
+                # --- ADICIONA A LINHA DE TOTAL GERAL ---
+                # Calcula a soma de cada coluna
+                total_geral = tabela_etapas_ordenada.sum().to_frame().T
+                # Define o nome do índice para a linha de total
+                total_geral.index = ['TOTAL GERAL']
+
+                # Concatena a linha de total ao DataFrame
+                tabela_final_com_total = pd.concat([tabela_etapas_ordenada, total_geral])
+
+                # Exibe a tabela com o total geral
+                st.dataframe(tabela_final_com_total, use_container_width=True)
+            else:
+                st.warning("Não há dados de campanhas consultadas no Google Ads para gerar a análise por etapa. Clique no botão 'Consultar Campanhas no Google Ads' acima.")
 
     except Exception as e:
-        st.error(f"Não foi possível carregar os dados de conversão do banco de dados. Erro: {e}")
-
-  #------------ Teste de Gclid > Ads
-   
-    st.header("🔎 Teste de Consulta de GCLID no Google Ads")
-    st.info("Use esta ferramenta para verificar rapidamente a qual campanha um GCLID específico pertence.")
-
-    # Input para o GCLID
-    gclid_para_teste = st.text_input("Cole o GCLID que deseja consultar:", key="gclid_test_input")
-
-    # Botão para iniciar a consulta
-    if st.button("Consultar Campanha", key="gclid_test_button"):
-        if not gclid_para_teste:
-            st.warning("Por favor, insira um GCLID para consultar.")
-        else:
-            # Inicializa a API do Google Ads
-            with st.spinner("Conectando à API do Google Ads..."):
-                gads_client, customer_id = get_google_ads_client()
-
-            if not gads_client:
-                st.error("Não foi possível estabelecer a conexão com a API do Google Ads.")
-            else:
-                with st.spinner(f"Buscando campanha para o GCLID: {gclid_para_teste}..."):
-                    # A função espera uma lista, então passamos o GCLID dentro de uma
-                    mapa_resultado = get_campaigns_for_gclids(gads_client, customer_id, [gclid_para_teste.strip()])
-                
-                # Verifica o resultado após a consulta
-                if mapa_resultado is None:
-                    # Um erro ocorreu e já foi exibido na tela pela função. Não fazemos nada.
-                    pass
-                elif gclid_para_teste.strip() in mapa_resultado:
-                    campanha_encontrada = mapa_resultado[gclid_para_teste.strip()]
-                    st.success(f"**Campanha encontrada:** {campanha_encontrada}")
-                else:
-                    st.warning("Nenhuma campanha foi encontrada para este GCLID. Verifique se o GCLID é válido e pertence à conta correta.")
-                
+        st.error(f"Erro ao carregar dados: {str(e)}")

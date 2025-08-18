@@ -27,8 +27,8 @@ def run_page():
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=0)
+    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
 
     df["data_referencia"] = pd.to_datetime(df["data_referencia"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
@@ -98,7 +98,7 @@ def run_page():
     
 
     df_filtrado = df[
-        (df["empresa"].isin(empresa_selecionada)) &
+        (df["empresa"] == empresa_selecionada) &
         (df["unidade"].isin(unidade_selecionada)) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df['tipo_cancelamento'].isin(tipo_selecionado)) &

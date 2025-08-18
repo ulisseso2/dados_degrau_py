@@ -12,7 +12,7 @@ SELECT
     ont.title AS titulo_cancelamento,
     os.name AS status,
     os.id AS status_id,
-    IF(o.school_id = 1, 'Degrau', 'Central') AS empresa, 
+    CASE WHEN o.school_id = 1 THEN 'Degrau' ELSE 'Central' END as empresa, 
     o.customer_id AS cliente_id,
     c.cpf AS cpf,
     c.full_name AS nome_cliente,

@@ -18,12 +18,10 @@ def run_page():
 
     # UNIDADE FILTRADA
     unidade_filtrada = "Centro"
-
  
-    # Filtro: empresa
-    empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
+    # Definição fixa da empresa como "Degrau" (sem opção de escolha)
+    empresa_selecionada = "Degrau"
+    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
     df["data_referencia"] = pd.to_datetime(df["data_referencia"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
 
@@ -61,7 +59,7 @@ def run_page():
 
     # Aplica filtros finais
     df_filtrado = df[
-        (df["empresa"].isin(empresa_selecionada)) &
+        (df["empresa"] == empresa_selecionada) &
         (df["unidade"] == unidade_filtrada) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df["data_referencia"] >= data_inicio_aware) &

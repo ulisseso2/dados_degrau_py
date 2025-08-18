@@ -17,8 +17,8 @@ def run_page():
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.multiselect("Selecione as empresas:", empresas, default=["Degrau"])
-    df_filtrado_empresa = df[df["empresa"].isin(empresa_selecionada)]
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=0)
+    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
     df["data_pagamento"] = pd.to_datetime(df["data_pagamento"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
 
@@ -27,11 +27,14 @@ def run_page():
     periodo = st.sidebar.date_input("Data Pagamento", [hoje_aware, hoje_aware])
 
     # Filtro: status (padrão: "Pago")
-    status_list = df["status"].dropna().unique().tolist()
+    status_list = df_filtrado_empresa["status"].dropna().unique().tolist()
 
+    # Verificar quais status estão disponíveis para a empresa selecionada
     default_status_name = []
-    if 2 in df['status_id'].values:
-        default_status_name = df[df['status_id'].isin ([2, 3, 14, 15])]['status'].unique().tolist()
+    if any(status_id in df_filtrado_empresa['status_id'].values for status_id in [2, 3, 14, 15]):
+        default_status_name = df_filtrado_empresa[df_filtrado_empresa['status_id'].isin([2, 3, 14, 15])]['status'].unique().tolist()
+    elif status_list:  # Se não encontrar os status padrão mas tiver algum status disponível
+        default_status_name = [status_list[0]]  # Usa o primeiro status disponível como default
 
     status_selecionado = st.sidebar.multiselect(
         "Selecione o status do pedido:", 
@@ -49,36 +52,62 @@ def run_page():
 
 
     st.sidebar.subheader("Filtro de Categoria")
+    # Busca as categorias disponíveis apenas para a empresa selecionada
     categorias_disponiveis = df_filtrado_empresa['categoria'].str.split(', ').explode().str.strip().dropna().unique().tolist()
-
+    
+    # Lista de categorias que gostaríamos de ter como default
+    categorias_default_desejadas = ["Curso Presencial", "Curso Live", "Passaporte", "Smart"]
+    
+    # Filtrar apenas as categorias default que realmente existem nos dados da empresa selecionada
+    categorias_default_reais = [cat for cat in categorias_default_desejadas if cat in categorias_disponiveis]
+    
+    # Se nenhuma das categorias default estiver disponível, usa todas as categorias disponíveis
+    if not categorias_default_reais:
+        categorias_default_reais = categorias_disponiveis
+    
     categoria_selecionada = st.sidebar.multiselect(
         "Selecione a(s) categoria(s):",
         options=sorted(categorias_disponiveis),
-        default=["Curso Presencial", "Curso Live", "Passaporte", "Smart"]
+        default=categorias_default_reais
     )
 
     # O filtro de Unidades agora fica dentro de seu próprio expander
     with st.sidebar.expander("Filtrar por Unidade"):
-        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique())
-        unidade_selecionada = st.multiselect(
-            "Selecione a(s) unidade(s):", 
-            unidades_list, 
-            default=unidades_list
-        )
+        # Garantir que só mostra unidades disponíveis na empresa selecionada
+        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique().tolist())
+        # Evitar lista vazia de unidades
+        if unidades_list:
+            unidade_selecionada = st.multiselect(
+                "Selecione a(s) unidade(s):", 
+                unidades_list, 
+                default=unidades_list
+            )
+        else:
+            st.warning("Nenhuma unidade disponível para a(s) empresa(s) selecionada(s).")
+            unidade_selecionada = []
 
     # Aplica filtros finais
-    df_filtrado = df[
-        (df["empresa"].isin(empresa_selecionada)) &
-        (df["unidade"].isin(unidade_selecionada)) &
-        (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
+    filtros = (df["empresa"] == empresa_selecionada)
+
+    # Adiciona filtro de unidade apenas se tiver unidades selecionadas
+    if unidade_selecionada:
+        filtros = filtros & (df["unidade"].isin(unidade_selecionada))
+    
+    # Adiciona outros filtros
+    if categoria_selecionada:
+        filtros = filtros & (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False))
+    
+    filtros = filtros & (
         (df["data_pagamento"] >= data_inicio_aware) &
         (df["data_pagamento"] < data_fim_aware) &
         (df["status"].isin(status_selecionado)) &
         (df["total_pedido"] != 0) &
         (~df["metodo_pagamento"].isin([5, 8]))
-    ]
+    )
+    
+    df_filtrado = df[filtros]
 
-    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])].copy()
+    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])].copy() if not df_filtrado.empty else pd.DataFrame()
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -90,7 +119,12 @@ def run_page():
     with col2:
         st.metric("Pedidos Cancelados", df_cancelados.shape[0])
     with col3:
-        st.metric("Valor", formatar_reais(df_filtrado["total_pedido"].sum()))
+        st.metric("Valor", formatar_reais(df_filtrado["total_pedido"].sum()) if not df_filtrado.empty else "R$ 0,00")
+
+    # Verifica se há dados para mostrar
+    if df_filtrado.empty:
+        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        st.stop()
 
     # Tabela por unidade
     tabela = (
@@ -207,51 +241,51 @@ def run_page():
     ]].copy() # Usamos .copy() para garantir que é um novo DataFrame
 
     # --- 2. CRIAÇÃO DOS FILTROS ESPECÍFICOS PARA A TABELA ---
-    st.markdown("Filtre a lista de alunos abaixo:")
-    col1, col2, col3 = st.columns([1, 1, 1]) # Duas colunas para os filtros
+    if not tabela_base.empty:
+        st.markdown("Filtre a lista de alunos abaixo:")
+        col1, col2, col3 = st.columns([1, 1, 1]) # Três colunas para os filtros
 
-    with col1:
-        # Filtro para Curso Venda
-        cursos_venda_disponiveis = sorted(tabela_base['curso_venda'].dropna().unique().tolist())
-        placeholder_curso_nulo = "Online/Passaporte/Smart" # Placeholder para cursos nulos
+        with col1:
+            # Filtro para Curso Venda
+            cursos_venda_disponiveis = sorted(tabela_base['curso_venda'].dropna().unique().tolist())
+            placeholder_curso_nulo = "Online/Passaporte/Smart" # Placeholder para cursos nulos
 
-        opcoes_cv = cursos_venda_disponiveis
-        if tabela_base['curso_venda'].isna().any():
-            opcoes_cv = [placeholder_curso_nulo] + opcoes_cv
+            opcoes_cv = cursos_venda_disponiveis
+            if tabela_base['curso_venda'].isna().any():
+                opcoes_cv = [placeholder_curso_nulo] + opcoes_cv
 
-        curso_venda_selecionado = st.multiselect(
-            "Filtrar por Curso Venda:",
-            options=opcoes_cv,
-            default=opcoes_cv,
-            key="filtro_curso_venda_tabela"
-        )
+            curso_venda_selecionado = st.multiselect(
+                "Filtrar por Curso Venda:",
+                options=opcoes_cv,
+                default=opcoes_cv,
+                key="filtro_curso_venda_tabela"
+            )
 
-    with col2:
-        # Filtro para Turno
-        turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
-        placeholder_turno_nulo = "Sem Turno" # Placeholder para turnos nulos
+        with col2:
+            # Filtro para Turno
+            turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
+            placeholder_turno_nulo = "Sem Turno" # Placeholder para turnos nulos
 
-        opcoes_turno = turnos_disponiveis
-        if tabela_base['turno'].isna().any():
-            opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
+            opcoes_turno = turnos_disponiveis
+            if tabela_base['turno'].isna().any():
+                opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
 
-        turno_selecionado = st.multiselect(
-            "Filtrar por Turno:",
-            options=opcoes_turno,
-            default=opcoes_turno,
-            key="filtro_turno_tabela"
-        )
-    
-    with col3:
-        #Filtro Vendedor
-        vendedores_disponiveis = sorted(tabela_base['vendedor'].dropna().unique().tolist())
-        vendedor_selecionado = st.multiselect(
-            "Filtrar por Vendedor:",
-            options=vendedores_disponiveis,
-            default=vendedores_disponiveis
-        )
-    
-
+            turno_selecionado = st.multiselect(
+                "Filtrar por Turno:",
+                options=opcoes_turno,
+                default=opcoes_turno,
+                key="filtro_turno_tabela"
+            )
+        
+        with col3:
+            #Filtro Vendedor
+            vendedores_disponiveis = sorted(tabela_base['vendedor'].dropna().unique().tolist())
+            vendedor_selecionado = st.multiselect(
+                "Filtrar por Vendedor:",
+                options=vendedores_disponiveis,
+                default=vendedores_disponiveis
+            )
+        
         # Lógica para o filtro de Curso Venda
         cursos_reais_selecionados = [c for c in curso_venda_selecionado if c != placeholder_curso_nulo]
         mascara_curso = tabela_base['curso_venda'].isin(cursos_reais_selecionados)
@@ -263,7 +297,6 @@ def run_page():
         mascara_turno = tabela_base['turno'].isin(turnos_reais_selecionados)
         if placeholder_turno_nulo in turno_selecionado:
             mascara_turno = mascara_turno | tabela_base['turno'].isna()
-
 
         mascara_vendedor = tabela_base['vendedor'].isin(vendedor_selecionado)
 
