@@ -10,6 +10,7 @@ SELECT
     oct.name AS tipo_cancelamento,
     ont.description AS descricao,
     ont.title AS titulo_cancelamento,
+    p.title AS produto,
     os.name AS status,
     os.id AS status_id,
     CASE WHEN o.school_id = 1 THEN 'Degrau' ELSE 'Central' END as empresa, 
@@ -61,6 +62,7 @@ LEFT JOIN seducar.users v ON v.id = o.user_id
 LEFT JOIN seducar.order_items oi ON oi.order_id = o.id
 LEFT JOIN seducar.product_categories pc ON pc.id = oi.product_category_id
 LEFT JOIN seducar.classrooms t ON t.id = oi.classroom_id
+LEFT JOIN seducar.products p ON p.id = oi.product_id
 LEFT JOIN seducar.shifts s ON s.id = t.shift_id
 LEFT JOIN seducar.units u ON u.id = t.unit_id
 LEFT JOIN seducar.units u3 ON u3.id = o.unit_id

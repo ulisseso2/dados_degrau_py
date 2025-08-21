@@ -315,37 +315,92 @@ def run_page():
                 else 'Não consultado'
             )
             
+            # Adiciona coluna de FBclid formatado conforme especificação da Meta
+            from fbclid_db import format_fbclid
+            df_display['FBCLID Formatado'] = df_display['FBCLID'].apply(
+                lambda x: format_fbclid(x) if x else ''
+            )
+            
             # Exibe a tabela de conversões
             st.dataframe(
                 df_display,
                 hide_index=True,
                 column_config={
                     "Data Criação": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
-                    "FBCLID": st.column_config.TextColumn(width="large")
+                    "FBCLID": st.column_config.TextColumn(width="large"),
+                    "FBCLID Formatado": st.column_config.TextColumn(width="large")
                 },
                 use_container_width=True
             )
             
             # Botão de consulta
-            if st.button("📡 Consultar Campanhas no Facebook", type="primary"):
-                _, _, _, _, account = init_facebook_api()
-                if account:
-                    fbclid_list = [
-                        row['fbclid']
-                        for _, row in df_conversoes_filtrado.iterrows()
-                        if pd.notna(row['fbclid']) and row['fbclid'] != ''
-                    ]
-                    
-                    with st.spinner(f"Consultando {len(fbclid_list)} FBclids..."):
-                        result = get_campaigns_for_fbclids(
-                            account, fbclid_list, empresa="degrau"
-                        )
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📡 Consultar Campanhas no Facebook", type="primary"):
+                    _, _, _, _, account = init_facebook_api()
+                    if account:
+                        fbclid_list = [
+                            row['fbclid']
+                            for _, row in df_conversoes_filtrado.iterrows()
+                            if pd.notna(row['fbclid']) and row['fbclid'] != ''
+                        ]
                         
-                        if result is not None:
-                            st.success("Consulta concluída! Atualizando tabela...")
-                            st.rerun()
-                else:
-                    st.error("Falha na conexão com a API do Facebook")
+                        with st.spinner(f"Consultando {len(fbclid_list)} FBclids..."):
+                            result = get_campaigns_for_fbclids(
+                                account, fbclid_list, empresa="degrau"
+                            )
+                            
+                            if result is not None:
+                                st.success("Consulta concluída! Atualizando tabela...")
+                                st.rerun()
+                    else:
+                        st.error("Falha na conexão com a API do Facebook")
+            
+            with col2:
+                # Botão para migrar os FBclids para o formato da Meta
+                if st.button("🔄 Converter FBclids para Formato Meta", help="Converte os FBclids para o formato recomendado pela Meta"):
+                    from fbclid_db import format_fbclid
+                    
+                    with st.spinner("Convertendo FBclids para o formato da Meta..."):
+                        # Executa a migração diretamente aqui
+                        fbclid_list = [
+                            row['fbclid']
+                            for _, row in df_conversoes_filtrado.iterrows()
+                            if pd.notna(row['fbclid']) and row['fbclid'] != ''
+                        ]
+                        
+                        # Para cada FBclid, formata e atualiza no banco
+                        updated_count = 0
+                        for fbclid in fbclid_list:
+                            try:
+                                formatted_fbclid = format_fbclid(fbclid)
+                                
+                                # Conecta ao banco para atualizar
+                                import sqlite3
+                                conn = sqlite3.connect("fbclid_cache.db")
+                                cursor = conn.cursor()
+                                
+                                cursor.execute("""
+                                UPDATE fbclid_cache SET formatted_fbclid = ? WHERE fbclid = ?
+                                """, (formatted_fbclid, fbclid))
+                                
+                                # Se não existir, insere
+                                if cursor.rowcount == 0:
+                                    cursor.execute("""
+                                    INSERT OR IGNORE INTO fbclid_cache (fbclid, formatted_fbclid, empresa)
+                                    VALUES (?, ?, ?)
+                                    """, (fbclid, formatted_fbclid, "degrau"))
+                                
+                                conn.commit()
+                                conn.close()
+                                
+                                updated_count += 1
+                            except Exception as e:
+                                st.error(f"Erro ao processar FBclid {fbclid}: {e}")
+                        
+                        st.success(f"Conversão concluída! {updated_count} FBclids foram convertidos.")
+                        st.rerun()
             
             # Resumo das conversões
             col1, col2 = st.columns(2)

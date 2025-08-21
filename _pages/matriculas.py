@@ -17,7 +17,13 @@ def run_page():
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=0)
+    
+    # Definir o índice padrão para 'Degrau'
+    default_index = 0
+    if "Degrau" in empresas:
+        default_index = empresas.index("Degrau")
+        
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=default_index)
     df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
     df["data_pagamento"] = pd.to_datetime(df["data_pagamento"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
@@ -50,15 +56,27 @@ def run_page():
         st.warning("👈 Por favor, selecione um período de datas na barra lateral para exibir a análise.")
         st.stop()
 
+    # Cria um DataFrame filtrado apenas com empresa e período de data para uso nos filtros seguintes
+    df_filtrado_data = df[
+        (df["empresa"] == empresa_selecionada) & 
+        (df["data_pagamento"] >= data_inicio_aware) & 
+        (df["data_pagamento"] < data_fim_aware) &
+        (df["total_pedido"] != 0) &
+        (~df["metodo_pagamento"].isin([5, 8]))
+    ]
+
+    # Filtra também por status se já tiver sido selecionado
+    if status_selecionado:
+        df_filtrado_data = df_filtrado_data[df_filtrado_data["status"].isin(status_selecionado)]
 
     st.sidebar.subheader("Filtro de Categoria")
-    # Busca as categorias disponíveis apenas para a empresa selecionada
-    categorias_disponiveis = df_filtrado_empresa['categoria'].str.split(', ').explode().str.strip().dropna().unique().tolist()
+    # Busca as categorias disponíveis apenas para a empresa selecionada E no período selecionado
+    categorias_disponiveis = df_filtrado_data['categoria'].str.split(', ').explode().str.strip().dropna().unique().tolist()
     
     # Lista de categorias que gostaríamos de ter como default
-    categorias_default_desejadas = ["Curso Presencial", "Curso Live", "Passaporte", "Smart"]
+    categorias_default_desejadas = ["Curso Presencial", "Curso Live", "Passaporte", "Smart", "Curso Online"]
     
-    # Filtrar apenas as categorias default que realmente existem nos dados da empresa selecionada
+    # Filtrar apenas as categorias default que realmente existem nos dados filtrados
     categorias_default_reais = [cat for cat in categorias_default_desejadas if cat in categorias_disponiveis]
     
     # Se nenhuma das categorias default estiver disponível, usa todas as categorias disponíveis
@@ -71,10 +89,14 @@ def run_page():
         default=categorias_default_reais
     )
 
+    # Atualiza o DataFrame filtrado com a seleção de categorias
+    if categoria_selecionada:
+        df_filtrado_data = df_filtrado_data[df_filtrado_data['categoria'].str.contains('|'.join(categoria_selecionada), na=False)]
+
     # O filtro de Unidades agora fica dentro de seu próprio expander
     with st.sidebar.expander("Filtrar por Unidade"):
-        # Garantir que só mostra unidades disponíveis na empresa selecionada
-        unidades_list = sorted(df_filtrado_empresa["unidade"].dropna().unique().tolist())
+        # Garantir que só mostra unidades disponíveis na empresa selecionada E no período/categoria selecionado
+        unidades_list = sorted(df_filtrado_data["unidade"].dropna().unique().tolist())
         # Evitar lista vazia de unidades
         if unidades_list:
             unidade_selecionada = st.multiselect(
@@ -83,8 +105,42 @@ def run_page():
                 default=unidades_list
             )
         else:
-            st.warning("Nenhuma unidade disponível para a(s) empresa(s) selecionada(s).")
+            st.warning("Nenhuma unidade disponível para os filtros selecionados.")
             unidade_selecionada = []
+
+    # Atualiza o DataFrame filtrado com a seleção de unidades
+    if unidade_selecionada:
+        df_filtrado_data = df_filtrado_data[df_filtrado_data["unidade"].isin(unidade_selecionada)]
+
+    # Filtro para Método de Pagamento
+    st.sidebar.subheader("Filtro de Pagamento")
+    metodos_pagamento_disponiveis = sorted(df_filtrado_data["metodo_pagamento"].dropna().unique().tolist())
+    if metodos_pagamento_disponiveis:
+        metodo_pagamento_selecionado = st.sidebar.multiselect(
+            "Selecione o(s) método(s) de pagamento:",
+            options=metodos_pagamento_disponiveis,
+            default=metodos_pagamento_disponiveis
+        )
+    else:
+        st.sidebar.warning("Nenhum método de pagamento disponível para os filtros selecionados.")
+        metodo_pagamento_selecionado = []
+
+    # Atualiza o DataFrame filtrado com a seleção de métodos de pagamento
+    if metodo_pagamento_selecionado:
+        df_filtrado_data = df_filtrado_data[df_filtrado_data["metodo_pagamento"].isin(metodo_pagamento_selecionado)]
+
+    # Filtro para Vendedor
+    st.sidebar.subheader("Filtro de Vendedor")
+    vendedores_disponiveis = sorted(df_filtrado_data["vendedor"].dropna().unique().tolist())
+    if vendedores_disponiveis:
+        vendedor_selecionado = st.sidebar.multiselect(
+            "Selecione o(s) vendedor(es):",
+            options=vendedores_disponiveis,
+            default=vendedores_disponiveis
+        )
+    else:
+        st.sidebar.warning("Nenhum vendedor disponível para os filtros selecionados.")
+        vendedor_selecionado = []
 
     # Aplica filtros finais
     filtros = (df["empresa"] == empresa_selecionada)
@@ -93,6 +149,14 @@ def run_page():
     if unidade_selecionada:
         filtros = filtros & (df["unidade"].isin(unidade_selecionada))
     
+    # Adiciona filtro de método de pagamento
+    if metodo_pagamento_selecionado:
+        filtros = filtros & (df["metodo_pagamento"].isin(metodo_pagamento_selecionado))
+
+    # Adiciona filtro de vendedor
+    if vendedor_selecionado:
+        filtros = filtros & (df["vendedor"].isin(vendedor_selecionado))
+
     # Adiciona outros filtros
     if categoria_selecionada:
         filtros = filtros & (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False))
@@ -107,19 +171,20 @@ def run_page():
     
     df_filtrado = df[filtros]
 
-    df_cancelados = df_filtrado[df_filtrado["status_id"].isin([3, 15])].copy() if not df_filtrado.empty else pd.DataFrame()
     # Função para formatar valores em reais
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     # Tabela de resumo
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total de Pedidos", df_filtrado.shape[0])
     with col2:
-        st.metric("Pedidos Cancelados", df_cancelados.shape[0])
+        st.metric("Valor Presencial/Live/EAD", formatar_reais(df_filtrado[df_filtrado["categoria"] != "Passaporte"]["total_pedido"].sum()) if not df_filtrado.empty else "R$ 0,00")
     with col3:
-        st.metric("Valor", formatar_reais(df_filtrado["total_pedido"].sum()) if not df_filtrado.empty else "R$ 0,00")
+        st.metric("Vendas Passaporte", formatar_reais(df_filtrado[df_filtrado["categoria"] == "Passaporte"]["total_pedido"].sum()) if not df_filtrado.empty else "R$ 0,00")
+    with col4:
+        st.metric("Total Vendas", formatar_reais(df_filtrado["total_pedido"].sum()) if not df_filtrado.empty else "R$ 0,00")
 
     # Verifica se há dados para mostrar
     if df_filtrado.empty:
@@ -233,25 +298,31 @@ def run_page():
     st.dataframe(tabela_completa, use_container_width=True)
 
     st.divider()
-    st.subheader("Lista de Alunos Matriculados")
+    st.subheader("Lista de Alunos Matriculados (Exceto Curso Online)")
 
     # 1. Cria a tabela base com os dados que já passaram pelos filtros da sidebar
-    tabela_base = df_filtrado[[
-      "ordem_id", "curso_venda", "turma", "turno", "cpf","nome_cliente", "email_cliente", "celular_cliente","status", "unidade", "total_pedido", "data_pagamento","cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"
-    ]].copy() # Usamos .copy() para garantir que é um novo DataFrame
+    colunas_selecionadas = ["ordem_id", "curso_venda", "turma", "turno", "cpf", "nome_cliente", 
+                          "email_cliente", "celular_cliente", "metodo_pagamento", "status", 
+                          "unidade", "total_pedido", "data_pagamento", "cep_cliente", 
+                          "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"]
+    
+    # Filtra primeiro e depois seleciona as colunas
+    tabela_base_sem_online = df_filtrado[df_filtrado["categoria"] != "Curso Online"].copy()
+    if not tabela_base_sem_online.empty:
+        tabela_base_sem_online = tabela_base_sem_online[colunas_selecionadas]
 
     # --- 2. CRIAÇÃO DOS FILTROS ESPECÍFICOS PARA A TABELA ---
-    if not tabela_base.empty:
+    if not tabela_base_sem_online.empty:
         st.markdown("Filtre a lista de alunos abaixo:")
         col1, col2, col3 = st.columns([1, 1, 1]) # Três colunas para os filtros
 
         with col1:
             # Filtro para Curso Venda
-            cursos_venda_disponiveis = sorted(tabela_base['curso_venda'].dropna().unique().tolist())
+            cursos_venda_disponiveis = sorted(tabela_base_sem_online['curso_venda'].dropna().unique().tolist())
             placeholder_curso_nulo = "Online/Passaporte/Smart" # Placeholder para cursos nulos
 
             opcoes_cv = cursos_venda_disponiveis
-            if tabela_base['curso_venda'].isna().any():
+            if tabela_base_sem_online['curso_venda'].isna().any():
                 opcoes_cv = [placeholder_curso_nulo] + opcoes_cv
 
             curso_venda_selecionado = st.multiselect(
@@ -263,11 +334,11 @@ def run_page():
 
         with col2:
             # Filtro para Turno
-            turnos_disponiveis = sorted(tabela_base['turno'].dropna().unique().tolist())
+            turnos_disponiveis = sorted(tabela_base_sem_online['turno'].dropna().unique().tolist())
             placeholder_turno_nulo = "Sem Turno" # Placeholder para turnos nulos
 
             opcoes_turno = turnos_disponiveis
-            if tabela_base['turno'].isna().any():
+            if tabela_base_sem_online['turno'].isna().any():
                 opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
 
             turno_selecionado = st.multiselect(
@@ -279,29 +350,30 @@ def run_page():
         
         with col3:
             #Filtro Vendedor
-            vendedores_disponiveis = sorted(tabela_base['vendedor'].dropna().unique().tolist())
-            vendedor_selecionado = st.multiselect(
+            vendedores_disponiveis_tabela = sorted(tabela_base_sem_online['vendedor'].dropna().unique().tolist())
+            vendedor_selecionado_tabela = st.multiselect(
                 "Filtrar por Vendedor:",
-                options=vendedores_disponiveis,
-                default=vendedores_disponiveis
+                options=vendedores_disponiveis_tabela,
+                default=vendedores_disponiveis_tabela,
+                key="filtro_vendedor_tabela"
             )
         
         # Lógica para o filtro de Curso Venda
         cursos_reais_selecionados = [c for c in curso_venda_selecionado if c != placeholder_curso_nulo]
-        mascara_curso = tabela_base['curso_venda'].isin(cursos_reais_selecionados)
+        mascara_curso = tabela_base_sem_online['curso_venda'].isin(cursos_reais_selecionados)
         if placeholder_curso_nulo in curso_venda_selecionado:
-            mascara_curso = mascara_curso | tabela_base['curso_venda'].isna()
+            mascara_curso = mascara_curso | tabela_base_sem_online['curso_venda'].isna()
 
         # Lógica para o filtro de Turno
         turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_turno_nulo]
-        mascara_turno = tabela_base['turno'].isin(turnos_reais_selecionados)
+        mascara_turno = tabela_base_sem_online['turno'].isin(turnos_reais_selecionados)
         if placeholder_turno_nulo in turno_selecionado:
-            mascara_turno = mascara_turno | tabela_base['turno'].isna()
+            mascara_turno = mascara_turno | tabela_base_sem_online['turno'].isna()
 
-        mascara_vendedor = tabela_base['vendedor'].isin(vendedor_selecionado)
+        mascara_vendedor = tabela_base_sem_online['vendedor'].isin(vendedor_selecionado_tabela)
 
         # Combina as máscaras de filtro
-        tabela_final = tabela_base[mascara_curso & mascara_turno & mascara_vendedor]
+        tabela_final = tabela_base_sem_online[mascara_curso & mascara_turno & mascara_vendedor]
 
     # --- 4. EXIBIÇÃO E EXPORTAÇÃO DA TABELA JÁ FILTRADA ---
     if not tabela_final.empty:
@@ -329,3 +401,190 @@ def run_page():
         )
     else:
         st.info("Nenhum aluno encontrado para os filtros de Curso Venda e Turno selecionados.")
+        
+    # =====================================================================
+    # Tabela específica para Cursos Online
+    # =====================================================================
+    st.divider()
+    st.subheader("Lista de Alunos de Cursos Online (Detalhamento por Produto)")
+
+    colunas_selecionadas_online = ["ordem_id", "produto", "cpf", "nome_cliente", "email_cliente", "celular_cliente", "metodo_pagamento", "status", "unidade", "total_pedido", "data_pagamento", "cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"
+    ]
+    
+    # Cria a tabela base para cursos online
+    tabela_base_online = df_filtrado[df_filtrado["categoria"] == "Curso Online"].copy()
+    if not tabela_base_online.empty:
+        tabela_base_online = tabela_base_online[colunas_selecionadas_online]
+        
+        st.markdown("Filtre a lista de alunos de cursos online abaixo:")
+        col1_online, col2_online, col3_online = st.columns([1, 1, 1])
+        
+        with col1_online:
+            # Filtro para Produto
+            produtos_online = sorted(tabela_base_online['produto'].dropna().unique().tolist())
+            placeholder_produto_nulo = "Sem Produto" 
+            
+            opcoes_produto = produtos_online
+            if tabela_base_online['produto'].isna().any():
+                opcoes_produto = [placeholder_produto_nulo] + opcoes_produto
+                
+            produto_selecionado = st.multiselect(
+                "Filtrar por Produto:",
+                options=opcoes_produto,
+                default=opcoes_produto,
+                key="filtro_curso_produto"
+            )
+        
+        with col2_online:
+            # Filtro para Status
+            status_online = sorted(tabela_base_online['status'].dropna().unique().tolist())
+            status_selecionado_online = st.multiselect(
+                "Filtrar por Status:",
+                options=status_online,
+                default=status_online,
+                key="filtro_status_online"
+            )
+            
+        with col3_online:
+            # Filtro Vendedor
+            vendedores_online = sorted(tabela_base_online['vendedor'].dropna().unique().tolist())
+            vendedor_selecionado_online = st.multiselect(
+                "Filtrar por Vendedor:",
+                options=vendedores_online,
+                default=vendedores_online,
+                key="filtro_vendedor_online"
+            )
+            
+        # Lógica para o filtro de Produto
+        produtos_reais = [p for p in produtos_online if p != placeholder_produto_nulo]
+        mascara_produto = tabela_base_online['produto'].isin(produtos_reais)
+        if placeholder_produto_nulo in produto_selecionado:
+            mascara_produto = mascara_produto | tabela_base_online['produto'].isna()
+            
+        # Lógica para o filtro de Status Online
+        mascara_status_online = tabela_base_online['status'].isin(status_selecionado_online)
+        
+        # Lógica para o filtro de Vendedor Online
+        mascara_vendedor_online = tabela_base_online['vendedor'].isin(vendedor_selecionado_online)
+        
+        # Combina as máscaras de filtro
+        tabela_final_online = tabela_base_online[mascara_produto & mascara_status_online & mascara_vendedor_online]
+        
+        # Exibição e exportação da tabela de cursos online filtrada
+        if not tabela_final_online.empty:
+            tabela_para_exibir_online = tabela_final_online.copy()
+            tabela_para_exibir_online["total_pedido"] = tabela_para_exibir_online["total_pedido"].apply(formatar_reais)
+            tabela_para_exibir_online["data_pagamento"] = pd.to_datetime(tabela_para_exibir_online["data_pagamento"]).dt.strftime('%d/%m/%Y')
+            
+            st.dataframe(tabela_para_exibir_online, use_container_width=True, hide_index=True)
+            
+            # Prepara a versão para exportação
+            tabela_para_exportar_online = tabela_final_online.copy()
+            if 'data_pagamento' in tabela_para_exportar_online.columns:
+                tabela_para_exportar_online['data_pagamento'] = tabela_para_exportar_online['data_pagamento'].dt.tz_localize(None)
+                
+            buffer_online = io.BytesIO()
+            with pd.ExcelWriter(buffer_online, engine='xlsxwriter') as writer:
+                tabela_para_exportar_online.to_excel(writer, index=False, sheet_name='Produtos Online Detalhados')
+            buffer_online.seek(0)
+            
+            st.download_button(
+                label="📥 Baixar Lista de Produtos Online",
+                data=buffer_online,
+                file_name="produtos_online_detalhados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_online"
+            )
+            
+            # =====================================================================
+            # Análises Gráficas para Cursos Online
+            # =====================================================================
+            st.subheader("Análises dos Cursos Online")
+            
+            # 1. Gráfico de barras dos produtos por total financeiro
+            st.markdown("### Produtos Online por Valor Total")
+            
+            # Agrupa os dados por produto e soma os valores
+            produtos_valores = tabela_final_online.groupby('produto')['total_pedido'].sum().reset_index()
+            produtos_valores = produtos_valores.sort_values('total_pedido', ascending=False)
+            
+            # Adiciona formatação em reais para exibição no gráfico
+            produtos_valores['valor_formatado'] = produtos_valores['total_pedido'].apply(formatar_reais)
+            
+            # Cria o gráfico de barras horizontal com escala logarítmica
+            fig_produtos = px.bar(
+                produtos_valores,
+                y='produto',
+                x='total_pedido',
+                text='valor_formatado',
+                title="Faturamento por Produto Online (Escala Logarítmica)",
+                labels={'produto': 'Produto', 'total_pedido': 'Valor Total (R$)'},
+                orientation='h',
+                color='total_pedido',
+                color_continuous_scale='Viridis',
+                log_x=True  # Adiciona escala logarítmica no eixo X
+            )
+            fig_produtos.update_layout(
+                yaxis={'categoryorder': 'total ascending'},
+                xaxis_title="Valor Total (R$) - Escala Logarítmica"
+            )
+            st.plotly_chart(fig_produtos, use_container_width=True)
+            
+            st.divider()
+            
+            # Layout de duas colunas para os gráficos restantes
+
+
+            st.markdown("### Distribuição por Cidades")
+                
+            # Agrupa os dados por cidade
+            cidades = tabela_final_online.groupby('cidade_cliente').agg(
+                contagem=pd.NamedAgg(column='ordem_id', aggfunc='count')
+            ).reset_index()
+                
+            # Ordena e pega as top 20 cidades se houver mais que isso
+            cidades = cidades.sort_values('contagem', ascending=False)
+            if len(cidades) > 20:
+                cidades_resto = pd.DataFrame({
+                    'cidade_cliente': ['Outras Cidades'],
+                    'contagem': [cidades.iloc[20:]['contagem'].sum()]
+                })
+                cidades = pd.concat([cidades.iloc[:20], cidades_resto])
+                
+            # Cria o gráfico de barras com escala logarítmica
+            fig_cidades = px.bar(
+                cidades,
+                x='contagem',
+                y='cidade_cliente',
+                orientation='h',
+                title="Top 20 Cidades (Escala Logarítmica)",
+                labels={'contagem': 'Quantidade de Alunos (Escala Log)', 'cidade_cliente': 'Cidade'},
+                color='contagem',
+                color_continuous_scale='Blues',
+                log_x=True  # Adiciona escala logarítmica no eixo X
+            )
+            fig_cidades.update_layout(
+                yaxis={'categoryorder': 'total ascending'},
+                xaxis_title="Quantidade de Alunos (Escala Logarítmica)"
+            )
+            st.plotly_chart(fig_cidades, use_container_width=True)
+            
+            # Adiciona um indicador resumido
+            st.markdown("### Resumo dos Cursos Online")
+            metricas_online = st.columns(4)
+            with metricas_online[0]:
+                st.metric("Total de Matrículas", tabela_final_online.shape[0])
+            with metricas_online[1]:
+                valor_total_online = tabela_final_online['total_pedido'].sum()
+                st.metric("Faturamento Total", formatar_reais(valor_total_online))
+            with metricas_online[2]:
+                ticket_medio_online = valor_total_online / tabela_final_online.shape[0] if tabela_final_online.shape[0] > 0 else 0
+                st.metric("Ticket Médio", formatar_reais(ticket_medio_online))
+            with metricas_online[3]:
+                produtos_distintos = len(tabela_final_online['produto'].unique())
+                st.metric("Produtos Distintos", produtos_distintos)
+                
+        else:
+            st.info("Nenhum aluno de curso online encontrado para os filtros de produtos selecionados.")
+    else:
+        st.info("Não há dados de produtos online para o período selecionado.")

@@ -27,7 +27,13 @@ def run_page():
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
-    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=0)
+    
+    # Definir o índice padrão para 'Degrau'
+    default_index = 0
+    if "Degrau" in empresas:
+        default_index = empresas.index("Degrau")
+        
+    empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=default_index)
     df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
 
