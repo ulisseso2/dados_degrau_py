@@ -833,6 +833,108 @@ def run_page():
 
                 # Exibe a tabela com o total geral
                 st.dataframe(tabela_final_com_total, use_container_width=True)
+
+                # NOVA SEÇÃO: ANÁLISES DETALHADAS DE CAMPANHAS E ETAPAS
+                # ===============================================================================
+                st.divider()
+                st.header("🔍 Análises Detalhadas de Campanhas e Etapas")
+                st.info("Esta seção oferece visualizações personalizáveis sobre a distribuição de campanhas por etapas do funil de conversão.")
+                
+                # Filtra para usar apenas campanhas e etapas que existem no período selecionado
+                df_periodo = df_display.copy()
+                
+                # Lista de campanhas disponíveis no período (excluindo o total geral)
+                campanhas_disponiveis_periodo = list(tabela_etapas.index)
+                campanhas_disponiveis_periodo = [c for c in campanhas_disponiveis_periodo if c != 'TOTAL GERAL']
+                
+                # Lista de etapas disponíveis no período (todas as colunas exceto 'Total')
+                etapas_disponiveis_periodo = list(df_periodo['Etapa'].unique())
+                
+                # --- FILTROS EM EXPANDER ---
+                with st.expander("📋 Filtros para Análise Detalhada", expanded=True):
+                    col1, col2 = st.columns(2)
+                    
+                    # Filtro de Campanhas (multi-select)
+                    with col1:
+                        campanhas_selecionadas = st.multiselect(
+                            "Selecione as Campanhas:",
+                            options=campanhas_disponiveis_periodo,
+                            default=campanhas_disponiveis_periodo[:20] if len(campanhas_disponiveis_periodo) > 20 else campanhas_disponiveis_periodo
+                        )
+                    
+                    # Filtro de Etapas (multi-select)
+                    with col2:
+                        etapas_selecionadas = st.multiselect(
+                            "Selecione as Etapas:",
+                            options=etapas_disponiveis_periodo,
+                            default=etapas_disponiveis_periodo
+                        )
+                
+                # Aplicar filtros ao dataframe
+                if campanhas_selecionadas and etapas_selecionadas:
+                    # Filtra apenas as campanhas e etapas selecionadas
+                    df_filtro_campanhas = df_periodo[
+                        (df_periodo['Campanha (Google Ads)'].isin(campanhas_selecionadas)) &
+                        (df_periodo['Etapa'].isin(etapas_selecionadas))
+                    ]
+                    
+                    # --- GRÁFICOS ---
+                    col1, col2 = st.columns(2)
+                    
+                    # 1. Gráfico de Barras para Campanhas (sem segmentação por etapa)
+                    with col1:
+                        # Conta oportunidades por campanha
+                        contagem_campanhas = df_filtro_campanhas.groupby('Campanha (Google Ads)').size().reset_index(name='Contagem')
+                        contagem_campanhas = contagem_campanhas.sort_values('Contagem', ascending=True)
+                        
+                        # Cria o gráfico de barras
+                        fig_campanhas = px.bar(
+                            contagem_campanhas,
+                            x='Contagem',
+                            y='Campanha (Google Ads)',
+                            orientation='h',
+                            title="Distribuição de Campanhas",
+                            labels={'Contagem': 'Número de Oportunidades', 'Campanha (Google Ads)': 'Campanha'},
+                            color_discrete_sequence=['#2E86C1']  # Cor azul para todas as barras
+                        )
+                        
+                        # Ajusta o layout
+                        fig_campanhas.update_layout(
+                            showlegend=False,
+                            height=400 + (len(campanhas_selecionadas) * 30)  # Ajusta altura baseado no número de campanhas
+                        )
+                        
+                        st.plotly_chart(fig_campanhas, use_container_width=True)
+                    
+                    # 2. Gráfico de Pizza para Etapas
+                    with col2:
+                        # Filtra os dados
+                        df_filtro_etapas = df_periodo[
+                            (df_periodo['Campanha (Google Ads)'].isin(campanhas_selecionadas)) &
+                            (df_periodo['Etapa'].isin(etapas_selecionadas))
+                        ]
+                        
+                        # Conta oportunidades por etapa
+                        contagem_etapas = df_filtro_etapas.groupby('Etapa').size().reset_index(name='Contagem')
+                        
+                        # Cria o gráfico de pizza
+                        fig_etapas = px.pie(
+                            contagem_etapas,
+                            names='Etapa',
+                            values='Contagem',
+                            title="Distribuição de Oportunidades por Etapa",
+                            hole=0.4  # Cria um gráfico de rosca
+                        )
+                        
+                        # Ajusta o layout
+                        fig_etapas.update_layout(
+                            legend_title_text='Etapa',
+                            height=500
+                        )
+                        
+                        st.plotly_chart(fig_etapas, use_container_width=True)
+                else:
+                    st.warning("Selecione pelo menos uma campanha e uma etapa para visualizar os gráficos.")
             else:
                 st.warning("Não há dados de campanhas consultadas no Google Ads para gerar a análise por etapa. Clique no botão 'Consultar Campanhas no Google Ads' acima.")
 
