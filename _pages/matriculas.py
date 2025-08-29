@@ -37,8 +37,8 @@ def run_page():
 
     # Verificar quais status estão disponíveis para a empresa selecionada
     default_status_name = []
-    if any(status_id in df_filtrado_empresa['status_id'].values for status_id in [2, 3, 14, 15]):
-        default_status_name = df_filtrado_empresa[df_filtrado_empresa['status_id'].isin([2, 3, 14, 15])]['status'].unique().tolist()
+    if any(status_id in df_filtrado_empresa['status_id'].values for status_id in [2, 3, 14, 10, 15]):
+        default_status_name = df_filtrado_empresa[df_filtrado_empresa['status_id'].isin([2, 3, 14, 10, 15])]['status'].unique().tolist()
     elif status_list:  # Se não encontrar os status padrão mas tiver algum status disponível
         default_status_name = [status_list[0]]  # Usa o primeiro status disponível como default
 
@@ -62,7 +62,7 @@ def run_page():
         (df["data_pagamento"] >= data_inicio_aware) & 
         (df["data_pagamento"] < data_fim_aware) &
         (df["total_pedido"] != 0) &
-        (~df["metodo_pagamento"].isin([5, 8]))
+        (~df["metodo_pagamento"].isin([5, 8, 13]))
     ]
 
     # Filtra também por status se já tiver sido selecionado
@@ -166,7 +166,7 @@ def run_page():
         (df["data_pagamento"] < data_fim_aware) &
         (df["status"].isin(status_selecionado)) &
         (df["total_pedido"] != 0) &
-        (~df["metodo_pagamento"].isin([5, 8]))
+        (~df["metodo_pagamento"].isin([5, 8, 13]))
     )
     
     df_filtrado = df[filtros]
@@ -308,6 +308,10 @@ def run_page():
     
     # Filtra primeiro e depois seleciona as colunas
     tabela_base_sem_online = df_filtrado[df_filtrado["categoria"] != "Curso Online"].copy()
+    
+    # Inicializa tabela_final como DataFrame vazio para evitar erro
+    tabela_final = pd.DataFrame()
+    
     if not tabela_base_sem_online.empty:
         tabela_base_sem_online = tabela_base_sem_online[colunas_selecionadas]
 
@@ -374,6 +378,8 @@ def run_page():
 
         # Combina as máscaras de filtro
         tabela_final = tabela_base_sem_online[mascara_curso & mascara_turno & mascara_vendedor]
+    else:
+        st.info("Nenhum dado de curso presencial/live encontrado para o período e filtros selecionados.")
 
     # --- 4. EXIBIÇÃO E EXPORTAÇÃO DA TABELA JÁ FILTRADA ---
     if not tabela_final.empty:
@@ -400,7 +406,10 @@ def run_page():
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.info("Nenhum aluno encontrado para os filtros de Curso Venda e Turno selecionados.")
+        if tabela_base_sem_online.empty:
+            st.info("Nenhum aluno de curso presencial/live encontrado para os filtros selecionados.")
+        else:
+            st.info("Nenhum aluno encontrado para os filtros de Curso Venda, Turno e Vendedor selecionados.")
         
     # =====================================================================
     # Tabela específica para Cursos Online

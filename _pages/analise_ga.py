@@ -96,6 +96,77 @@ def get_google_ads_client():
         st.error(f"Falha ao inicializar o cliente do Google Ads com as credenciais de '{source}': {e}")
         return None, None
 
+def get_google_ads_campaign_performance(client, customer_id, start_date, end_date):
+    """
+    Função para buscar dados de desempenho de campanhas diretamente do Google Ads.
+    Retorna informações de campanhas, incluindo custo e conversões.
+    """
+    try:
+        # Inicializa o serviço
+        ga_service = client.get_service("GoogleAdsService")
+        
+        # Formata as datas para o formato esperado pelo Google Ads (YYYY-MM-DD)
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+        
+        # Query GAQL (Google Ads Query Language)
+        query = f"""
+            SELECT 
+                campaign.name, 
+                campaign.id, 
+                metrics.cost_micros, 
+                metrics.conversions,
+                metrics.conversions_value
+            FROM campaign
+            WHERE 
+                segments.date >= '{start_date_str}' 
+                AND segments.date <= '{end_date_str}'
+                AND campaign.status != 'REMOVED'
+            ORDER BY metrics.cost_micros DESC
+        """
+        
+        # Executa a consulta
+        response = ga_service.search_stream(customer_id=customer_id, query=query)
+        
+        # Processa os resultados
+        campaigns_data = []
+        
+        for batch in response:
+            for row in batch.results:
+                # Converte micros (millionths) para valores reais e arredonda para 2 casas decimais
+                cost = round(float(row.metrics.cost_micros) / 1000000, 2)
+                conversions = float(row.metrics.conversions)
+                conversion_value = float(row.metrics.conversions_value)
+                
+                # Calcula CPA (Custo por Conversão) e arredonda para 2 casas decimais
+                cpa = round(cost / conversions, 2) if conversions > 0 else 0
+                
+                # Extrai nome do curso venda do nome da campanha (se existir no formato {Curso})
+                campaign_name = row.campaign.name
+                
+                campaigns_data.append({
+                    'Campanha': campaign_name,
+                    'ID da Campanha': row.campaign.id,
+                    'Custo': cost,
+                    'Conversões': conversions,
+                    'Valor de Conversões': conversion_value,
+                    'CPA (Custo por Conversão)': cpa
+                })
+        
+        # Retorna como DataFrame
+        return pd.DataFrame(campaigns_data)
+    
+    except GoogleAdsException as ex:
+        error_messages = []
+        for error in ex.failure.errors:
+            error_messages.append(f"Erro {error.error_code.error_code}: {error.message}")
+        st.error("\n".join(error_messages))
+        return pd.DataFrame()
+    
+    except Exception as e:
+        st.error(f"Erro na consulta do Google Ads: {str(e)}")
+        return pd.DataFrame()
+
 def get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict):
     """
     Versão otimizada com:
@@ -347,7 +418,7 @@ def run_page():
         st.metric("Custo Total no Período", formatar_reais(custo_total_periodo))
 
 
-    st.header("📈 Performance de Campanhas por Curso Venda")
+    st.header("📈 Performance de Campanhas por Curso Venda (Dados do GA4)")
 
     if not df_performance.empty:
         # --- 1. EXTRAÇÃO DO "CURSO VENDA" ---
@@ -359,7 +430,7 @@ def run_page():
         # Se alguma campanha não tiver o padrão, preenche com um valor padrão
         df_agrupado['Curso Venda'] = df_agrupado['Curso Venda'].fillna('Não Especificado')
         
-        st.info("Esta tabela agrupa as campanhas pelo 'Curso Venda' extraído do nome. Clique na seta (▶) para expandir e ver os detalhes.")
+        st.info("Esta tabela agrupa as campanhas pelo 'Curso Venda' extraído do nome. Clique na seta (▶) para expandir e ver os detalhes. Dados provenientes do GA4.")
 
         # --- 2. CONFIGURAÇÃO DA TABELA HIERÁRQUICA AG-GRID ---
         gb = GridOptionsBuilder.from_dataframe(df_agrupado)
@@ -406,6 +477,92 @@ def run_page():
         )
     else:
         st.info("Não há dados de performance para agrupar por Curso Venda.")
+        
+    # --- NOVA SEÇÃO: TABELA DO GOOGLE ADS ---
+    st.header("📊 Performance de Campanhas por Curso Venda (Dados do Google Ads)")
+    
+    # Obtém cliente do Google Ads
+    gads_client, customer_id = get_google_ads_client()
+    
+    if gads_client and customer_id:
+        # Busca dados diretamente do Google Ads
+        with st.spinner("Buscando dados de campanhas no Google Ads..."):
+            df_gads = get_google_ads_campaign_performance(gads_client, customer_id, start_date, end_date)
+            
+        if not df_gads.empty:
+            # Filtra apenas campanhas com valor investido (Custo > 0)
+            df_gads = df_gads[df_gads['Custo'] > 0].copy()
+            # Extrai o "Curso Venda" do nome da campanha (similar ao GA4)
+            df_gads['Curso Venda'] = df_gads['Campanha'].str.extract(r'\{(.*?)\}')
+            df_gads['Curso Venda'] = df_gads['Curso Venda'].fillna('Não Especificado')
+            # Formata o custo para duas casas decimais com ponto
+            df_gads['Custo'] = df_gads['Custo'].map(lambda x: float(f"{x:.2f}"))
+            
+            # Formatamos os dados agregados (somas por grupo) para garantir duas casas decimais
+            df_gads_grouped = df_gads.groupby('Curso Venda')['Custo'].sum().reset_index()
+            df_gads_grouped['Custo'] = df_gads_grouped['Custo'].map(lambda x: float(f"{x:.2f}"))
+            
+            st.info("Esta tabela agrupa as campanhas pelo 'Curso Venda' extraído do nome. Clique na seta (▶) para expandir e ver os detalhes. Dados provenientes diretamente do Google Ads API.")
+            # Configuração da tabela hierárquica AG-GRID
+            gb_gads = GridOptionsBuilder.from_dataframe(df_gads)
+            # Configura a coluna "Curso Venda" para ser o grupo
+            gb_gads.configure_column("Curso Venda", rowGroup=True, hide=True)
+            # Configura as outras colunas
+            gb_gads.configure_column("Campanha", header_name="Nome da Campanha")
+            gb_gads.configure_column("ID da Campanha", hide=True)
+            gb_gads.configure_column(
+                "Custo", header_name="Custo", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+                aggFunc='sum',
+                valueFormatter="Number(data.Custo).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})"
+            )
+            gb_gads.configure_column(
+                "Conversões", header_name="Conversões", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+                aggFunc='sum'
+            )
+            gb_gads.configure_column(
+                "CPA (Custo por Conversão)", header_name="CPA", type=["numericColumn", "numberColumnFilter", "customNumericFormat"],
+                # Calcula o CPA agregado para o grupo
+                valueGetter='(params.node.aggData.Custo && params.node.aggData.Conversões && params.node.aggData.Conversões > 0) ? Math.round((params.node.aggData.Custo / params.node.aggData.Conversões) * 100) / 100 : null',
+                valueFormatter="data['CPA (Custo por Conversão)'] ? Number(data['CPA (Custo por Conversão)']).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''"
+            )
+            grid_options_gads = gb_gads.build()
+            # Define a aparência da coluna de grupo
+            grid_options_gads["autoGroupColumnDef"] = {
+                "headerName": "Curso Venda (Produto)",
+                "minWidth": 250,
+                "cellRendererParams": {"suppressCount": True}
+            }
+            # Exibição da tabela
+            AgGrid(
+                df_gads,
+                gridOptions=grid_options_gads,
+                width='100%',
+                theme='streamlit',
+                allow_unsafe_jscode=True,
+                enable_enterprise_modules=True
+            )
+            # Adiciona uma exibição de dados brutos das campanhas
+            st.header("📊 Performance de Campanhas (Dados Brutos do Google Ads)")
+            st.info("Esta tabela mostra os dados de custo e conversão diretamente do Google Ads, sem agrupamentos.")
+            
+            # Formata as colunas de valor para garantir exatamente 2 casas decimais
+            df_bruto = df_gads.copy()
+            df_bruto['Custo'] = df_bruto['Custo'].apply(lambda x: round(x, 2))
+            df_bruto['CPA (Custo por Conversão)'] = df_bruto['CPA (Custo por Conversão)'].apply(lambda x: round(x, 2) if x > 0 else 0)
+            
+            st.dataframe(
+                df_bruto.sort_values("Custo", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Custo": st.column_config.NumberColumn(format="%.2f"),
+                    "CPA (Custo por Conversão)": st.column_config.NumberColumn(format="%.2f")
+                }
+            )
+        else:
+            st.warning("Não foi possível obter dados de campanhas do Google Ads para o período selecionado.")
+    else:
+        st.error("Não foi possível conectar ao Google Ads. Verifique as credenciais.")
 
     st.divider()
 

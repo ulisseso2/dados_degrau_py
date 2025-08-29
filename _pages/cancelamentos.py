@@ -75,10 +75,16 @@ def run_page():
 
     st.sidebar.subheader("Filtro de Turno")
     turnos_disponiveis = df_filtrado_empresa['turno'].dropna().unique().tolist()
+    placeholder_turno_nulo = "Sem Turno"
+
+    opcoes_turno = sorted(turnos_disponiveis)
+    if df_filtrado_empresa['turno'].isna().any():
+        opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
+
     turno_selecionado = st.sidebar.multiselect(
         "Selecione o(s) turno(s):",
-        options=sorted(turnos_disponiveis),
-        default=sorted(turnos_disponiveis)
+        options=opcoes_turno,
+        default=opcoes_turno
     )
 
     st.sidebar.subheader("Filtro de Curso Venda")
@@ -102,19 +108,26 @@ def run_page():
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     
+    turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_turno_nulo]
+    if placeholder_turno_nulo in turno_selecionado:
+        # Se "Sem Turno" estiver selecionado, inclui registros com turno null
+        mascara_turno = df['turno'].isin(turnos_reais_selecionados) | df['turno'].isna()
+    else:
+        # Caso contrário, inclui apenas os turnos específicos selecionados
+        mascara_turno = df['turno'].isin(turnos_reais_selecionados)
+    
 
     df_filtrado = df[
         (df["empresa"] == empresa_selecionada) &
         (df["unidade"].isin(unidade_selecionada)) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df['tipo_cancelamento'].isin(tipo_selecionado)) &
-        (df['turno'].isin(turno_selecionado)) &
+        mascara_turno &  # Usando a máscara em vez do .isin() direto
         (df['curso_venda'].isin(curso_venda_selecionado)) &
         (df["data_referencia"] >= data_inicio_aware) &
         (df["data_referencia"] < data_fim_aware) &
         (df["status_id"].isin([3, 15])) &
-        (~df["metodo_pagamento"].isin([5, 8])) & 
-        (df["total_pedido"] != 0)
+        (~df["metodo_pagamento"].isin([5, 8, 13]))
     ].copy()
 
     df_cancelados = df_filtrado.groupby('tipo_cancelamento')['estorno_cancelamento'].sum().reset_index().copy()
