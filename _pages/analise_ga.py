@@ -59,7 +59,12 @@ def get_google_ads_client():
 
     try:
         # Tenta carregar do Streamlit Secrets primeiro
-        config = st.secrets[secrets_key]
+        config_raw = st.secrets[secrets_key]
+        # Converte para dict se necessário
+        if hasattr(config_raw, 'to_dict'):
+            config = config_raw.to_dict()
+        else:
+            config = dict(config_raw)
         source = f"Streamlit Secrets ({secrets_key})"
         st.success(f"Credenciais do Google Ads encontradas no {source}.")
     except (st.errors.StreamlitAPIException, KeyError):
@@ -79,6 +84,10 @@ def get_google_ads_client():
             return None, None
 
     # Validação unificada das credenciais
+    if not isinstance(config, dict):
+        st.error(f"Configuração inválida carregada de '{source}'. Esperado um dicionário.")
+        return None, None
+        
     login_customer_id = config.get("login_customer_id")
     if not login_customer_id:
         st.error(f"A chave 'login_customer_id' (MCC ID) está ausente em '{source}'.")
