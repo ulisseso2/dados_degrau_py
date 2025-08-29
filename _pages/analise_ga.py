@@ -46,34 +46,36 @@ def get_ga_credentials():
 @st.cache_resource
 def get_google_ads_client():
     """
-    Inicializa o cliente do Google Ads e retorna o cliente e o customer_id para consulta.
+    Inicializa o cliente do Google Ads para a empresa Degrau.
     Usa cache para evitar reinicializações repetidas.
     Retorna (client, query_customer_id) em caso de sucesso, e (None, None) em caso de falha.
     """
     config = None
     source = ""
+    
+    # Usa credenciais da Degrau
+    yaml_filename = "google-ads.yaml"
+    secrets_key = "google_ads"
 
     try:
-        # Tenta carregar do Streamlit Secrets
-        st.info("Tentando carregar credenciais do Google Ads via Streamlit Secrets...")
-        config = st.secrets["google_ads"]
-        source = "Streamlit Secrets"
+        # Tenta carregar do Streamlit Secrets primeiro
+        config = st.secrets[secrets_key]
+        source = f"Streamlit Secrets ({secrets_key})"
         st.success(f"Credenciais do Google Ads encontradas no {source}.")
     except (st.errors.StreamlitAPIException, KeyError):
         # Fallback para o arquivo yaml local
-        st.info("Credenciais do Streamlit Secrets não encontradas. Tentando carregar do arquivo google-ads.yaml local...")
-        yaml_path = "google-ads.yaml"
-        if os.path.exists(yaml_path):
+        st.info(f"Credenciais do Streamlit Secrets não encontradas. Tentando carregar do arquivo {yaml_filename}...")
+        if os.path.exists(yaml_filename):
             try:
-                with open(yaml_path, 'r') as f:
+                with open(yaml_filename, 'r') as f:
                     config = yaml.safe_load(f)
-                source = "arquivo google-ads.yaml"
+                source = f"arquivo {yaml_filename}"
                 st.success(f"Credenciais do Google Ads carregadas do {source}.")
             except Exception as e:
-                st.error(f"Erro ao carregar ou processar o arquivo google-ads.yaml: {e}")
+                st.error(f"Erro ao carregar ou processar o arquivo {yaml_filename}: {e}")
                 return None, None
         else:
-            st.error("Nenhuma fonte de credenciais do Google Ads foi encontrada (nem Secrets, nem google-ads.yaml).")
+            st.error(f"Nenhuma fonte de credenciais do Google Ads foi encontrada para Degrau (nem Secrets, nem {yaml_filename}).")
             return None, None
 
     # Validação unificada das credenciais
