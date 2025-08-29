@@ -33,9 +33,10 @@ load_dotenv()
 
 # Carrega as credenciais do Google Analytics de forma híbrida
 def get_ga_credentials():
-    """Carrega as credenciais de forma híbrida"""
+    """Carrega as credenciais de forma híbrida - específico para Central"""
     try:
-        creds_dict = st.secrets["gcp_service_account"]
+        # Tenta carregar credenciais específicas da Central do Streamlit Secrets
+        creds_dict = st.secrets["gcp_service_account_central"]
         return service_account.Credentials.from_service_account_info(creds_dict)
     except (st.errors.StreamlitAPIException, KeyError):
         # Usa o arquivo de credenciais específico para a Central
