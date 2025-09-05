@@ -49,8 +49,8 @@ def run_page():
        
     etapas = sorted(df_filtrado_empresa["etapa"].dropna().unique()) # Ordenado
     etapa_selecionada = st.sidebar.multiselect("Selecione a etapa:", etapas, default=etapas)
-        
-      
+
+
     modalidades = sorted(df_filtrado_empresa["modalidade"].dropna().unique()) # Ordenado
     modalidade_selecionada = st.sidebar.multiselect("Selecione a modalidade:", modalidades, default=modalidades)
 
@@ -83,7 +83,19 @@ def run_page():
         (df_filtrado["criacao"] < data_fim_aware)
     ]
 
-    st.metric("Total de Oportunidades", df_filtrado.shape[0])
+    # Métricas principais
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total de Oportunidades", df_filtrado.shape[0])
+    
+    with col2:
+        oportunidades_online = df_filtrado[df_filtrado["modalidade"] == "Online"].shape[0]
+        st.metric("Oportunidades Online", oportunidades_online)
+
+    with col3:
+        oportunidades_live = df_filtrado[df_filtrado["modalidade"] == "Live"].shape[0]
+        st.metric("Oportunidades Live", oportunidades_live)
 
     df_diario = df_filtrado.groupby(df_filtrado["criacao"].dt.date)["oportunidade"].count().reset_index()
 
@@ -115,6 +127,21 @@ def run_page():
         )
     fig.update_traces(textinfo='value+percent')
     st.plotly_chart(fig, use_container_width=True)
+
+    #pizza modalidades
+    # Agrupa por modalidade e conta a quantidade de oportunidades
+    df_modalidade = df_filtrado.groupby("modalidade")["oportunidade"].count().reset_index()
+
+    # Cria o gráfico de pizza
+    fig_modalidade = px.pie(
+        df_modalidade,
+        names="modalidade",
+        values="oportunidade",
+        title="Oportunidades por Modalidade",
+        labels={"modalidade": "Modalidade", "oportunidade": "Quantidade"},
+        )
+    fig_modalidade.update_traces(textinfo='value+percent')
+    st.plotly_chart(fig_modalidade, use_container_width=True)
 
     # --- INÍCIO DO CÓDIGO DO GRÁFICO DE FUNIL ---
 
@@ -460,3 +487,145 @@ def run_page():
 
     else:
         st.warning("Nenhum dado encontrado para a combinação de filtros selecionada.")
+
+    # ==============================================================================
+    # SEÇÃO DE VALIDAÇÃO - COMPARAÇÃO ENTRE CAMPOS ORIGINAIS E TRATADOS
+    # ==============================================================================
+    # st.divider()
+    # st.header("🔍 Validação das Regras de Negócio")
+    # st.info("Esta seção mostra a comparação entre os dados originais e os dados tratados pelas regras de negócio.")
+
+    # # Criar abas para diferentes análises
+    # tab1, tab2, tab3 = st.tabs(["📊 Resumo das Transformações", "📋 Casos Específicos", "🔎 Análise Detalhada"])
+
+    # with tab1:
+    #     col1, col2 = st.columns(2)
+        
+    #     with col1:
+    #         st.subheader("Unidades - Antes vs Depois")
+    #         # Contagem de valores nulos/vazios antes do tratamento
+    #         unidades_originais_nulas = df_filtrado['unidade'].isna().sum() + (df_filtrado['unidade'] == '').sum()
+    #         unidades_tratadas_nulas = df_filtrado['unidade_tratada'].isna().sum() + (df_filtrado['unidade_tratada'] == '').sum()
+            
+    #         st.metric("Unidades nulas/vazias (Original)", unidades_originais_nulas)
+    #         st.metric("Unidades nulas/vazias (Tratada)", unidades_tratadas_nulas)
+    #         st.metric("Registros corrigidos", unidades_originais_nulas - unidades_tratadas_nulas)
+            
+    #         # Distribuição das unidades tratadas
+    #         unidades_dist = df_filtrado['unidade_tratada'].value_counts()
+    #         fig_unidades = px.bar(
+    #             x=unidades_dist.values,
+    #             y=unidades_dist.index,
+    #             orientation='h',
+    #             title="Distribuição das Unidades (Após Tratamento)",
+    #             labels={'x': 'Quantidade', 'y': 'Unidade'}
+    #         )
+    #         st.plotly_chart(fig_unidades, use_container_width=True)
+
+    #     with col2:
+    #         st.subheader("Modalidades - Antes vs Depois")
+    #         # Contagem de valores nulos/vazios antes do tratamento
+    #         modalidades_originais_nulas = df_filtrado['modalidade'].isna().sum() + (df_filtrado['modalidade'] == '').sum()
+    #         modalidades_tratadas_nulas = df_filtrado['modalidade_tratada'].isna().sum() + (df_filtrado['modalidade_tratada'] == '').sum()
+            
+    #         st.metric("Modalidades nulas/vazias (Original)", modalidades_originais_nulas)
+    #         st.metric("Modalidades nulas/vazias (Tratada)", modalidades_tratadas_nulas)
+    #         st.metric("Registros corrigidos", modalidades_originais_nulas - modalidades_tratadas_nulas)
+            
+    #         # Distribuição das modalidades tratadas
+    #         modalidades_dist = df_filtrado['modalidade_tratada'].value_counts()
+    #         fig_modalidades = px.bar(
+    #             x=modalidades_dist.values,
+    #             y=modalidades_dist.index,
+    #             orientation='h',
+    #             title="Distribuição das Modalidades (Após Tratamento)",
+    #             labels={'x': 'Quantidade', 'y': 'Modalidade'}
+    #         )
+    #         st.plotly_chart(fig_modalidades, use_container_width=True)
+
+    # with tab2:
+    #     st.subheader("Exemplos de Transformações Aplicadas")
+        
+    #     # Filtrar apenas registros onde houve transformação para mostrar exemplos
+    #     transformacoes_unidade = df_filtrado[
+    #         (df_filtrado['unidade'].isna() | (df_filtrado['unidade'] == '')) & 
+    #         (df_filtrado['unidade_tratada'].notna() & (df_filtrado['unidade_tratada'] != ''))
+    #     ][['oportunidade', 'unidade', 'unidade_tratada', 'modalidade', 'modalidade_tratada']].head(20)
+        
+    #     transformacoes_modalidade = df_filtrado[
+    #         (df_filtrado['modalidade'].isna() | (df_filtrado['modalidade'] == '')) & 
+    #         (df_filtrado['modalidade_tratada'].notna() & (df_filtrado['modalidade_tratada'] != ''))
+    #     ][['oportunidade', 'unidade', 'unidade_tratada', 'modalidade', 'modalidade_tratada']].head(20)
+        
+    #     if not transformacoes_unidade.empty:
+    #         st.markdown("**Transformações de Unidade:**")
+    #         st.dataframe(transformacoes_unidade, use_container_width=True)
+        
+    #     if not transformacoes_modalidade.empty:
+    #         st.markdown("**Transformações de Modalidade:**")
+    #         st.dataframe(transformacoes_modalidade, use_container_width=True)
+            
+    #     if transformacoes_unidade.empty and transformacoes_modalidade.empty:
+    #         st.info("Não foram encontradas transformações no período/filtros selecionados.")
+
+    # with tab3:
+    #     st.subheader("Análise Completa de Transformações")
+        
+    #     # Criar tabela comparativa completa
+    #     colunas_comparacao = ['oportunidade', 'concurso', 'unidade', 'unidade_tratada', 'modalidade', 'modalidade_tratada']
+    #     df_comparacao = df_filtrado[colunas_comparacao].copy()
+        
+    #     # Adicionar colunas indicando se houve transformação
+    #     df_comparacao['unidade_transformada'] = (
+    #         (df_comparacao['unidade'].isna() | (df_comparacao['unidade'] == '')) & 
+    #         (df_comparacao['unidade_tratada'].notna() & (df_comparacao['unidade_tratada'] != ''))
+    #     )
+        
+    #     df_comparacao['modalidade_transformada'] = (
+    #         (df_comparacao['modalidade'].isna() | (df_comparacao['modalidade'] == '')) & 
+    #         (df_comparacao['modalidade_tratada'].notna() & (df_comparacao['modalidade_tratada'] != ''))
+    #     )
+        
+    #     # Filtros para a análise detalhada
+    #     col_filtro1, col_filtro2 = st.columns(2)
+        
+    #     with col_filtro1:
+    #         mostrar_apenas_transformados = st.checkbox("Mostrar apenas registros transformados", value=True)
+            
+    #     with col_filtro2:
+    #         concurso_filtro = st.selectbox(
+    #             "Filtrar por concurso:",
+    #             ["Todos"] + sorted(df_comparacao['concurso'].dropna().unique().tolist()),
+    #             key="concurso_validacao"
+    #         )
+        
+    #     # Aplicar filtros
+    #     df_exibir = df_comparacao.copy()
+        
+    #     if mostrar_apenas_transformados:
+    #         df_exibir = df_exibir[
+    #             df_exibir['unidade_transformada'] | 
+    #             df_exibir['modalidade_transformada']
+    #         ]
+            
+    #     if concurso_filtro != "Todos":
+    #         df_exibir = df_exibir[df_exibir['concurso'] == concurso_filtro]
+        
+    #     # Exibir tabela
+    #     if not df_exibir.empty:
+    #         st.dataframe(df_exibir, use_container_width=True)
+            
+    #         # Opção de download
+    #         buffer = io.BytesIO()
+    #         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+    #             df_exibir.to_excel(writer, index=False, sheet_name='Validacao_Transformacoes')
+    #         buffer.seek(0)
+            
+    #         st.download_button(
+    #             label="📥 Baixar Análise Completa",
+    #             data=buffer,
+    #             file_name="validacao_transformacoes_oportunidades.xlsx",
+    #             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    #         )
+    #     else:
+    #         st.info("Nenhum registro encontrado com os filtros aplicados.")

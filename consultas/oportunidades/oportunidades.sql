@@ -17,11 +17,28 @@ d.full_name as dono,
 a.name as area,
 o.name as origem, 
 f.name as concurso, 
-m.name as modalidade, 
+l.name as unidade_original,
+m.name as modalidade_original, 
 t.name as turno, 
-l.name as unidade, 
 c.full_name as criador,
-h.name as h_ligar
+h.name as h_ligar,
+-- Unidade tratada com regras de negócio
+CASE 
+    WHEN (l.name IS NULL OR l.name = '') AND i.opportunity_modality_id IN (2, 5) THEN 'EAD'
+    WHEN (l.name IS NULL OR l.name = '') AND i.opportunity_modality_id IN (3, 6) THEN 'LIVE'
+    WHEN (l.name IS NULL OR l.name = '') AND i.opportunity_modality_id IN (1, 4) THEN 'Presencial/Indefinido'
+    WHEN (l.name IS NULL OR l.name = '') AND i.opportunity_modality_id IS NULL THEN 'Indefinida'
+    ELSE l.name
+END as unidade,
+-- Modalidade tratada com regras de negócio
+CASE 
+    WHEN (m.name IS NULL OR m.name = '') AND i.unit_id IN (22, 24) THEN 'Live'
+    WHEN (m.name IS NULL OR m.name = '') AND i.unit_id IN (23, 26) THEN 'Online'
+    WHEN (m.name IS NULL OR m.name = '') AND i.unit_id BETWEEN 1 AND 21 THEN 'Presencial'
+    WHEN (m.name IS NULL OR m.name = '') AND i.unit_id IN (26, 27) THEN 'Smart'
+    WHEN (m.name IS NULL OR m.name = '') AND i.unit_id IS NULL THEN 'Indefinida'
+    ELSE m.name
+END as modalidade
 FROM seducar.interesteds i
 left join seducar.opportunity_steps s on i.opportunity_step_id = s.id
 left join seducar.users d on i.owner_id = d.id
