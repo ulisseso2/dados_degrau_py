@@ -231,24 +231,33 @@ def run_page():
     st.subheader("Pedidos por Curso Venda")
     grafico2 = (
         df_filtrado.groupby(["curso_venda"])
-        .agg({'total_pedido': 'sum'})
+        .agg({'total_pedido': 'sum',
+              'ordem_id': 'count'})
         .reset_index()
     )
 
     grafico2['valor_numerico'] = grafico2['total_pedido']
+    grafico2['quantidade'] = grafico2['ordem_id']
     grafico2["total_formatado"] = grafico2["valor_numerico"].apply(formatar_reais)
+
+    grafico2['valor_combinado'] = grafico2.apply(
+        lambda row: f"{row['total_formatado']} / {int(row['quantidade'])}", axis=1)
+
     max_value = float(grafico2["valor_numerico"].max())
 
     fig2 = px.bar(
         grafico2,
         x="total_pedido",
         y="curso_venda",
-        title="Pedidos por Curso (Detalhado por Unidade)",
+        text="valor_combinado",
+        title="Pedidos por Curso Venda (Valor e Quantidade)",
         labels={"total_pedido": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
         orientation="h",
         barmode="group",
-        text="total_formatado",
         range_x=[0, max_value * 1.1]
+    )
+    fig2.update_layout(
+        yaxis={'categoryorder':'total ascending'}
     )
     st.plotly_chart(fig2, use_container_width=True)
 
