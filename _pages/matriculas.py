@@ -511,25 +511,36 @@ def run_page():
             st.subheader("Análises dos Cursos Online")
             
             # 1. Gráfico de barras dos produtos por total financeiro
-            st.markdown("### Produtos Online por Valor Total")
+            st.markdown("### Produtos Online por Valor Total e Quantidade")
             
             # Agrupa os dados por produto e soma os valores
-            produtos_valores = tabela_final_online.groupby('produto')['total_pedido'].sum().reset_index()
+            produtos_valores = tabela_final_online.groupby('produto').agg({
+                'total_pedido': 'sum',
+                'ordem_id': 'count'  # Conta a quantidade de pedidos por produto
+            }).reset_index()
             produtos_valores = produtos_valores.sort_values('total_pedido', ascending=False)
-            
+
+            # Renomeia a coluna para ficar mais clara
+            produtos_valores['quantidade_vendida'] = produtos_valores['ordem_id']
+
             # Adiciona formatação em reais para exibição no gráfico
             produtos_valores['valor_formatado'] = produtos_valores['total_pedido'].apply(formatar_reais)
+            
+            # Cria texto combinado com valor e quantidade
+            produtos_valores['texto_combinado'] = produtos_valores.apply(
+                lambda row: f"{row['valor_formatado']} / {int(row['quantidade_vendida'])}", axis=1
+            )
             
             # Cria o gráfico de barras horizontal com escala logarítmica
             fig_produtos = px.bar(
                 produtos_valores,
                 y='produto',
                 x='total_pedido',
-                text='valor_formatado',
-                title="Faturamento por Produto Online (Escala Logarítmica)",
-                labels={'produto': 'Produto', 'total_pedido': 'Valor Total (R$)'},
+                text='texto_combinado',
+                title="Faturamento por Produto Online (Valor / Quantidade)",
+                labels={'produto': 'Produto', 'total_pedido': 'Valor Total (R$)', 'quantidade_vendida': 'Quantidade Vendida'},
                 orientation='h',
-                color='total_pedido',
+                color='total_pedido', 
                 color_continuous_scale='Viridis',
                 log_x=True  # Adiciona escala logarítmica no eixo X
             )
