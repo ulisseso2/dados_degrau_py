@@ -229,82 +229,98 @@ def run_page():
 
     # Gráfico de pedidos por curso venda quantitativa
     st.subheader("Pedidos por Curso Venda")
-    grafico2 = (
-        df_filtrado.groupby(["curso_venda"])
-        .agg({'total_pedido': 'sum',
-              'ordem_id': 'count'})
-        .reset_index()
-    )
+    
+    # Verifica se há dados antes de criar o gráfico
+    if df_filtrado.empty:
+        st.info("Nenhum dado de curso venda encontrado para os filtros selecionados.")
+    else:
+        grafico2 = (
+            df_filtrado.groupby(["curso_venda"])
+            .agg({'total_pedido': 'sum',
+                  'ordem_id': 'count'})
+            .reset_index()
+        )
 
-    grafico2['valor_numerico'] = grafico2['total_pedido']
-    grafico2['quantidade'] = grafico2['ordem_id']
-    grafico2["total_formatado"] = grafico2["valor_numerico"].apply(formatar_reais)
+        # Verifica se o agrupamento retornou dados
+        if not grafico2.empty:
+            grafico2['valor_numerico'] = grafico2['total_pedido']
+            grafico2['quantidade'] = grafico2['ordem_id']
+            grafico2["total_formatado"] = grafico2["valor_numerico"].apply(formatar_reais)
 
-    grafico2['valor_combinado'] = grafico2.apply(
-        lambda row: f"{row['total_formatado']} / {int(row['quantidade'])}", axis=1)
+            grafico2['valor_combinado'] = grafico2.apply(
+                lambda row: f"{row['total_formatado']} / {int(row['quantidade'])}", axis=1)
 
-    max_value = float(grafico2["valor_numerico"].max())
+            max_value = float(grafico2["valor_numerico"].max())
 
-    fig2 = px.bar(
-        grafico2,
-        x="total_pedido",
-        y="curso_venda",
-        text="valor_combinado",
-        title="Pedidos por Curso Venda (Valor e Quantidade)",
-        labels={"total_pedido": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
-        orientation="h",
-        barmode="group",
-        range_x=[0, max_value * 1.1]
-    )
-    fig2.update_layout(
-        yaxis={'categoryorder':'total ascending'}
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+            fig2 = px.bar(
+                grafico2,
+                x="total_pedido",
+                y="curso_venda",
+                text="valor_combinado",
+                title="Pedidos por Curso Venda (Valor e Quantidade)",
+                labels={"total_pedido": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
+                orientation="h",
+                barmode="group",
+                range_x=[0, max_value * 1.1]
+            )
+            fig2.update_layout(
+                yaxis={'categoryorder':'total ascending'}
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("Nenhum curso venda encontrado para os filtros selecionados.")
 
     # Tabela de venda por curso venda
-    # Agrupa total vendido por categoria
-    valor_pivot = df_filtrado.pivot_table(
-        index="curso_venda",
-        columns="categoria",
-        values="total_pedido",
-        aggfunc="sum",
-        fill_value=0
-    )
+    if not df_filtrado.empty:
+        # Agrupa total vendido por categoria
+        valor_pivot = df_filtrado.pivot_table(
+            index="curso_venda",
+            columns="categoria",
+            values="total_pedido",
+            aggfunc="sum",
+            fill_value=0
+        )
 
-    # Agrupa quantidade por categoria
-    qtd_pivot = df_filtrado.pivot_table(
-        index="curso_venda",
-        columns="categoria",
-        values="ordem_id",
-        aggfunc="count",
-        fill_value=0
-    )
+        # Agrupa quantidade por categoria
+        qtd_pivot = df_filtrado.pivot_table(
+            index="curso_venda",
+            columns="categoria",
+            values="ordem_id",
+            aggfunc="count",
+            fill_value=0
+        )
 
-    # Formata valores em reais (depois de fazer a junção)
-    valor_formatado = valor_pivot.copy()
-    for col in valor_formatado.columns:
-        valor_formatado[col] = valor_formatado[col].apply(formatar_reais)
+        # Verifica se os pivots retornaram dados
+        if not valor_pivot.empty and not qtd_pivot.empty:
+            # Formata valores em reais (depois de fazer a junção)
+            valor_formatado = valor_pivot.copy()
+            for col in valor_formatado.columns:
+                valor_formatado[col] = valor_formatado[col].apply(formatar_reais)
 
-    valor_formatado.columns = [f"{col} (Valor)" for col in valor_formatado.columns]
-    qtd_pivot.columns = [f"{col} (Qtd)" for col in qtd_pivot.columns]
+            valor_formatado.columns = [f"{col} (Valor)" for col in valor_formatado.columns]
+            qtd_pivot.columns = [f"{col} (Qtd)" for col in qtd_pivot.columns]
 
-    # Junta horizontalmente
-    tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1)
+            # Junta horizontalmente
+            tabela_completa = pd.concat([valor_formatado, qtd_pivot], axis=1)
 
-    # Adiciona total geral de valor (convertendo novamente para float)
-    valor_total = valor_pivot.sum(axis=1)
-    tabela_completa["Total Geral (Valor)"] = valor_total.apply(formatar_reais)
+            # Adiciona total geral de valor (convertendo novamente para float)
+            valor_total = valor_pivot.sum(axis=1)
+            tabela_completa["Total Geral (Valor)"] = valor_total.apply(formatar_reais)
 
-    # Adiciona total geral de quantidade
-    qtd_total = qtd_pivot.sum(axis=1)
-    tabela_completa["Total Geral (Qtd)"] = qtd_total
+            # Adiciona total geral de quantidade
+            qtd_total = qtd_pivot.sum(axis=1)
+            tabela_completa["Total Geral (Qtd)"] = qtd_total
 
-    # Reset index para mostrar curso_venda como coluna
-    tabela_completa = tabela_completa.reset_index()
+            # Reset index para mostrar curso_venda como coluna
+            tabela_completa = tabela_completa.reset_index()
 
-    # Mostra a tabela final
-    st.subheader("Vendas por Curso e Categoria (Valor e Quantidade)")
-    st.dataframe(tabela_completa, use_container_width=True)
+            # Mostra a tabela final
+            st.subheader("Vendas por Curso e Categoria (Valor e Quantidade)")
+            st.dataframe(tabela_completa, use_container_width=True)
+        else:
+            st.info("Nenhum dado de vendas por curso e categoria encontrado.")
+    else:
+        st.info("Nenhum dado de vendas encontrado para criar a tabela por curso e categoria.")
 
     st.divider()
     st.subheader("Lista de Alunos Matriculados (Exceto Curso Online)")
