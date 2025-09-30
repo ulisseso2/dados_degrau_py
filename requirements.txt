@@ -51,4 +51,3 @@ watchdog
 # IA para Análise de Dados
 pandasai==2.0.21
 openai==1.37.0
-```
