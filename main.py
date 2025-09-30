@@ -3,10 +3,45 @@ import os
 import json
 import ast
 
-# Importa os módulos de cada página da aplicação
-from _pages import oportunidades, financeiro, tendencias, cancelamentos, matriculas, vendedores, madureira, madureira_cancelamento, campogrande, campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, octadesk, custo_aula, analise_ga_central, analise_disciplinas
-
 # Configuração da página (deve ser o primeiro comando Streamlit)
+st.set_page_config(layout="wide", page_title="Dashboard Seducar")
+
+# Importa os módulos de cada página da aplicação com tratamento de erro
+try:
+    from _pages import (
+        oportunidades, financeiro, tendencias, cancelamentos, matriculas, 
+        vendedores, madureira, madureira_cancelamento, campogrande, 
+        campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
+        centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas
+    )
+except ImportError as e:
+    st.error(f"Erro ao importar módulos: {e}")
+    st.info("Tentando importação individual...")
+    
+    # Importação individual com fallback
+    import importlib
+    import sys
+    
+    modules = [
+        'oportunidades', 'financeiro', 'tendencias', 'cancelamentos', 'matriculas',
+        'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
+        'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
+        'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas'
+    ]
+    
+    for module_name in modules:
+        try:
+            module = importlib.import_module(f'_pages.{module_name}')
+            globals()[module_name] = module
+        except ImportError as module_error:
+            st.warning(f"Não foi possível importar {module_name}: {module_error}")
+            # Criar um módulo dummy para evitar erros
+            class DummyModule:
+                def run_page(self):
+                    st.error(f"Módulo {module_name} não disponível")
+            globals()[module_name] = DummyModule()
 st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 
 # 1. MAPEAMENTO E AUTENTICAÇÃO

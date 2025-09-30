@@ -1,0 +1,517 @@
+Customer ID: 4934481887
+--------------------------------------------------
+resource_name: "customers/4934481887/conversionActions/9372842"
+id: 9372842
+name: "Vendas"
+
+resource_name: "customers/4934481887/conversionActions/10853402"
+id: 10853402
+name: "Transactions (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10853522"
+id: 10853522
+name: "Login até Finalizar (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10853642"
+id: 10853642
+name: "Compra Correios (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10853762"
+id: 10853762
+name: "Compra Conhecimentos Bancários (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10853882"
+id: 10853882
+name: "Compra Informatica (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10854002"
+id: 10854002
+name: "Quantas pessoas chegam até o fechamento (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10854122"
+id: 10854122
+name: "Compra Lingua Portuguesa (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10854242"
+id: 10854242
+name: "Compra Nivel Medio (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/10854362"
+id: 10854362
+name: "Comprar Matematica (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/12801122"
+id: 12801122
+name: "Vendas 2"
+
+resource_name: "customers/4934481887/conversionActions/13072322"
+id: 13072322
+name: "conversão de venda"
+
+resource_name: "customers/4934481887/conversionActions/13072802"
+id: 13072802
+name: "Venda-h1"
+
+resource_name: "customers/4934481887/conversionActions/13082642"
+id: 13082642
+name: "Vendas-h1-2"
+
+resource_name: "customers/4934481887/conversionActions/16064042"
+id: 16064042
+name: "Finalizado"
+
+resource_name: "customers/4934481887/conversionActions/16065242"
+id: 16065242
+name: "Finalização/Compra"
+
+resource_name: "customers/4934481887/conversionActions/16792682"
+id: 16792682
+name: "Contato (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/16793162"
+id: 16793162
+name: "Cursos Presenciais - Médio (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/16793282"
+id: 16793282
+name: "Cursos Presenciais - Menu (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/16793402"
+id: 16793402
+name: "Cursos Presenciais - Superior (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/16793522"
+id: 16793522
+name: "Cursos Presenciais - Topo (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/17723642"
+id: 17723642
+name: "William_Douglas_Jun14 (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/184728919"
+id: 184728919
+name: "Endereço Unidades"
+
+resource_name: "customers/4934481887/conversionActions/184901983"
+id: 184901983
+name: "Cadastro Minicurso INSS"
+
+resource_name: "customers/4934481887/conversionActions/184902139"
+id: 184902139
+name: "cadastro provas anteriores"
+
+resource_name: "customers/4934481887/conversionActions/191129175"
+id: 191129175
+name: "Cadastro Realizado (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/192129997"
+id: 192129997
+name: "Cadastro - INSS (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/192140828"
+id: 192140828
+name: "Cadastro - BB (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/192328525"
+id: 192328525
+name: "Carrinho (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/192458844"
+id: 192458844
+name: "Cadastro Info Curso (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/193603418"
+id: 193603418
+name: "Teste"
+
+resource_name: "customers/4934481887/conversionActions/194495911"
+id: 194495911
+name: "Cadastro (Master)"
+
+resource_name: "customers/4934481887/conversionActions/194549213"
+id: 194549213
+name: "Cadastro - Mini Curso INSS (Master)"
+
+resource_name: "customers/4934481887/conversionActions/194549216"
+id: 194549216
+name: "Transactions (Site)"
+
+resource_name: "customers/4934481887/conversionActions/194617677"
+id: 194617677
+name: "Cadastro - Apostila BB (Master)"
+
+resource_name: "customers/4934481887/conversionActions/194619024"
+id: 194619024
+name: "Carrinho (Site)"
+
+resource_name: "customers/4934481887/conversionActions/196864980"
+id: 196864980
+name: "Cadastros - Mini Curso Polícia Civil (Master)"
+
+resource_name: "customers/4934481887/conversionActions/197464723"
+id: 197464723
+name: "Cadastro - Bolsão (Somente bolsao.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/198307652"
+id: 198307652
+name: "Cadastros - Palestra Pietro (Master)"
+
+resource_name: "customers/4934481887/conversionActions/198687498"
+id: 198687498
+name: "Cadastro - Correios (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199456795"
+id: 199456795
+name: "Cadastros (Somente aulao.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/199456798"
+id: 199456798
+name: "Cadastros (Somente palestra.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/199522255"
+id: 199522255
+name: "Usuários - INSS (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199522939"
+id: 199522939
+name: "Usuários - Receita Federal (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199604396"
+id: 199604396
+name: "Usuários - IBGE (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199704870"
+id: 199704870
+name: "Usuários - Banco do Brasil (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199705140"
+id: 199705140
+name: "Usuários - Correios (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199706361"
+id: 199706361
+name: "Usuários - PGE-RJ (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199706370"
+id: 199706370
+name: "Usuários - Pedro II (Master)"
+
+resource_name: "customers/4934481887/conversionActions/199706781"
+id: 199706781
+name: "Usuários - TCM-Rio (Master)"
+
+resource_name: "customers/4934481887/conversionActions/200267513"
+id: 200267513
+name: "Cadastros - Palestra Pietro (Master)"
+
+resource_name: "customers/4934481887/conversionActions/200736389"
+id: 200736389
+name: "Cadastro - Aulão INSS (Master)"
+
+resource_name: "customers/4934481887/conversionActions/201669247"
+id: 201669247
+name: "Cadastros (Somente aulaexperimental.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/201899021"
+id: 201899021
+name: "Cadastros - Aula Experimental (Master)"
+
+resource_name: "customers/4934481887/conversionActions/202168471"
+id: 202168471
+name: "Cadastros - Aulão BB (Master)"
+
+resource_name: "customers/4934481887/conversionActions/202453106"
+id: 202453106
+name: "Cadastros (Somente aulaobb.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/202561659"
+id: 202561659
+name: "Cadastros (Somente fiscal.degraucultural.com.br)"
+
+resource_name: "customers/4934481887/conversionActions/206306873"
+id: 206306873
+name: "Cadastros - Palestra Fiscal (Master)"
+
+resource_name: "customers/4934481887/conversionActions/206458270"
+id: 206458270
+name: "Meta inteligente (Master)"
+
+resource_name: "customers/4934481887/conversionActions/207584095"
+id: 207584095
+name: "Meta inteligente (Somente Presencial)"
+
+resource_name: "customers/4934481887/conversionActions/210782077"
+id: 210782077
+name: "Pedidos Confirmados"
+
+resource_name: "customers/4934481887/conversionActions/211221974"
+id: 211221974
+name: "Cadastros - Palestra TCM-Rio (Master)"
+
+resource_name: "customers/4934481887/conversionActions/212176222"
+id: 212176222
+name: "Cadastros - Palestra TRF (Master)"
+
+resource_name: "customers/4934481887/conversionActions/216410875"
+id: 216410875
+name: "Cadastros Presenciais"
+
+resource_name: "customers/4934481887/conversionActions/216511600"
+id: 216511600
+name: "Cadastros - Mini Curso TRF (Site)"
+
+resource_name: "customers/4934481887/conversionActions/216520927"
+id: 216520927
+name: "Cadastros - Mini Curso TCM-Rio (Site)"
+
+resource_name: "customers/4934481887/conversionActions/216596770"
+id: 216596770
+name: "Cadastros - Bolsão Receita Federal (Master)"
+
+resource_name: "customers/4934481887/conversionActions/252019879"
+id: 252019879
+name: "Envio Contato Urgente (Site)"
+
+resource_name: "customers/4934481887/conversionActions/252303042"
+id: 252303042
+name: "Contato Urgente - Todos (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/263780803"
+id: 263780803
+name: "Compra"
+
+resource_name: "customers/4934481887/conversionActions/264156687"
+id: 264156687
+name: "Conversão Novo Site (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/270238468"
+id: 270238468
+name: "store_visits"
+
+resource_name: "customers/4934481887/conversionActions/271393640"
+id: 271393640
+name: "Calls from ads"
+
+resource_name: "customers/4934481887/conversionActions/280382554"
+id: 280382554
+name: "Lead - Presencial (OLD)"
+
+resource_name: "customers/4934481887/conversionActions/281007098"
+id: 281007098
+name: "Compra Curso Online"
+
+resource_name: "customers/4934481887/conversionActions/282165986"
+id: 282165986
+name: "Compra (Site)"
+
+resource_name: "customers/4934481887/conversionActions/307514367"
+id: 307514367
+name: "Extensão.Ligação"
+
+resource_name: "customers/4934481887/conversionActions/314621693"
+id: 314621693
+name: "pareto.botão.whatsapp"
+
+resource_name: "customers/4934481887/conversionActions/314623856"
+id: 314623856
+name: "pareto.telefone.campogrande"
+
+resource_name: "customers/4934481887/conversionActions/314752689"
+id: 314752689
+name: "pareto.telefone.(21) 99243-5891"
+
+resource_name: "customers/4934481887/conversionActions/314753187"
+id: 314753187
+name: "pareto.telefone.bonsucesso"
+
+resource_name: "customers/4934481887/conversionActions/332380317"
+id: 332380317
+name: "Clicks to call"
+
+resource_name: "customers/4934481887/conversionActions/333014382"
+id: 333014382
+name: "Local actions - Website visits"
+
+resource_name: "customers/4934481887/conversionActions/335625796"
+id: 335625796
+name: "Local actions - Directions"
+
+resource_name: "customers/4934481887/conversionActions/336105495"
+id: 336105495
+name: "Local actions - Other engagements"
+
+resource_name: "customers/4934481887/conversionActions/479876851"
+id: 479876851
+name: "Adicionar ao carrinho"
+
+resource_name: "customers/4934481887/conversionActions/481477657"
+id: 481477657
+name: "pareto.add_cart"
+
+resource_name: "customers/4934481887/conversionActions/490358605"
+id: 490358605
+name: "Lead.Mapper"
+
+resource_name: "customers/4934481887/conversionActions/557334670"
+id: 557334670
+name: "Android installs (all other apps)"
+
+resource_name: "customers/4934481887/conversionActions/810382446"
+id: 810382446
+name: "Cadastro realizado (Todos os dados do website)"
+
+resource_name: "customers/4934481887/conversionActions/948078959"
+id: 948078959
+name: "Contato (obrigado-online)"
+
+resource_name: "customers/4934481887/conversionActions/964173335"
+id: 964173335
+name: "Lead - Presencial"
+
+resource_name: "customers/4934481887/conversionActions/968012092"
+id: 968012092
+name: "Lead convertido - Vendido"
+
+resource_name: "customers/4934481887/conversionActions/968013046"
+id: 968013046
+name: "Lead qualificado - Convertido"
+
+resource_name: "customers/4934481887/conversionActions/968129718"
+id: 968129718
+name: "Lead convertido - Contato urgente"
+
+resource_name: "customers/4934481887/conversionActions/973022809"
+id: 973022809
+name: "Lead qualificado"
+
+resource_name: "customers/4934481887/conversionActions/987773947"
+id: 987773947
+name: "Principal – GA4 (web) purchase"
+
+resource_name: "customers/4934481887/conversionActions/1025054838"
+id: 1025054838
+name: "YouTube channel subscriptions"
+
+resource_name: "customers/4934481887/conversionActions/6555157620"
+id: 6555157620
+name: "Principal – GA4 (web) Formulario_lead"
+
+resource_name: "customers/4934481887/conversionActions/6555187817"
+id: 6555187817
+name: "Lead - Online"
+
+resource_name: "customers/4934481887/conversionActions/6555188822"
+id: 6555188822
+name: "Lead - Live"
+
+resource_name: "customers/4934481887/conversionActions/6562304815"
+id: 6562304815
+name: "Principal – GA4 (web) lead_online"
+
+resource_name: "customers/4934481887/conversionActions/6562394610"
+id: 6562394610
+name: "Principal – GA4 (web) lead_live"
+
+resource_name: "customers/4934481887/conversionActions/6562394760"
+id: 6562394760
+name: "Principal – GA4 (web) lead_presencial"
+
+resource_name: "customers/4934481887/conversionActions/6629372612"
+id: 6629372612
+name: "Principal – GA4 (web) carrinho"
+
+resource_name: "customers/4934481887/conversionActions/6629372615"
+id: 6629372615
+name: "Principal – GA4 (web) compra"
+
+resource_name: "customers/4934481887/conversionActions/6629372618"
+id: 6629372618
+name: "Principal – GA4 (web) envio_contato_urgente"
+
+resource_name: "customers/4934481887/conversionActions/6638047169"
+id: 6638047169
+name: "Oportunidade contato urgente"
+
+resource_name: "customers/4934481887/conversionActions/6693328692"
+id: 6693328692
+name: "Contato - Whatsapp"
+
+resource_name: "customers/4934481887/conversionActions/6812871561"
+id: 6812871561
+name: "Checkout"
+
+resource_name: "customers/4934481887/conversionActions/6813630445"
+id: 6813630445
+name: "Calls from Smart Campaign Ads"
+
+resource_name: "customers/4934481887/conversionActions/6813733110"
+id: 6813733110
+name: "Smart campaign map clicks to call"
+
+resource_name: "customers/4934481887/conversionActions/6813733113"
+id: 6813733113
+name: "Smart campaign map directions"
+
+resource_name: "customers/4934481887/conversionActions/6813733860"
+id: 6813733860
+name: "Smart campaign ad clicks to call"
+
+resource_name: "customers/4934481887/conversionActions/6835249439"
+id: 6835249439
+name: "Principal – GA4 (web) login"
+
+resource_name: "customers/4934481887/conversionActions/6835249580"
+id: 6835249580
+name: "Principal – GA4 (web) begin_checkout"
+
+resource_name: "customers/4934481887/conversionActions/6835249583"
+id: 6835249583
+name: "Principal – GA4 (web) calcular_frete"
+
+resource_name: "customers/4934481887/conversionActions/6835250060"
+id: 6835250060
+name: "Principal – GA4 (web) sign_up"
+
+resource_name: "customers/4934481887/conversionActions/6835278226"
+id: 6835278226
+name: "Principal – GA4 (web) add_payment_info"
+
+resource_name: "customers/4934481887/conversionActions/6835278664"
+id: 6835278664
+name: "Principal – GA4 (web) add_to_cart"
+
+resource_name: "customers/4934481887/conversionActions/6835279165"
+id: 6835279165
+name: "Principal – GA4 (web) view_cart"
+
+resource_name: "customers/4934481887/conversionActions/6835370076"
+id: 6835370076
+name: "Principal – GA4 (web) Contact"
+
+resource_name: "customers/4934481887/conversionActions/6835370115"
+id: 6835370115
+name: "Principal – GA4 (web) generate_lead"
+
+resource_name: "customers/4934481887/conversionActions/6835370154"
+id: 6835370154
+name: "Principal – GA4 (web) add_shipping_info"
+
+resource_name: "customers/4934481887/conversionActions/6835370808"
+id: 6835370808
+name: "Principal – GA4 (web) view_item"
+
+resource_name: "customers/4934481887/conversionActions/7045955759"
+id: 7045955759
+name: "Lead (todos os leads)"
+
+resource_name: "customers/4934481887/conversionActions/7101052764"
+id: 7101052764
+name: "YouTube follow-on views"
+
+resource_name: "customers/4934481887/conversionActions/7105558278"
+id: 7105558278
+name: "Principal – GA4 (web) lead_passaporte"
+
+resource_name: "customers/4934481887/conversionActions/7121707884"
+id: 7121707884
+name: "Lead - Passaporte"

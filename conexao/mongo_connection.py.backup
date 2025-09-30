@@ -1,0 +1,182 @@
+import os
+import pymongo
+from pymongo import MongoClient
+import pandas as pd
+import streamlit as st
+from typing import List, Dict, Any
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class MongoConnection:
+    def __init__(self):
+        self.client = None
+        self.db = None
+        self.connect()
+    
+    def connect(self):
+        """Conecta ao MongoDB usando as credenciais do .env"""
+        try:
+            mongo_uri = os.getenv('MONGO_DB_URI')
+            db_name = os.getenv('MONGO_DB_NAME')
+            
+            if not mongo_uri or not db_name:
+                raise ValueError("MONGO_DB_URI ou MONGO_DB_NAME não encontradas nas variáveis de ambiente")
+            
+            self.client = MongoClient(mongo_uri)
+            self.db = self.client[db_name]
+            
+            # Testa a conexão
+            self.client.admin.command('ping')
+            logger.info("Conexão com MongoDB estabelecida com sucesso")
+            
+        except Exception as e:
+            logger.error(f"Erro ao conectar com MongoDB: {e}")
+            raise e
+    
+    def get_subjects_total(self) -> List[Dict[str, Any]]:
+        """Busca todos os subjects com seus totais de questões"""
+        try:
+            collection = self.db['subjectXtopics_total']
+            cursor = collection.find({}, {'name': 1, 'total': 1, '_id': 0})
+            subjects = list(cursor)
+            logger.info(f"Encontrados {len(subjects)} subjects")
+            return subjects
+        except Exception as e:
+            logger.error(f"Erro ao buscar subjects: {e}")
+            return []
+    
+    def get_subject_details(self, subject_name: str) -> Dict[str, Any]:
+        """Busca os detalhes de um subject específico incluindo topics"""
+        try:
+            collection = self.db['subjectXtopics_total']
+            subject = collection.find_one({'name': subject_name})
+            
+            if subject:
+                logger.info(f"Detalhes encontrados para subject: {subject_name}")
+                return subject
+            else:
+                logger.warning(f"Subject não encontrado: {subject_name}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Erro ao buscar detalhes do subject {subject_name}: {e}")
+            return {}
+    
+    def get_all_subjects_with_topics(self) -> List[Dict[str, Any]]:
+        """Busca todos os subjects com seus topics"""
+        try:
+            collection = self.db['subjectXtopics_total']
+            cursor = collection.find({})
+            subjects = list(cursor)
+            logger.info(f"Encontrados {len(subjects)} subjects com topics")
+            return subjects
+        except Exception as e:
+            logger.error(f"Erro ao buscar subjects com topics: {e}")
+            return []
+    
+    def close(self):
+        """Fecha a conexão com o MongoDB"""
+        if self.client:
+            self.client.close()
+            logger.info("Conexão com MongoDB fechada")
+
+@st.cache_data(ttl=600)  # Cache por 10 minutos
+def get_cached_subjects():
+    """Função cached para buscar subjects"""
+    mongo = MongoConnection()
+    try:
+        subjects = mongo.get_subjects_total()
+        return subjects
+    finally:
+        mongo.close()
+
+@st.cache_data(ttl=600)  # Cache por 10 minutos
+def get_cached_subject_details(subject_name: str):
+    """Função cached para buscar detalhes de um subject"""
+    mongo = MongoConnection()
+    try:
+        subject_details = mongo.get_subject_details(subject_name)
+        return subject_details
+    finally:
+        mongo.close()
+
+@st.cache_data(ttl=600)  # Cache por 10 minutos
+def get_cached_all_subjects_with_topics():
+    """Função cached para buscar todos os subjects com topics"""
+    mongo = MongoConnection()
+    try:
+        subjects = mongo.get_all_subjects_with_topics()
+        return subjects
+    finally:
+        mongo.close()
+
+# Funções de compatibilidade para manter interface consistente
+def get_streamlit_cached_subjects():
+    return get_cached_subjects()
+
+def get_streamlit_cached_subject_details(subject_name: str):
+    return get_cached_subject_details(subject_name)
+
+def get_streamlit_cached_all_subjects_with_topics():
+    return get_cached_all_subjects_with_topics()
+
+def clear_cache():
+    """Limpa o cache do Streamlit"""
+    st.cache_data.clear()
+    logger.info("Cache Streamlit limpo")
+
+def get_mongodb_health():
+    """Health check simples"""
+    try:
+        mongo = MongoConnection()
+        try:
+            # Testa conexão
+            mongo.client.admin.command('ping')
+            
+            # Conta documentos
+            collection = mongo.db['subjectXtopics_total']
+            doc_count = collection.count_documents({})
+            
+            return {
+                'status': 'healthy',
+                'ping_time_ms': 'OK',
+                'document_count': doc_count
+            }
+        finally:
+            mongo.close()
+    except Exception as e:
+        return {
+            'status': 'unhealthy',
+            'error': str(e),
+            'ping_time_ms': None,
+            'document_count': 0
+        }
+
+def get_cache_stats():
+    """Estatísticas do cache"""
+    return {
+        'cache_size': 'Gerenciado pelo Streamlit',
+        'keys': ['subjects', 'subject_details', 'all_subjects'],
+        'timestamps': {}
+    }
+
+def get_system_stats():
+    """Estatísticas do sistema"""
+    health = get_mongodb_health()
+    return {
+        'cache': {'cache_size': 'Streamlit', 'type': 'managed'},
+        'mongodb': health,
+        'timestamp': 'Agora'
+    }
+
+def get_system_stats():
+    """Estatísticas do sistema simplificadas"""
+    health = get_mongodb_health()
+    return {
+        'cache': {'cache_size': 'Streamlit', 'type': 'managed'},
+        'mongodb': health,
+        'timestamp': 'Agora'
+    }

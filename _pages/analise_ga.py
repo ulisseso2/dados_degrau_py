@@ -17,6 +17,9 @@ from gclid_db import (
     load_gclid_cache,
     save_gclid_cache_batch,
     get_campaign_for_gclid,
+    get_not_found_gclids,
+    get_gclids_by_date_range,
+    count_not_found_gclids,
 )
 
 import logging
@@ -294,6 +297,73 @@ def get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict):
     finally:
         progress_bar.empty()
         status_text.empty()
+
+def reprocess_not_found_gclids(client, customer_id, start_date, end_date, force_all=False):
+    """
+    Reprocessa GCLIDs marcados como 'Não encontrado' tentando encontrá-los novamente.
+    
+    Args:
+        client: Cliente do Google Ads
+        customer_id: ID do cliente
+        start_date: Data de início
+        end_date: Data de fim
+        force_all: Se True, reprocessa todos os GCLIDs não encontrados, senão apenas os do período
+    """
+    if force_all:
+        not_found_list = get_not_found_gclids()
+        st.info(f"Reprocessando {len(not_found_list)} GCLIDs não encontrados...")
+    else:
+        not_found_list = get_gclids_by_date_range(start_date, end_date)
+        st.info(f"Reprocessando {len(not_found_list)} GCLIDs não encontrados no período selecionado...")
+    
+    if not not_found_list:
+        st.success("Não há GCLIDs não encontrados para reprocessar!")
+        return {"success": 0, "still_not_found": 0}
+    
+    # Cria um dicionário com os GCLIDs e suas datas para usar a função existente
+    gclid_date_dict = {}
+    for gclid, last_updated in not_found_list:
+        # Tenta usar uma data ampla para maximizar as chances de encontrar
+        try:
+            if isinstance(last_updated, str):
+                date_obj = datetime.fromisoformat(last_updated.replace('Z', '+00:00')).date()
+            else:
+                date_obj = last_updated.date() if hasattr(last_updated, 'date') else start_date
+        except:
+            date_obj = start_date
+            
+        gclid_date_dict[gclid] = date_obj
+    
+    # Remove temporariamente os GCLIDs do cache para forçar nova consulta
+    original_cache = st.session_state.gclid_cache.copy()
+    for gclid in gclid_date_dict.keys():
+        if gclid in st.session_state.gclid_cache:
+            del st.session_state.gclid_cache[gclid]
+    
+    try:
+        # Usa a função existente para buscar novamente
+        results = get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict)
+        
+        success_count = len(results) if results else 0
+        still_not_found = len(gclid_date_dict) - success_count
+        
+        # Atualiza o cache e banco de dados com os resultados
+        if results:
+            for gclid, campaign in results.items():
+                st.session_state.gclid_cache[gclid] = campaign
+            save_gclid_cache_batch(results)
+            st.success(f"✅ {success_count} GCLIDs foram encontrados e atualizados!")
+        
+        if still_not_found > 0:
+            st.warning(f"⚠️ {still_not_found} GCLIDs ainda não foram encontrados.")
+        
+        return {"success": success_count, "still_not_found": still_not_found}
+        
+    except Exception as e:
+        # Restaura o cache original em caso de erro
+        st.session_state.gclid_cache.update(original_cache)
+        st.error(f"Erro durante o reprocessamento: {str(e)}")
+        return {"success": 0, "still_not_found": len(gclid_date_dict)}
 
 def get_individual_conversion_report(client, property_id, start_date, end_date):
     """
@@ -574,6 +644,46 @@ def run_page():
             st.warning("Não foi possível obter dados de campanhas do Google Ads para o período selecionado.")
     else:
         st.error("Não foi possível conectar ao Google Ads. Verifique as credenciais.")
+
+    # --- SEÇÃO: REPROCESSAMENTO DE GCLIDs NÃO ENCONTRADOS ---
+    st.header("🔄 Reprocessamento de GCLIDs")
+    
+    # Mostra estatísticas dos GCLIDs não encontrados
+    total_not_found = count_not_found_gclids()
+    period_not_found = get_gclids_by_date_range(start_date, end_date)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total de GCLIDs Não Encontrados", total_not_found)
+    with col2:
+        st.metric("Não Encontrados no Período", len(period_not_found))
+    
+    if total_not_found > 0:
+        st.info("Os GCLIDs marcados como 'Não encontrado' podem ter sido processados em momentos diferentes ou podem ter se tornado disponíveis na API do Google Ads.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 Reprocessar Período Atual", help="Reprocessa apenas os GCLIDs não encontrados no período selecionado"):
+                if gads_client and customer_id:
+                    with st.spinner("Reprocessando GCLIDs do período..."):
+                        results = reprocess_not_found_gclids(gads_client, customer_id, start_date, end_date, force_all=False)
+                        if results["success"] > 0:
+                            st.rerun()  # Recarrega a página para mostrar os dados atualizados
+                else:
+                    st.error("Cliente Google Ads não disponível.")
+        
+        with col2:
+            if st.button("🔄 Reprocessar Todos", help="Reprocessa todos os GCLIDs não encontrados (pode demorar)"):
+                if gads_client and customer_id:
+                    with st.spinner("Reprocessando todos os GCLIDs não encontrados..."):
+                        results = reprocess_not_found_gclids(gads_client, customer_id, start_date, end_date, force_all=True)
+                        if results["success"] > 0:
+                            st.rerun()  # Recarrega a página para mostrar os dados atualizados
+                else:
+                    st.error("Cliente Google Ads não disponível.")
+    else:
+        st.success("🎉 Não há GCLIDs marcados como 'Não encontrado'!")
 
     st.divider()
 

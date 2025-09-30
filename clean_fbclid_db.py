@@ -30,6 +30,7 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS fbclid_cache (
     fbclid TEXT PRIMARY KEY,
+    formatted_fbclid TEXT,
     campaign_name TEXT,
     campaign_id TEXT,
     adset_name TEXT,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS fbclid_cache (
 # Cria índices para otimização
 cursor.execute("CREATE INDEX IF NOT EXISTS idx_fbclid_cache_empresa ON fbclid_cache(empresa)")
 cursor.execute("CREATE INDEX IF NOT EXISTS idx_fbclid_cache_campaign ON fbclid_cache(campaign_name)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_fbclid_cache_formatted ON fbclid_cache(formatted_fbclid)")
 
 conn.commit()
 conn.close()
