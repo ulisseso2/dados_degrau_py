@@ -84,7 +84,7 @@ def run_page():
     ]
 
     # Métricas principais
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Total de Oportunidades", df_filtrado.shape[0])
@@ -97,7 +97,48 @@ def run_page():
         oportunidades_live = df_filtrado[df_filtrado["modalidade"] == "Live"].shape[0]
         st.metric("Oportunidades Live", oportunidades_live)
 
+    with col4:
+        oportunidades_presenciais = df_filtrado[df_filtrado["modalidade"] == "Presencial"].shape[0]
+        st.metric("Oportunidades Presenciais", oportunidades_presenciais)
+
     df_diario = df_filtrado.groupby(df_filtrado["criacao"].dt.date)["oportunidade"].count().reset_index()
+
+    #tabela concurso modalidade
+    st.subheader("Oportunidades por Concurso / Modalidade")
+
+    tabela_concurso_modalidade = df_filtrado.pivot_table(
+        index="concurso",
+        columns="modalidade",
+        values="oportunidade",
+        aggfunc="count",
+        fill_value=0
+    )
+
+    # 4. Renomear colunas
+    tabela_concurso_modalidade.columns = [f"{col} (Qtd)" for col in tabela_concurso_modalidade.columns]
+
+    # 5. Adicionar coluna total
+    tabela_concurso_modalidade["Total (Qtd)"] = tabela_concurso_modalidade.sum(axis=1)
+
+    tabela_concurso_modalidade = tabela_concurso_modalidade.sort_values("Total (Qtd)", ascending=False)
+
+    st.dataframe(tabela_concurso_modalidade, use_container_width=True)
+
+
+    #pizza modalidades
+    # Agrupa por modalidade e conta a quantidade de oportunidades
+    df_modalidade = df_filtrado.groupby("modalidade")["oportunidade"].count().reset_index()
+
+    # Cria o gráfico de pizza
+    fig_modalidade = px.pie(
+        df_modalidade,
+        names="modalidade",
+        values="oportunidade",
+        title="Oportunidades por Modalidade",
+        labels={"modalidade": "Modalidade", "oportunidade": "Quantidade"},
+        )
+    fig_modalidade.update_traces(textinfo='value+percent')
+    st.plotly_chart(fig_modalidade, use_container_width=True)    
 
     # Renomeia coluna de data para 'Data' (opcional)
     df_diario.columns = ["Data", "Total"]
@@ -127,21 +168,6 @@ def run_page():
         )
     fig.update_traces(textinfo='value+percent')
     st.plotly_chart(fig, use_container_width=True)
-
-    #pizza modalidades
-    # Agrupa por modalidade e conta a quantidade de oportunidades
-    df_modalidade = df_filtrado.groupby("modalidade")["oportunidade"].count().reset_index()
-
-    # Cria o gráfico de pizza
-    fig_modalidade = px.pie(
-        df_modalidade,
-        names="modalidade",
-        values="oportunidade",
-        title="Oportunidades por Modalidade",
-        labels={"modalidade": "Modalidade", "oportunidade": "Quantidade"},
-        )
-    fig_modalidade.update_traces(textinfo='value+percent')
-    st.plotly_chart(fig_modalidade, use_container_width=True)
 
     # --- INÍCIO DO CÓDIGO DO GRÁFICO DE FUNIL ---
 

@@ -10,6 +10,7 @@ plotly==6.2.0
 # Conexão com Banco de Dados
 SQLAlchemy==2.0.41
 mysql-connector-python==9.3.0
+pymongo==4.8.0
 
 # APIs do Google
 google-analytics-data==0.18.19
@@ -23,6 +24,7 @@ facebook_business==23.0.0
 python-dotenv==1.1.1
 PyYAML==6.0.2
 xlsxwriter==3.2.5
+toml==0.10.2
 
 # Dependências principais (resolvidas pelo pip)
 aiohttp
@@ -45,3 +47,8 @@ toml
 tornado
 typing_extensions
 watchdog
+
+# IA para Análise de Dados
+pandasai==2.0.21
+openai==1.37.0
+```

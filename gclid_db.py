@@ -81,3 +81,53 @@ def get_campaign_for_gclid(gclid):
     
     conn.close()
     return result[0] if result else None
+
+def get_not_found_gclids():
+    """Retorna todos os GCLIDs marcados como 'Não encontrado'"""
+    init_db()
+    not_found_gclids = []
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT gclid, last_updated 
+                FROM gclid_cache 
+                WHERE campaign_name = 'Não encontrado'
+                ORDER BY last_updated DESC
+            """)
+            not_found_gclids = cursor.fetchall()
+    except Exception as e:
+        print(f"Erro ao buscar GCLIDs não encontrados: {e}")
+    return not_found_gclids
+
+def get_gclids_by_date_range(start_date, end_date):
+    """Retorna GCLIDs não encontrados dentro de um período específico"""
+    init_db()
+    gclids = []
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT gclid, last_updated 
+                FROM gclid_cache 
+                WHERE campaign_name = 'Não encontrado'
+                AND date(last_updated) BETWEEN ? AND ?
+                ORDER BY last_updated DESC
+            """, (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+            gclids = cursor.fetchall()
+    except Exception as e:
+        print(f"Erro ao buscar GCLIDs por período: {e}")
+    return gclids
+
+def count_not_found_gclids():
+    """Conta quantos GCLIDs estão marcados como 'Não encontrado'"""
+    init_db()
+    count = 0
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM gclid_cache WHERE campaign_name = 'Não encontrado'")
+            count = cursor.fetchone()[0]
+    except Exception as e:
+        print(f"Erro ao contar GCLIDs não encontrados: {e}")
+    return count
