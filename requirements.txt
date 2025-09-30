@@ -24,12 +24,9 @@ facebook_business==23.0.0
 python-dotenv==1.1.1
 PyYAML==6.0.2
 xlsxwriter==3.2.5
+toml==0.10.2
 
-# IA para Análise de Dados
-pandasai==2.0.21
-openai==1.37.0
-
-# Dependências que serão resolvidas pelo pip automaticamente
+# Dependências principais (resolvidas pelo pip)
 aiohttp
 altair
 blinker
