@@ -262,6 +262,38 @@ def run_page():
 
     st.dataframe(tabela_concurso, use_container_width=True)
 
+    st.subheader("Oportunidades por Vendedor/ Etapas")
+    # 1. Obter ordem das etapas da query (sem duplicar e mantendo a ordem)
+    ordem_etapas_dono = (
+        df_filtrado[['etapa', 'ordem_etapas']]
+        .drop_duplicates()
+        .sort_values('ordem_etapas')
+        ['etapa']
+        .tolist()
+    )
+
+    # 2. Criar a tabela pivotada
+    tabela_concurso_dono = df_filtrado.pivot_table(
+        index="dono",
+        columns="etapa",
+        values="oportunidade",
+        aggfunc="count",
+        fill_value=0
+    )
+
+    # 3. Aplicar a ordem correta (apenas colunas presentes)
+    etapas_presentes = [etapa for etapa in ordem_etapas_dono if etapa in tabela_concurso_dono.columns]
+    tabela_concurso_dono = tabela_concurso_dono[etapas_presentes]
+
+    # 4. Renomear colunas
+    tabela_concurso_dono.columns = [f"{col} (Qtd)" for col in tabela_concurso_dono.columns]
+
+    # 5. Adicionar coluna total
+    tabela_concurso_dono["Total (Qtd)"] = tabela_concurso_dono.sum(axis=1)
+
+    tabela_concurso_dono = tabela_concurso_dono.sort_values("Total (Qtd)", ascending=False)
+
+    st.dataframe(tabela_concurso_dono, use_container_width=True)
 
     st.subheader("Principais Concursos por Oportunidades")
 
