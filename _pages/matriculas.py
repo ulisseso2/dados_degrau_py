@@ -234,8 +234,9 @@ def run_page():
     if df_filtrado.empty:
         st.info("Nenhum dado de curso venda encontrado para os filtros selecionados.")
     else:
+        # Agrupa por curso_venda e categoria para manter a informação de categoria
         grafico2 = (
-            df_filtrado.groupby(["curso_venda"])
+            df_filtrado.groupby(["curso_venda", "categoria"])
             .agg({'total_pedido': 'sum',
                   'ordem_id': 'count'})
             .reset_index()
@@ -257,14 +258,23 @@ def run_page():
                 x="total_pedido",
                 y="curso_venda",
                 text="valor_combinado",
-                title="Pedidos por Curso Venda (Valor e Quantidade)",
-                labels={"total_pedido": "Qtd. Pedidos", "curso_venda": "Curso Venda"},
+                title="Pedidos por Curso Venda (Valor e Quantidade por Categoria)",
+                labels={"total_pedido": "Valor Total (R$)", "curso_venda": "Curso Venda", "categoria": "Categoria"},
                 orientation="h",
-                barmode="group",
-                range_x=[0, max_value * 1.1]
+                barmode="stack",  # Mudado para stack para melhor visualização das categorias
+                color="categoria",
+                range_x=[0, max_value * 1.1],
+                color_discrete_sequence=px.colors.qualitative.Set2  # Cores distintas para as categorias
             )
             fig2.update_layout(
-                yaxis={'categoryorder':'total ascending'}
+                yaxis={'categoryorder':'total ascending'},
+                legend=dict(
+                    orientation="v",
+                    yanchor="bottom",
+                    y=0,
+                    xanchor="right",
+                    x=1
+                )
             )
             st.plotly_chart(fig2, use_container_width=True)
         else:

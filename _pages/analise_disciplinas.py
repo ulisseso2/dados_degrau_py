@@ -223,7 +223,185 @@ def run_page():
             st.metric("Mediana", f"{df_compare['Total_Questoes'].median():.1f}")
     
     # ============================================================================
-    # SEÇÃO 4: TABELA COMPLETA E EXPORTAÇÃO
+    # SEÇÃO 4: PESQUISA DE TÓPICOS
+    # ============================================================================
+    st.header("🔍 Pesquisa de Tópicos")
+    
+    # Função para processar os dados e criar tabela de tópicos
+    @st.cache_data
+    def create_topics_table():
+        """Cria uma tabela invertida: tópicos -> disciplinas"""
+        topics_dict = {}
+        
+        # Processa todos os dados para extrair tópicos e suas disciplinas
+        for subject in all_subjects_with_topics:
+            subject_name = subject.get('name', '')
+            topics = subject.get('topics', [])
+            
+            for topic in topics:
+                topic_name = topic.get('name', '')
+                topic_total = topic.get('total', 0)
+                
+                if topic_name:
+                    if topic_name not in topics_dict:
+                        topics_dict[topic_name] = []
+                    
+                    topics_dict[topic_name].append({
+                        'disciplina': subject_name,
+                        'questoes': topic_total
+                    })
+        
+        # Converte para DataFrame
+        topics_data = []
+        for topic_name, disciplines in topics_dict.items():
+            total_questions_topic = sum(d['questoes'] for d in disciplines)
+            num_disciplines = len(disciplines)
+            
+            topics_data.append({
+                'topico': topic_name,
+                'total_questoes': total_questions_topic,
+                'num_disciplinas': num_disciplines,
+                'disciplinas': disciplines
+            })
+        
+        return pd.DataFrame(topics_data).sort_values('total_questoes', ascending=False)
+    
+    # Gera a tabela de tópicos
+    with st.spinner("Processando dados de tópicos..."):
+        df_topics_table = create_topics_table()
+    
+    if not df_topics_table.empty:
+        # Campo de pesquisa
+        st.subheader("🔎 Pesquisar Tópicos")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            search_term = st.text_input(
+                "Digite o nome do tópico para pesquisar:",
+                placeholder="Ex: matemática, português, etc..."
+            )
+        
+        with col2:
+            min_questions_topic = st.number_input(
+                "Mín. questões:",
+                min_value=0,
+                value=0,
+                step=1
+            )
+        
+        # Filtrar dados baseado na pesquisa
+        df_filtered_topics = df_topics_table.copy()
+        
+        if search_term:
+            df_filtered_topics = df_filtered_topics[
+                df_filtered_topics['topico'].str.contains(search_term, case=False, na=False)
+            ]
+        
+        if min_questions_topic > 0:
+            df_filtered_topics = df_filtered_topics[
+                df_filtered_topics['total_questoes'] >= min_questions_topic
+            ]
+        
+        # Estatísticas dos tópicos filtrados
+        if not df_filtered_topics.empty:
+            st.subheader("📊 Resultados da Pesquisa")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Tópicos Encontrados", len(df_filtered_topics))
+            with col2:
+                st.metric("Total de Questões", f"{df_filtered_topics['total_questoes'].sum():,}")
+            with col3:
+                st.metric("Média por Tópico", f"{df_filtered_topics['total_questoes'].mean():.1f}")
+            with col4:
+                st.metric("Máx. Disciplinas", df_filtered_topics['num_disciplinas'].max())
+            
+            # Tabela principal de tópicos
+            st.subheader("📋 Tópicos e Disciplinas Associadas")
+            
+            # Seletor de tópico para ver detalhes
+            selected_topic = st.selectbox(
+                "Selecione um tópico para ver as disciplinas:",
+                options=df_filtered_topics['topico'].tolist(),
+                index=0 if len(df_filtered_topics) > 0 else None
+            )
+            
+            if selected_topic:
+                # Busca dados do tópico selecionado
+                topic_data = df_filtered_topics[df_filtered_topics['topico'] == selected_topic].iloc[0]
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.write(f"**Tópico:** {selected_topic}")
+                    st.write(f"**Total de Questões:** {topic_data['total_questoes']:,}")
+                    st.write(f"**Disciplinas com este tópico:** {topic_data['num_disciplinas']}")
+                
+                with col2:
+                    # Gráfico de pizza das disciplinas para este tópico
+                    disciplines_data = topic_data['disciplinas']
+                    df_disc = pd.DataFrame(disciplines_data)
+                    
+                    if len(df_disc) > 1:
+                        fig_pie = px.pie(
+                            df_disc,
+                            values='questoes',
+                            names='disciplina',
+                            title=f"Distribuição por Disciplina"
+                        )
+                        fig_pie.update_layout(height=300)
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # Tabela detalhada das disciplinas
+                st.write("**Disciplinas que contêm este tópico:**")
+                
+                df_disc_display = pd.DataFrame(disciplines_data).sort_values('questoes', ascending=False)
+                df_disc_display['percentual'] = (df_disc_display['questoes'] / df_disc_display['questoes'].sum() * 100).round(2)
+                df_disc_display['percentual_str'] = df_disc_display['percentual'].astype(str) + '%'
+                
+                df_disc_display = df_disc_display.rename(columns={
+                    'disciplina': 'Disciplina',
+                    'questoes': 'Questões',
+                    'percentual_str': 'Percentual'
+                })
+                
+                st.dataframe(
+                    df_disc_display[['Disciplina', 'Questões', 'Percentual']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            
+            # Tabela resumo de todos os tópicos filtrados
+            st.subheader("📊 Resumo dos Tópicos")
+            
+            df_summary = df_filtered_topics[['topico', 'total_questoes', 'num_disciplinas']].copy()
+            df_summary = df_summary.rename(columns={
+                'topico': 'Tópico',
+                'total_questoes': 'Total de Questões',
+                'num_disciplinas': 'Nº Disciplinas'
+            })
+            
+            st.dataframe(df_summary, use_container_width=True, hide_index=True)
+            
+            # Botão de download
+            csv_topics = df_summary.to_csv(index=False)
+            st.download_button(
+                label="📥 Baixar tópicos em CSV",
+                data=csv_topics,
+                file_name="topicos_questoes.csv",
+                mime="text/csv"
+            )
+        
+        else:
+            st.warning("⚠️ Nenhum tópico encontrado com os filtros aplicados.")
+    
+    else:
+        st.error("❌ Não foi possível processar os dados de tópicos.")
+
+    # ============================================================================
+    # SEÇÃO 5: TABELA COMPLETA E EXPORTAÇÃO
     # ============================================================================
     st.header("📋 Dados Completos")
     
