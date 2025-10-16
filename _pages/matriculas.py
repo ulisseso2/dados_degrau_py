@@ -6,7 +6,9 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from datetime import datetime
+from style.config_collor import CATEGORIA_PRODUTO
 from utils.sql_loader import carregar_dados
+
 
 def run_page():
     st.title("🎓 Dashboard de Matrículas por Unidade")
@@ -224,7 +226,11 @@ def run_page():
         labels={"quantidade": "Qtd. Pedidos", "unidade": "Unidade"},
         barmode="group",
         text_auto=True,
+        color_discrete_map=CATEGORIA_PRODUTO,
+
     )
+    fig.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+
     st.plotly_chart(fig, use_container_width=True)
 
     # Gráfico de pedidos por curso venda quantitativa
@@ -264,8 +270,9 @@ def run_page():
                 barmode="stack",  # Mudado para stack para melhor visualização das categorias
                 color="categoria",
                 range_x=[0, max_value * 1.1],
-                color_discrete_sequence=px.colors.qualitative.Set2  # Cores distintas para as categorias
+                color_discrete_map=CATEGORIA_PRODUTO  # Cores distintas para as categorias
             )
+            # Ordena o eixo y com base no total de vendas
             fig2.update_layout(
                 yaxis={'categoryorder':'total ascending'},
                 legend=dict(
@@ -276,6 +283,7 @@ def run_page():
                     x=1
                 )
             )
+            fig2.update_traces(textfont_size=12, textangle=0, textposition="inside", cliponaxis=False)
             st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("Nenhum curso venda encontrado para os filtros selecionados.")
