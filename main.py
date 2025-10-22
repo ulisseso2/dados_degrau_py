@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp'
     ]
     
     for module_name in modules:
@@ -48,7 +48,6 @@ st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 
 PAGES = {
     "Oportunidades": oportunidades,
-    "Oportunidades SP": oportunidades_sp,
     "Tendências": tendencias,
     "Financeiro": financeiro,
     "Cancelamentos": cancelamentos,
@@ -60,6 +59,12 @@ PAGES = {
     "Análise Facebook": analise_facebook,
     "Análise Disciplinas": analise_disciplinas,
     "Previsão Custo Pedagógico": custo_aula,
+    "Oportunidades SP": oportunidades_sp,
+    "Matriculas SP": matriculas_sp,
+    "Vendedores SP": vendedores_sp,
+    "Tendências SP": tendencias_sp,
+    #"Financeiro SP": financeiro_sp,
+    "Cancelamentos SP": cancelamentos_sp,
     "Matriculas Madureira": madureira,
     "Cancelamentos Madureira": madureira_cancelamento,
     "Matriculas Campo Grande": campogrande,

@@ -256,6 +256,8 @@ def run_page():
 
             grafico2['valor_combinado'] = grafico2.apply(
                 lambda row: f"{row['total_formatado']} / {int(row['quantidade'])}", axis=1)
+            grafico2['ticket'] = grafico2['total_pedido'] / grafico2['ordem_id']
+            grafico2['ticket_medio'] = grafico2['ticket'].apply(formatar_reais)
 
             max_value = float(grafico2["valor_numerico"].max())
 
@@ -270,7 +272,12 @@ def run_page():
                 barmode="stack",  # Mudado para stack para melhor visualização das categorias
                 color="categoria",
                 range_x=[0, max_value * 1.1],
-                color_discrete_map=CATEGORIA_PRODUTO  # Cores distintas para as categorias
+                color_discrete_map=CATEGORIA_PRODUTO,  # Cores distintas para as categorias
+                hover_data={
+                    'total_pedido': ':,.2f',
+                    'quantidade': True,
+                    'ticket_medio': True
+                }
             )
             # Ordena o eixo y com base no total de vendas
             fig2.update_layout(
