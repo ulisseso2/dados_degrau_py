@@ -288,7 +288,7 @@ def run_page():
 
     # Colunas selecionadas conforme solicitado
     colunas_planilha = ["ordem_id", "produto", "email_cliente", "metodo_pagamento", 
-                       "status", "total_pedido", "data_pagamento", "categoria", "vendedor"]
+                       "status", "total_pedido", "data_pagamento", "categoria", "vendedor", "dono"]
     
     # Cria a tabela base para exportação
     tabela_detalhada = df_filtrado[colunas_planilha].copy()
@@ -298,12 +298,12 @@ def run_page():
         col1_det, col2_det, col3_det = st.columns([1, 1, 1])
         
         with col1_det:
-            vendedores_disponiveis = sorted(tabela_detalhada['vendedor'].dropna().unique().tolist())
-            vendedor_selecionado = st.multiselect(
-                "Filtrar por Vendedor:",
-                options=vendedores_disponiveis,
-                default=vendedores_disponiveis,
-                key="filtro_vendedor_detalhado"
+            donos_disponiveis = sorted(tabela_detalhada['dono'].dropna().unique().tolist())
+            dono_selecionado = st.multiselect(
+                "Filtrar por dono:",
+                options=donos_disponiveis,
+                default=donos_disponiveis,
+                key="filtro_dono_detalhado"
             )
         
         with col2_det:
@@ -326,7 +326,7 @@ def run_page():
         
         # Aplica os filtros da tabela
         tabela_final_detalhada = tabela_detalhada[
-            (tabela_detalhada['vendedor'].isin(vendedor_selecionado)) &
+            (tabela_detalhada['dono'].isin(dono_selecionado)) &
             (tabela_detalhada['categoria'].isin(categoria_selecionada_det)) &
             (tabela_detalhada['status'].isin(status_selecionado))
         ]
