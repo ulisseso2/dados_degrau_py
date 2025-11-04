@@ -20,6 +20,8 @@ from gclid_db_central import (  # Usando o módulo específico para a Central
     get_not_found_gclids,
     get_gclids_by_date_range,
     count_not_found_gclids,
+    has_valid_campaign_history,
+    restore_valid_gclids,
 )
 
 import logging
@@ -208,7 +210,8 @@ def get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict):
     # Carrega cache existente
     cache = st.session_state.gclid_cache
     
-    # Filtra apenas GCLIDs não consultados
+    # Filtra apenas GCLIDs não consultados OU que estão como 'Não encontrado'
+    # NUNCA reprocessa GCLIDs que já têm uma campanha válida
     gclids_to_query = {
         gclid: date for gclid, date in gclid_date_dict.items() 
         if gclid not in cache or cache[gclid] == 'Não encontrado'
@@ -307,20 +310,23 @@ def get_campaigns_for_gclids_with_date(client, customer_id, gclid_date_dict):
                         st.error(f"{error.message}")
                     continue
 
-        # Atualiza cache para GCLIDs não encontrados
-        for gclid in gclids_to_query:
-            if gclid not in gclid_campaign_map:
-                cache[gclid] = 'Não encontrado'
-
-        # Salva cache no banco de dados
+        # Salva cache no banco de dados - APENAS OS ENCONTRADOS
         if gclid_campaign_map:
             save_gclid_cache_batch(gclid_campaign_map)
             
-        not_found = {
-            gclid: 'Não encontrado' 
-            for gclid in gclids_to_query 
-            if gclid not in gclid_campaign_map
-        }
+        # Marca como 'Não encontrado' APENAS se nunca foi encontrado antes
+        not_found = {}
+        for gclid in gclids_to_query:
+            if gclid not in gclid_campaign_map:
+                # Verifica se já existe no banco com campanha válida
+                existing_campaign = get_campaign_for_gclid(gclid)
+                if existing_campaign and existing_campaign != 'Não encontrado':
+                    # Já foi encontrado antes, restaura no cache
+                    st.session_state.gclid_cache[gclid] = existing_campaign
+                else:
+                    # Nunca foi encontrado, marca como não encontrado
+                    not_found[gclid] = 'Não encontrado'
+                    
         if not_found:
             save_gclid_cache_batch(not_found)
             for gclid in not_found:

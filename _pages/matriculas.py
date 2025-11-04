@@ -193,22 +193,76 @@ def run_page():
         st.warning("Nenhum dado encontrado para os filtros selecionados.")
         st.stop()
 
-    # Tabela por unidade
-    tabela = (
-        df_filtrado.groupby("unidade")
-        .agg(
-            quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
-            total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
-        )
-        .reset_index()
-        .sort_values("total_vendido", ascending=False)
+    # Tabela por unidade pivotada Passaporte e Outros
+    valor_pivot_tabela = df_filtrado.pivot_table(
+        index="unidade",
+        columns=df_filtrado["categoria"].apply(lambda x: "Passaporte" if x == "Passaporte" else "Outros"),
+        values="total_pedido",
+        aggfunc="sum",
+        fill_value=0
     )
-    tabela["ticket_medio"] = tabela["total_vendido"] / tabela["quantidade"]
-    tabela["ticket_medio"] = tabela["ticket_medio"].apply(formatar_reais)
-    tabela["total_vendido"] = tabela["total_vendido"].apply(formatar_reais)
 
-    st.subheader("Vendas por Unidade")
-    st.dataframe(tabela, use_container_width=True)
+    qtd_pivot_tabela = df_filtrado.pivot_table(
+        index="unidade",
+        columns=df_filtrado["categoria"].apply(lambda x: "Passaporte" if x == "Passaporte" else "Outros"),
+        values="ordem_id",
+        aggfunc="count",
+        fill_value=0
+    )
+
+    
+
+    if not valor_pivot_tabela.empty and not qtd_pivot_tabela.empty:
+        # Formata valores em reais (depois de fazer a junção)
+        valor_formatado_tabela = valor_pivot_tabela.copy()
+        for col in valor_formatado_tabela.columns:
+            valor_formatado_tabela[col] = valor_formatado_tabela[col].apply(formatar_reais)
+
+        valor_formatado_tabela.columns = [f"{col} (Valor)" for col in valor_formatado_tabela.columns]
+        qtd_pivot_tabela.columns = [f"{col} (Qtd)" for col in qtd_pivot_tabela.columns]
+
+        # Junta horizontalmente
+        tabela_unidade = pd.concat([valor_formatado_tabela, qtd_pivot_tabela], axis=1)
+
+        # Adiciona total geral de valor (convertendo novamente para float)
+        valor_total_unidade = valor_pivot_tabela.sum(axis=1)
+
+        # Formata o valor total por último
+        tabela_unidade["Valor total"] = valor_total_unidade.apply(formatar_reais)
+        
+        # Adiciona total geral de quantidade
+        qtd_total_unidade = qtd_pivot_tabela.sum(axis=1)
+        tabela_unidade["Qtd total"] = qtd_total_unidade
+
+        # Calcula ticket médio ANTES de formatar os valores
+        ticket_medio_unidade = valor_total_unidade / qtd_total_unidade
+        tabela_unidade["Ticket Médio"] = ticket_medio_unidade.apply(formatar_reais)
+
+        # Reset index para mostrar unidade como coluna
+        tabela_unidade = tabela_unidade.reset_index()
+
+        st.subheader("Vendas por Unidade (Passaporte vs Outros)")
+        st.dataframe(tabela_unidade, use_container_width=True)
+    else:
+        st.info("Nenhum dado de vendas por unidade e categoria encontrado.")
+
+
+    # Tabela por unidade
+    # tabela = (
+    #     df_filtrado.groupby(["unidade", "categoria"])
+    #     .agg(
+    #         quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
+    #         total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
+    #     )
+    #     .reset_index()
+    #     .sort_values("total_vendido", ascending=False)
+    # )
+    # tabela["ticket_medio"] = tabela["total_vendido"] / tabela["quantidade"]
+    # tabela["ticket_medio"] = tabela["ticket_medio"].apply(formatar_reais)
+    # tabela["total_vendido"] = tabela["total_vendido"].apply(formatar_reais)
+
+    # st.subheader("Vendas por Unidade")
+    # st.dataframe(tabela, use_container_width=True)
 
     # Gráfico de pedidos por unidade e categoria
     st.subheader("Gráfico de Pedidos por Unidade e Categoria")
