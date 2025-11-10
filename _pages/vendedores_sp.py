@@ -21,7 +21,7 @@ def run_page():
         st.stop()
     
     # Verificação se as colunas essenciais existem
-    colunas_essenciais = ["empresa", "data_pagamento", "status", "vendedor"]
+    colunas_essenciais = ["empresa", "data_pagamento", "status", "dono"]
     colunas_faltando = [col for col in colunas_essenciais if col not in df.columns]
     
     if colunas_faltando:
@@ -117,21 +117,21 @@ def run_page():
             unidade_selecionada = []
 
     # Filtro para Vendedor
-    st.sidebar.subheader("Filtro de Vendedor")
-    vendedores_disponiveis = sorted(df_filtrado_data["vendedor"].dropna().unique().tolist())
-    
-    # Remove "Indefinido" da lista de vendedores padrão se existir
-    vendedores_default = [v for v in vendedores_disponiveis if v != "Indefinido"]
-    
-    if vendedores_disponiveis:
-        vendedor_selecionado = st.sidebar.multiselect(
-            "Selecione o(s) vendedor(es):",
-            options=vendedores_disponiveis,
-            default=vendedores_default
+    st.sidebar.subheader("Filtro de Dono")
+    donos_disponiveis = sorted(df_filtrado_data["dono"].dropna().unique().tolist())
+
+    # Remove "Indefinido" da lista de donos padrão se existir
+    donos_default = [v for v in donos_disponiveis if v != "Indefinido"]
+
+    if donos_disponiveis:
+        dono_selecionado = st.sidebar.multiselect(
+            "Selecione o(s) dono(s):",
+            options=donos_disponiveis,
+            default=donos_default
         )
     else:
-        st.sidebar.warning("Nenhum vendedor disponível para os filtros selecionados.")
-        vendedor_selecionado = []
+        st.sidebar.warning("Nenhum dono disponível para os filtros selecionados.")
+        dono_selecionado = []
 
     # Aplica filtros finais
     filtros = (df["empresa"] == empresa_selecionada)
@@ -140,9 +140,9 @@ def run_page():
     if unidade_selecionada:
         filtros = filtros & (df["unidade"].isin(unidade_selecionada))
 
-    # Adiciona filtro de vendedor
-    if vendedor_selecionado:
-        filtros = filtros & (df["vendedor"].isin(vendedor_selecionado))
+    # Adiciona filtro de dono
+    if dono_selecionado:
+        filtros = filtros & (df["dono"].isin(dono_selecionado))
 
     # Adiciona outros filtros
     if categoria_selecionada:
@@ -167,9 +167,9 @@ def run_page():
         st.warning("Nenhum dado encontrado para os filtros selecionados.")
         st.stop()
 
-    # Tabela de resumo por vendedor
-    tabela_vendedores = (
-        df_filtrado.groupby("vendedor")
+    # Tabela de resumo por dono
+    tabela_donos = (
+        df_filtrado.groupby("dono")
         .agg(
             quantidade=pd.NamedAgg(column="ordem_id", aggfunc="count"),
             total_vendido=pd.NamedAgg(column="total_pedido", aggfunc="sum")
@@ -177,14 +177,14 @@ def run_page():
         .reset_index()
         .sort_values("total_vendido", ascending=False)
     )
-    tabela_vendedores["ticket_medio"] = tabela_vendedores["total_vendido"] / tabela_vendedores["quantidade"]
-    
+    tabela_donos["ticket_medio"] = tabela_donos["total_vendido"] / tabela_donos["quantidade"]
+
     # Tabela de resumo geral
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total de Pedidos", df_filtrado.shape[0])
     with col2:
-        st.metric("Total de Vendedores", len(tabela_vendedores))
+        st.metric("Total de Donos", len(tabela_donos))
     with col3:
         st.metric("Total Vendas", formatar_reais(df_filtrado["total_pedido"].sum()))
     with col4:
@@ -192,96 +192,96 @@ def run_page():
         st.metric("Ticket Médio Geral", formatar_reais(ticket_medio_geral))
 
     # ===========================================================================
-    # GRÁFICO DE BARRAS: Vendedor por Total Pedido / Quantidade
+    # GRÁFICO DE BARRAS: Dono por Total Pedido / Quantidade
     # ===========================================================================
-    st.subheader("📊 Vendedores por Faturamento")
-    
+    st.subheader("📊 Donos por Faturamento")
+
     # Prepara dados para o gráfico de barras
-    vendedores_barras = tabela_vendedores.copy()
-    vendedores_barras["valor_formatado"] = vendedores_barras["total_vendido"].apply(formatar_reais)
-    vendedores_barras["texto_combinado"] = vendedores_barras.apply(
+    donos_barras = tabela_donos.copy()
+    donos_barras["valor_formatado"] = donos_barras["total_vendido"].apply(formatar_reais)
+    donos_barras["texto_combinado"] = donos_barras.apply(
         lambda row: f"{row['valor_formatado']} / {int(row['quantidade'])}", axis=1
     )
     
     fig_barras = px.bar(
-        vendedores_barras,
-        y="vendedor",
+        donos_barras,
+        y="dono",
         x="total_vendido",
         text="texto_combinado",
-        title="Faturamento por Vendedor (Valor / Quantidade)",
-        labels={"vendedor": "Vendedor", "total_vendido": "Valor Total (R$)"},
+        title="Faturamento por Dono (Valor / Quantidade)",
+        labels={"dono": "Dono", "total_vendido": "Valor Total (R$)"},
         color="total_vendido",
         color_continuous_scale="Viridis",
         orientation="h"
     )
     fig_barras.update_layout(
         yaxis={'categoryorder': 'total ascending'},
-        yaxis_title="Vendedor",
+        yaxis_title="Dono",
         xaxis_title="Valor Total (R$)"
     )
     st.plotly_chart(fig_barras, use_container_width=True)
 
     # ===========================================================================
-    # GRÁFICO DE PIZZA: Vendedor por Total Pedido
+    # GRÁFICO DE PIZZA: Dono por Total Pedido
     # ===========================================================================
-    st.subheader("🥧 Distribuição de Vendas por Vendedor")
-    
-    # Se houver muitos vendedores, mostra apenas os top 10 e agrupa o resto
-    vendedores_pizza = tabela_vendedores.copy()
-    if len(vendedores_pizza) > 10:
-        top_10 = vendedores_pizza.head(10)
-        outros_valor = vendedores_pizza.iloc[10:]["total_vendido"].sum()
+    st.subheader("🥧 Distribuição de Vendas por Dono")
+
+    # Se houver muitos donos, mostra apenas os top 10 e agrupa o resto
+    donos_pizza = tabela_donos.copy()
+    if len(donos_pizza) > 10:
+        top_10 = donos_pizza.head(10)
+        outros_valor = donos_pizza.iloc[10:]["total_vendido"].sum()
         if outros_valor > 0:
             outros_row = pd.DataFrame({
-                'vendedor': ['Outros'],
+                'dono': ['Outros'],
                 'total_vendido': [outros_valor],
-                'quantidade': [vendedores_pizza.iloc[10:]["quantidade"].sum()]
+                'quantidade': [donos_pizza.iloc[10:]["quantidade"].sum()]
             })
-            vendedores_pizza = pd.concat([top_10, outros_row], ignore_index=True)
+            donos_pizza = pd.concat([top_10, outros_row], ignore_index=True)
         else:
-            vendedores_pizza = top_10
-    
+            donos_pizza = top_10
+
     fig_pizza = px.pie(
-        vendedores_pizza,
+        donos_pizza,
         values="total_vendido",
-        names="vendedor",
-        title="Distribuição do Faturamento por Vendedor",
+        names="dono",
+        title="Distribuição do Faturamento por Dono",
         color_discrete_sequence=px.colors.qualitative.Set3
     )
     fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
     st.plotly_chart(fig_pizza, use_container_width=True)
 
     # ===========================================================================
-    # GRÁFICO DE COLUNAS: Vendedor por Quantidade com Detalhamento de Categoria
+    # GRÁFICO DE COLUNAS: Dono por Quantidade com Detalhamento de Categoria
     # ===========================================================================
-    st.subheader("📈 Vendedores por Quantidade (Detalhado por Categoria)")
-    
-    # Agrupa por vendedor e categoria
-    vendedor_categoria = (
-        df_filtrado.groupby(["vendedor", "categoria"])
+    st.subheader("📈 Donos por Quantidade (Detalhado por Categoria)")
+
+    # Agrupa por dono e categoria
+    dono_categoria = (
+        df_filtrado.groupby(["dono", "categoria"])
         .size()
         .reset_index(name="quantidade")
     )
     
     fig_colunas = px.bar(
-        vendedor_categoria,
-        x="vendedor",
+        dono_categoria,
+        x="dono",
         y="quantidade",
         color="categoria",
-        title="Quantidade de Vendas por Vendedor (Detalhado por Categoria)",
-        labels={"vendedor": "Vendedor", "quantidade": "Quantidade de Vendas"},
+        title="Quantidade de Vendas por Dono (Detalhado por Categoria)",
+        labels={"dono": "Dono", "quantidade": "Quantidade de Vendas"},
         barmode="stack",
         text_auto=True
     )
     fig_colunas.update_layout(
         xaxis_tickangle=-45,
-        xaxis_title="Vendedor",
+        xaxis_title="Dono",
         yaxis_title="Quantidade de Vendas"
     )
     st.plotly_chart(fig_colunas, use_container_width=True)
 
     # ===========================================================================
-    # PLANILHA DETALHADA DOS VENDEDORES
+    # PLANILHA DETALHADA DOS DONOS
     # ===========================================================================
     st.divider()
     st.subheader("📋 Lista Detalhada de Vendas")
@@ -364,15 +364,15 @@ def run_page():
     # TABELA RESUMO DE PERFORMANCE DOS VENDEDORES
     # ===========================================================================
     st.divider()
-    st.subheader("🏆 Ranking de Performance dos Vendedores")
-    
-    # Formata a tabela de vendedores para exibição
-    tabela_performance = tabela_vendedores.copy()
+    st.subheader("🏆 Ranking de Performance dos Donos")
+
+    # Formata a tabela de donos para exibição
+    tabela_performance = tabela_donos.copy()
     tabela_performance["total_vendido_fmt"] = tabela_performance["total_vendido"].apply(formatar_reais)
     tabela_performance["ticket_medio_fmt"] = tabela_performance["ticket_medio"].apply(formatar_reais)
     
     # Reorganiza as colunas para melhor visualização
-    tabela_performance = tabela_performance[["vendedor", "quantidade", "total_vendido_fmt", "ticket_medio_fmt"]]
-    tabela_performance.columns = ["Vendedor", "Qtd. Vendas", "Total Vendido", "Ticket Médio"]
+    tabela_performance = tabela_performance[["dono", "quantidade", "total_vendido_fmt", "ticket_medio_fmt"]]
+    tabela_performance.columns = ["Dono", "Qtd. Vendas", "Total Vendido", "Ticket Médio"]
     
     st.dataframe(tabela_performance, use_container_width=True, hide_index=True)
