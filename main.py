@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead'
     ]
     
     for module_name in modules:
@@ -50,6 +50,7 @@ PAGES = {
     "Oportunidades": oportunidades,
     "Tendências": tendencias,
     "Relatório de Desempenho Mensal": analise_mensal,
+    "Análise EAD": analise_ead,
     "Financeiro": financeiro,
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
