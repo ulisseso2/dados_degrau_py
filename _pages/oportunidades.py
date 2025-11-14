@@ -514,6 +514,34 @@ def run_page():
     else:
         st.warning("Nenhum dado encontrado para a combinação de filtros selecionada.")
 
+    # --- 4. TABELA DETALHADA DE OPORTUNIDADES ---
+    st.subheader("Tabela Detalhada de Oportunidades")
+
+    if not df_filtrado.empty:
+        tabela_oportunidades_lista = df_filtrado[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'campanha', 'name', 'email', 'telefone']].copy()
+        
+        # Remover informações de fuso horário das colunas de data e hora
+        if not df_filtrado.empty:
+            for col in tabela_oportunidades_lista.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
+                tabela_oportunidades_lista[col] = tabela_oportunidades_lista[col].dt.tz_localize(None)
+
+        st.dataframe(tabela_oportunidades_lista, use_container_width=True)
+    else:
+        st.info("Nenhum dado disponível para os filtros aplicados.")
+    #botão de download lista de oportunidades
+    if not df_filtrado.empty:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            tabela_oportunidades_lista.to_excel(writer, index=False, sheet_name='Oportunidades_Detalhadas')
+        buffer.seek(0)
+        
+        st.download_button(
+            label="📥 Baixar Lista Detalhada de Oportunidades",
+            data=buffer,
+            file_name="lista_detalhada_oportunidades.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
     # ==============================================================================
     # SEÇÃO DE VALIDAÇÃO - COMPARAÇÃO ENTRE CAMPOS ORIGINAIS E TRATADOS
     # ==============================================================================
