@@ -30,8 +30,8 @@ def run_page():
     st.sidebar.header("Filtros da Análise")
 
     # Filtro de Empresa
+    empresas_list = df["empresa"].dropna().unique().tolist()
     empresa_selecionada = "Central"
-
     df_para_opcoes = df[df["empresa"] == empresa_selecionada]
 
     # Pega a data de "hoje" já com o fuso horário correto
@@ -397,16 +397,24 @@ def run_page():
         # --- Filtro de Data de Vencimento com Mês Atual como Padrão ---
         with col_filtro1:
             hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-            data_min_venc = df_apagar['data_vencimento_parcela'].min().date()
-            data_max_venc = df_apagar['data_vencimento_parcela'].max().date()
+            data_min_venc = df_apagar['data_vencimento_parcela'].min().date() if not df_apagar.empty else hoje_aware
+            data_max_venc = df_apagar['data_vencimento_parcela'].max().date() if not df_apagar.empty else hoje_aware
 
             primeiro_dia_mes_atual = hoje_aware.replace(day=1)
             ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+            
+            # Garante que data_inicio esteja dentro do range válido
+            data_inicio_padrao = max(primeiro_dia_mes_atual, data_min_venc)
+            # Garante que data_fim esteja dentro do range válido
             data_fim_padrao = min(ultimo_dia_mes_atual_ts.date(), data_max_venc)
+            # Se data_inicio for maior que data_fim, ajusta para o mínimo
+            if data_inicio_padrao > data_fim_padrao:
+                data_inicio_padrao = data_min_venc
+                data_fim_padrao = data_max_venc
             
             periodo_vencimento = st.date_input(
                 "Período de Vencimento:",
-                value=[primeiro_dia_mes_atual, data_fim_padrao],
+                value=[data_inicio_padrao, data_fim_padrao],
                 min_value=data_min_venc, max_value=data_max_venc,
                 key="filtro_vencimento_apagar"
             )
