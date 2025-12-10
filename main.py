@@ -9,7 +9,7 @@ st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 # Importa os módulos de cada página da aplicação com tratamento de erro
 try:
     from _pages import (
-        oportunidades, financeiro, tendencias, cancelamentos, matriculas, 
+        oportunidades, financeiro, financeiro_sp, tendencias, cancelamentos, matriculas, 
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
@@ -24,7 +24,7 @@ except ImportError as e:
     import sys
     
     modules = [
-        'oportunidades', 'financeiro', 'tendencias', 'cancelamentos', 'matriculas',
+        'oportunidades', 'financeiro', 'financeiro_sp', 'tendencias', 'cancelamentos', 'matriculas',
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
@@ -52,6 +52,7 @@ PAGES = {
     "Relatório de Desempenho Mensal": analise_mensal,
     "Análise EAD": analise_ead,
     "Financeiro": financeiro,
+    "Financeiro SP": financeiro_sp,
     "Cancelamentos": cancelamentos,
     "Matriculas": matriculas,
     "Vendedores": vendedores,

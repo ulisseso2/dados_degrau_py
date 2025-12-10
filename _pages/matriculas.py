@@ -521,7 +521,7 @@ def run_page():
     st.divider()
     st.subheader("Lista de Alunos de Cursos Online (Detalhamento por Produto)")
 
-    colunas_selecionadas_online = ["ordem_id", "produto", "cpf", "nome_cliente", "email_cliente", "celular_cliente", "metodo_pagamento", "status", "unidade", "total_pedido", "data_pagamento", "cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"
+    colunas_selecionadas_online = ["ordem_id", "produto", "cpf", "nome_cliente", "email_cliente", "celular_cliente", "metodo_pagamento", "status", "unidade", "total_pedido", "data_pagamento", "cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor", "uuid"
     ]
     
     # Cria a tabela base para cursos online

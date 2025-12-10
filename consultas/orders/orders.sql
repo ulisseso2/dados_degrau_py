@@ -1,5 +1,6 @@
 SELECT 
-    o.id AS ordem_id, 
+    o.id AS ordem_id,
+    o.uuid AS uuid,
     o.created_at AS criacao_pedido,
     o.paid_at AS data_pagamento,
     o.total AS total_pedido,

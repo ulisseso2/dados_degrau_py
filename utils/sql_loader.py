@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import streamlit as st
-from conexao.mysql_connector import conectar_mysql
+from conexao.mysql_connector import conectar_mysql, conectar_mysql_secundario
 
 def carregar_sql(caminho_arquivo):
     caminho = Path(caminho_arquivo)
@@ -31,4 +31,25 @@ def carregar_dados(caminho_sql):
             return pd.DataFrame()
     else:
         st.error("Erro ao conectar ao banco de dados.")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=600)
+def carregar_dados_secundario(caminho_sql):
+    """
+    Carrega os dados do banco secundário executando o SQL de um arquivo.
+    Usa um engine do SQLAlchemy para a conexão, como recomendado pelo pandas.
+    """
+    query = carregar_sql(caminho_sql)
+    engine = conectar_mysql_secundario()
+    if engine:
+        try:
+            # pd.read_sql lida com o engine, abrindo e fechando a conexão
+            df = pd.read_sql(query, engine)
+            return df
+        except Exception as e:
+            st.error(f"Erro ao executar a consulta no banco secundário: {e}")
+            return pd.DataFrame()
+    else:
+        st.error("Erro ao conectar ao banco de dados secundário.")
         return pd.DataFrame()

@@ -43,3 +43,44 @@ def conectar_mysql():
     except Exception as e:
         st.error(f"Erro ao criar o engine de conexão: {e}")
         return None
+
+
+def conectar_mysql_secundario():
+    """
+    Cria um engine de conexão para o banco secundário.
+    Usa a mesma estratégia híbrida (st.secrets + .env).
+    """
+    creds = {}
+    try:
+        # Tenta usar as credenciais do Streamlit Secrets (para produção)
+        creds = st.secrets["database_secundario"]
+    
+    except st.errors.StreamlitAPIException:
+        # Se falhar (estamos localmente), usa as variáveis de ambiente do .env
+        creds = {
+            "user": os.getenv("DB_SECUNDARIO_USER"),
+            "password": os.getenv("DB_SECUNDARIO_PASSWORD"),
+            "host": os.getenv("DB_SECUNDARIO_HOST"),
+            "port": os.getenv("DB_SECUNDARIO_PORT"),
+            "db_name": os.getenv("DB_SECUNDARIO_NAME")
+        }
+
+    # Verifica se as credenciais foram carregadas
+    if not all(creds.values()):
+        st.error("As credenciais do banco secundário não foram encontradas. Verifique seus Secrets ou o arquivo .env.")
+        return None
+
+    try:
+        database_url = URL.create(
+            drivername="mysql+mysqlconnector",
+            username=creds["user"], 
+            password=creds["password"], 
+            host=creds["host"],
+            port=creds["port"], 
+            database=creds["db_name"]
+        )
+        engine = create_engine(database_url)
+        return engine
+    except Exception as e:
+        st.error(f"Erro ao criar o engine de conexão secundária: {e}")
+        return None
