@@ -9,3 +9,5 @@ venv/
 *.json
 *.yaml
 google-ads.yamlgoogle-ads.yaml
+.cache/
+*.pkl

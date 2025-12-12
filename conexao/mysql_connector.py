@@ -17,7 +17,7 @@ def conectar_mysql():
         # Tenta usar as credenciais do Streamlit Secrets (para produção)
         creds = st.secrets["database"]
     
-    except st.errors.StreamlitAPIException:
+    except (st.errors.StreamlitAPIException, KeyError):
         # Se falhar (estamos localmente), usa as variáveis de ambiente do .env
         creds = {
             "user": os.getenv("DB_USER"),
@@ -55,7 +55,7 @@ def conectar_mysql_secundario():
         # Tenta usar as credenciais do Streamlit Secrets (para produção)
         creds = st.secrets["database_secundario"]
     
-    except st.errors.StreamlitAPIException:
+    except (st.errors.StreamlitAPIException, KeyError):
         # Se falhar (estamos localmente), usa as variáveis de ambiente do .env
         creds = {
             "user": os.getenv("DB_SECUNDARIO_USER"),

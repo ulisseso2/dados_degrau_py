@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys'
     ]
     
     for module_name in modules:
@@ -76,7 +76,8 @@ PAGES = {
     "Cancelamentos Niterói": niteroi_cancelamento,
     "Matriculas Centro": centro,
     "Cancelamentos Centro": centro_cancelamento,
-    "Mensagens Octadesk": octadesk
+    "Mensagens Octadesk": octadesk,
+    "Central Backup": backup_central_consys
 }
 
 def check_credentials(username, password):
