@@ -36,4 +36,5 @@ left join central3.TURMA t on m.TURMA = t.CODIGO AND m.UNIDADE = t.EMPRESA_ID
 left join central3.EMPRESA e on m.EMPRESA_ID = e.CODIGO
 left join central3.FORMA_PAGAMENTO f on m.FORMA_PAGTO_CURSO = f.FORMA_PAGAMENTO_ID
 left join central3.FORMA_PAGAMENTO_DESCRICAO fd on fd.ID = f.DESCRICAO_ID
+where m.DT_CADASTRO > "2019-01-01"
 
