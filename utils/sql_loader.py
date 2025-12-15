@@ -34,7 +34,7 @@ def carregar_dados(caminho_sql):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def carregar_dados_secundario(caminho_sql):
     """
     Carrega os dados do banco secundário executando o SQL de um arquivo.

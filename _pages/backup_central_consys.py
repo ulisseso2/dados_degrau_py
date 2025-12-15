@@ -5,49 +5,49 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pandas as pd
 import streamlit as st
 import json
-import pickle
 from datetime import datetime
 from pathlib import Path
-from utils.sql_loader import carregar_dados_secundario
 
 
-# Caminho do cache
-CACHE_DIR = Path(__file__).parent.parent / ".cache"
-CACHE_FILE = CACHE_DIR / "central_backup.pkl"
+# Diretório dos arquivos Parquet particionados
+CACHE_DIR = Path(__file__).parent.parent / "data_cache" / "central_backup"
 
 
-def carregar_dados_central():
-    """
-    Carrega dados do banco Central com cache persistente em disco.
-    Como os dados são estáticos, usa sempre o cache se existir.
-    """
-    # Cria diretório de cache se não existir
-    CACHE_DIR.mkdir(exist_ok=True)
+@st.cache_data(show_spinner=False)
+def carregar_anos_disponiveis():
+    """Lista os anos disponíveis nos arquivos Parquet"""
+    if not CACHE_DIR.exists():
+        return []
     
-    # Verifica se existe cache
-    if CACHE_FILE.exists():
-        try:
-            with open(CACHE_FILE, 'rb') as f:
-                df = pickle.load(f)
-                st.info(f"✅ Dados carregados do cache local ({len(df):,} registros)")
-                return df
-        except Exception as e:
-            st.warning(f"⚠️ Erro ao ler cache, carregando do banco: {e}")
+    arquivos = list(CACHE_DIR.glob("*.parquet"))
+    anos = sorted([int(f.stem) for f in arquivos])
+    return anos
+
+
+@st.cache_data(show_spinner=False)
+def carregar_dados_ano(ano):
+    """Carrega dados de um ano específico do arquivo Parquet"""
+    arquivo = CACHE_DIR / f"{ano}.parquet"
     
-    # Se não tem cache ou deu erro, carrega do banco
-    st.info("🔄 Carregando dados do banco (primeira vez)...")
-    df = carregar_dados_secundario("consultas/consys/central_backup.sql")
+    if not arquivo.exists():
+        return pd.DataFrame()
     
-    # Salva no cache
-    if not df.empty:
-        try:
-            with open(CACHE_FILE, 'wb') as f:
-                pickle.dump(df, f)
-            st.success(f"💾 Cache criado com sucesso! ({len(df):,} registros)")
-        except Exception as e:
-            st.warning(f"⚠️ Não foi possível salvar cache: {e}")
-    
+    df = pd.read_parquet(arquivo)
+    # Converte data de volta para datetime
+    df['data'] = pd.to_datetime(df['data'], errors='coerce')
     return df
+
+
+@st.cache_data(show_spinner=False)
+def carregar_todos_dados():
+    """Carrega todos os anos em um único DataFrame (quando necessário)"""
+    anos = carregar_anos_disponiveis()
+    
+    if not anos:
+        return pd.DataFrame()
+    
+    dfs = [carregar_dados_ano(ano) for ano in anos]
+    return pd.concat(dfs, ignore_index=True)
 
 
 def exibir_parcelas(json_parcelas):
@@ -118,29 +118,15 @@ def exibir_detalhes_matricula(row):
 def run_page():
     st.title("🎓 Consulta de Matrículas - Central Backup")
     
-    # Botão para atualizar cache apenas em ambiente local
-    is_local = Path(__file__).parent.parent / ".env"
-    if is_local.exists():
-        col_titulo1, col_titulo2 = st.columns([4, 1])
-        with col_titulo2:
-            if st.button("🔄 Atualizar Cache"):
-                if CACHE_FILE.exists():
-                    CACHE_FILE.unlink()
-                    st.success("Cache limpo! Recarregando...")
-                    st.rerun()
+    # Verifica se os arquivos existem
+    anos_disponiveis = carregar_anos_disponiveis()
     
-    # Carrega dados com cache persistente
-    df = carregar_dados_central()
-    
-    if df.empty:
-        st.error("Não foi possível carregar os dados")
+    if not anos_disponiveis:
+        st.error("❌ Cache não encontrado!")
+        st.info("Execute o script `utils/central_backup_generator.py` para gerar o cache.")
         return
     
-    # Converte data para datetime se necessário
-    if 'data' in df.columns and df['data'].dtype == 'object':
-        df['data'] = pd.to_datetime(df['data'], errors='coerce')
-    
-    st.write(f"**Total de registros:** {len(df):,}")
+    st.success(f"✅ Cache disponível: {len(anos_disponiveis)} anos ({min(anos_disponiveis)} - {max(anos_disponiveis)})")
     
     # Filtros de busca
     st.markdown("## 🔍 Filtros de Busca")
@@ -153,25 +139,31 @@ def run_page():
             ["Selecione...", "CPF", "Email", "Telefone", "Data", "Turma"]
         )
     
-    df_filtrado = df.copy()
+    df_filtrado = pd.DataFrame()
     
     if tipo_busca == "CPF":
         with col2:
             cpf_busca = st.text_input("Digite o CPF")
         if cpf_busca:
-            df_filtrado = df_filtrado[df_filtrado['cpf'].astype(str).str.contains(cpf_busca, case=False, na=False)]
+            with st.spinner("Buscando..."):
+                df = carregar_todos_dados()
+                df_filtrado = df[df['cpf'].astype(str).str.contains(cpf_busca, case=False, na=False)]
     
     elif tipo_busca == "Email":
         with col2:
             email_busca = st.text_input("Digite o Email")
         if email_busca:
-            df_filtrado = df_filtrado[df_filtrado['email'].astype(str).str.contains(email_busca, case=False, na=False)]
+            with st.spinner("Buscando..."):
+                df = carregar_todos_dados()
+                df_filtrado = df[df['email'].astype(str).str.contains(email_busca, case=False, na=False)]
     
     elif tipo_busca == "Telefone":
         with col2:
             telefone_busca = st.text_input("Digite o Telefone")
         if telefone_busca:
-            df_filtrado = df_filtrado[df_filtrado['telefone'].astype(str).str.contains(telefone_busca, case=False, na=False)]
+            with st.spinner("Buscando..."):
+                df = carregar_todos_dados()
+                df_filtrado = df[df['telefone'].astype(str).str.contains(telefone_busca, case=False, na=False)]
     
     elif tipo_busca == "Data":
         with col2:
@@ -179,18 +171,29 @@ def run_page():
         with col3:
             data_fim = st.date_input("Data Fim")
         if data_inicio and data_fim:
-            df_filtrado = df_filtrado[
-                (df_filtrado['data'] >= pd.to_datetime(data_inicio)) & 
-                (df_filtrado['data'] <= pd.to_datetime(data_fim))
-            ]
+            with st.spinner("Buscando..."):
+                # Carrega apenas os anos necessários
+                ano_inicio = data_inicio.year
+                ano_fim = data_fim.year
+                anos_necessarios = [ano for ano in anos_disponiveis if ano_inicio <= ano <= ano_fim]
+                
+                dfs = [carregar_dados_ano(ano) for ano in anos_necessarios]
+                df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+                
+                df_filtrado = df[
+                    (df['data'] >= pd.to_datetime(data_inicio)) & 
+                    (df['data'] <= pd.to_datetime(data_fim))
+                ]
     
     elif tipo_busca == "Turma":
         with col2:
-            turmas_disponiveis = sorted(df['turma'].dropna().unique())
+            df_todas = carregar_todos_dados()
+            turmas_disponiveis = sorted(df_todas['turma'].dropna().unique())
             turma_selecionada = st.selectbox("Selecione a Turma", ["Todas"] + list(turmas_disponiveis))
         
         if turma_selecionada != "Todas":
-            df_filtrado = df_filtrado[df_filtrado['turma'] == turma_selecionada]
+            with st.spinner("Buscando..."):
+                df_filtrado = df_todas[df_todas['turma'] == turma_selecionada]
     
     # Exibição dos resultados
     if tipo_busca != "Selecione...":

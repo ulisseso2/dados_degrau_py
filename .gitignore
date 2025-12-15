@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-data/
 notebooks/
 venv/
 *.json
@@ -11,3 +10,5 @@ venv/
 google-ads.yamlgoogle-ads.yaml
 .cache/
 *.pkl
+!data_cache/central_backup/*.parquet
+!data_cache/central_backup/metadata.json
