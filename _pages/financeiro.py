@@ -416,7 +416,8 @@ def run_page():
             periodo_vencimento = st.date_input(
                 "Período de Vencimento:",
                 value=[data_inicio_padrao, data_fim_padrao],
-                min_value=data_min_venc, max_value=data_max_venc,
+                min_value=data_min_venc,
+                max_value=data_max_venc,
                 key="filtro_vencimento_apagar"
             )
         
@@ -433,10 +434,14 @@ def run_page():
         # --- NOVO FILTRO: Status da Parcela ---
         with col_filtro3:
             status_list = df_apagar['status_parcela'].dropna().unique().tolist()
+            # Garante que apenas valores existentes sejam usados como padrão
+            default_status = [s for s in ["A pagar", "Aprovado"] if s in status_list]
+            if not default_status:  # Se nenhum dos valores padrão existe, usa todos
+                default_status = status_list
             status_selecionado = st.multiselect(
                 "Status da Parcela:",
                 options=sorted(status_list),
-                default=["A pagar", "Aprovado"], # Padrão: todos os status de parcelas
+                default=default_status,
                 key="filtro_status_apagar"
             )
             
