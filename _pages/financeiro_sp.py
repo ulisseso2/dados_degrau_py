@@ -388,7 +388,7 @@ def run_page():
     # O DataFrame base é o 'df_filtrado_empresa', que já respeita o filtro da sidebar.
     base_df_apagar = df_para_opcoes.copy()
 
-    df_apagar = base_df_apagar[base_df_apagar['situacao'].isin(['Em Atraso', 'A Vencer'])]
+    df_apagar = base_df_apagar[base_df_apagar['situacao'].isin(['Em Atraso', 'A Vencer', 'Pago Atrasado', 'Pago em dia'])]
 
     # --- 1. FILTROS INDEPENDENTES DENTRO DE UM EXPANDER ---
     with st.expander("Aplicar Filtros para a Análise de Contas a Pagar (Os Filtros de Previsão de Vencimento são independentes da Análise Geral)", expanded=True):
