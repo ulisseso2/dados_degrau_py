@@ -131,12 +131,12 @@ def run_page():
             # Agrupa os dados conforme sua estrutura original
             tabela_agrupada = (
                 df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
-                .agg(valor_total=("valor_corrigido", "sum"))
+                .agg(
+                    valor_total=("valor_corrigido", "sum"),
+                    data_pagamento_parcela=("data_pagamento_parcela", "max")  # Pega a data mais recente do grupo
+                )
                 .reset_index()
             )
-            
-            # Adiciona a coluna formatada
-            tabela_agrupada["valor_total_formatado"] = tabela_agrupada["valor_total"].apply(formatar_reais)
 
             # --- CONFIGURAÇÃO DA AG-GRID ---
             gb = GridOptionsBuilder.from_dataframe(tabela_agrupada)
@@ -158,7 +158,16 @@ def run_page():
             
             gb.configure_column(
                 field="descricao_pedido_compra",
-                header_name="Histórico"
+                header_name="Histórico",
+                minWidth=200
+            )
+
+            gb.configure_column(
+                field="data_pagamento_parcela",
+                header_name="Data de Pagamento",
+                type=["dateColumnFilter", "customDateTimeFormat"],
+                custom_format_string='dd/MM/yyyy',
+                minWidth=150
             )
             
             gb.configure_column(
@@ -181,7 +190,7 @@ def run_page():
             # Configurações adicionais da grid
             grid_options = gb.build()
             grid_options["autoGroupColumnDef"] = {
-                "headerName": "Grupo/Item",
+                "headerName": "Centro de Custo / Categoria",
                 "minWidth": 350,
                 "cellRenderer": "agGroupCellRenderer",
                 "cellRendererParams": {
@@ -218,6 +227,10 @@ def run_page():
         # Cria uma cópia dos dados para exportação (sem formatação)
     tabela_export = tabela_agrupada.copy()
     tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
+    
+    # Remove timezone e converte para apenas data (sem hora)
+    if 'data_pagamento_parcela' in tabela_export.columns:
+        tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
         
         # Cria buffer para o Excel
     buffer = io.BytesIO()
@@ -227,7 +240,7 @@ def run_page():
                 writer, 
                 index=False, 
                 sheet_name='Despesas Detalhadas',
-                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total"]
+                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
             )
             
             # Adiciona uma aba com totais consolidados
@@ -389,7 +402,7 @@ def run_page():
     # O DataFrame base é o 'df_filtrado_empresa', que já respeita o filtro da sidebar.
     base_df_apagar = df_para_opcoes.copy()
 
-    df_apagar = base_df_apagar[base_df_apagar['situacao'].isin(['Em Atraso', 'A Vencer'])]
+    df_apagar = base_df_apagar[base_df_apagar['situacao'].isin(['Em Atraso', 'A Vencer', 'Pago Atrasado' , 'Pago em dia'])]
 
     # --- 1. FILTROS INDEPENDENTES DENTRO DE UM EXPANDER ---
     with st.expander("Aplicar Filtros para a Análise de Contas a Pagar (Os Filtros de Previsão de Vencimento são independentes da Análise Geral)", expanded=True):
@@ -482,11 +495,13 @@ def run_page():
         valor_vencido = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'Em Atraso']['valor_corrigido'].sum()
         valor_a_vencer = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'A Vencer']['valor_corrigido'].sum()
         total_apagar = df_apagar_filtrado['valor_corrigido'].sum()
+        total_pago = df_apagar_filtrado[df_apagar_filtrado['situacao'].isin(['Pago Atrasado', 'Pago em dia'])]['valor_corrigido'].sum()
 
-        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
         kpi1.metric("Total a Pagar", formatar_reais(total_apagar))
         kpi2.metric("Valor Vencido (Em Atraso)", formatar_reais(valor_vencido))
         kpi3.metric("A Vencer no Período", formatar_reais(valor_a_vencer))
+        kpi4.metric("Pago no Período", formatar_reais(total_pago))
 
         st.divider()
         

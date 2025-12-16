@@ -130,12 +130,10 @@ def run_page():
             # Agrupa os dados conforme sua estrutura original
             tabela_agrupada = (
                 df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
-                .agg(valor_total=("valor_corrigido", "sum"))
+                .agg(valor_total=("valor_corrigido", "sum"),
+                     data_pagamento_parcela=("data_pagamento_parcela", "max"))
                 .reset_index()
             )
-            
-            # Adiciona a coluna formatada
-            tabela_agrupada["valor_total_formatado"] = tabela_agrupada["valor_total"].apply(formatar_reais)
 
             # --- CONFIGURAÇÃO DA AG-GRID ---
             gb = GridOptionsBuilder.from_dataframe(tabela_agrupada)
@@ -157,9 +155,18 @@ def run_page():
             
             gb.configure_column(
                 field="descricao_pedido_compra",
-                header_name="Histórico"
+                header_name="Histórico",
+                minWidth=200
             )
             
+            gb.configure_column(
+                field="data_pagamento_parcela",
+                header_name="Data de Pagamento",
+                type=["dateColumnFilter", "customDateTimeFormat"],
+                custom_format_string='dd/MM/yyyy',
+                minWidth=150
+            )
+
             gb.configure_column(
                 field="valor_total",
                 header_name="Valor",
@@ -180,7 +187,7 @@ def run_page():
             # Configurações adicionais da grid
             grid_options = gb.build()
             grid_options["autoGroupColumnDef"] = {
-                "headerName": "Grupo/Item",
+                "headerName": "Centro de Custo / Categoria",
                 "minWidth": 350,
                 "cellRenderer": "agGroupCellRenderer",
                 "cellRendererParams": {
@@ -217,6 +224,10 @@ def run_page():
         # Cria uma cópia dos dados para exportação (sem formatação)
     tabela_export = tabela_agrupada.copy()
     tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
+    
+    # Remove timezone e converte para apenas data (sem hora)
+    if 'data_pagamento_parcela' in tabela_export.columns:
+        tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
         
         # Cria buffer para o Excel
     buffer = io.BytesIO()
@@ -226,7 +237,7 @@ def run_page():
                 writer, 
                 index=False, 
                 sheet_name='Despesas Detalhadas',
-                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total"]
+                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
             )
             
             # Adiciona uma aba com totais consolidados
