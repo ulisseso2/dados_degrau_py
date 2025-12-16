@@ -481,11 +481,13 @@ def run_page():
         valor_vencido = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'Em Atraso']['valor_corrigido'].sum()
         valor_a_vencer = df_apagar_filtrado[df_apagar_filtrado['situacao'] == 'A Vencer']['valor_corrigido'].sum()
         total_apagar = df_apagar_filtrado['valor_corrigido'].sum()
+        total_pago = df_apagar_filtrado[df_apagar_filtrado['situacao'].isin(['Pago Atrasado', 'Pago em dia'])]['valor_corrigido'].sum()
 
-        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
         kpi1.metric("Total a Pagar", formatar_reais(total_apagar))
         kpi2.metric("Valor Vencido (Em Atraso)", formatar_reais(valor_vencido))
         kpi3.metric("A Vencer no Período", formatar_reais(valor_a_vencer))
+        kpi4.metric("Pago no Período", formatar_reais(total_pago))
 
         st.divider()
         
