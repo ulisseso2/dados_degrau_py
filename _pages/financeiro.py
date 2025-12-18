@@ -130,10 +130,9 @@ def run_page():
     if not df_filtrado.empty:
             # Agrupa os dados conforme sua estrutura original
             tabela_agrupada = (
-                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
+                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_pagamento_parcela"])
                 .agg(
                     valor_total=("valor_corrigido", "sum"),
-                    data_pagamento_parcela=("data_pagamento_parcela", "max")  # Pega a data mais recente do grupo
                 )
                 .reset_index()
             )
