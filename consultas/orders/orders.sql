@@ -11,6 +11,8 @@ SELECT
     oct.name AS tipo_cancelamento,
     ont.description AS descricao,
     ont.title AS titulo_cancelamento,
+    orf.refund_date AS data_devolucao,
+    rmc.name AS metodo_devolucao,
     p.title AS produto,
     os.name AS status,
     os.id AS status_id,
@@ -73,5 +75,8 @@ LEFT JOIN seducar.courses cu ON cu.id = t.course_id
 LEFT JOIN seducar.course_sales cs ON cs.id = cu.course_sale_id
 LEFT JOIN seducar.order_cancelation_types oct ON o.cancelation_type_id = oct.id
 LEFT JOIN seducar.order_notes ont ON o.id = ont.order_id
-where o.updated_at >= '2023-01-01'
+LEFT JOIN seducar.order_refunds orf ON o.id = orf.order_id
+LEFT JOIN seducar.return_methods rmc ON o.return_method_id = rmc.id
+
+where o.updated_at >= '2024-01-01'
 GROUP BY o.id;

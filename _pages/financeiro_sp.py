@@ -21,6 +21,7 @@ def run_page():
 
     # --- Carregamento e Preparação dos Dados ---
     df = carregar_dados("consultas/contas/contas_a_pagar.sql")
+    df2 = carregar_dados("consultas/contas/movimento_caixa.sql")
 
     # Converte para datetime, trata erros e ATRIBUI o fuso horário correto
     df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
@@ -531,3 +532,391 @@ def run_page():
         
     else:
         st.info("Não há contas a pagar para os filtros selecionados.")
+
+
+    # ==============================================================================
+    # ANÁLISE DE MOVIMENTO DE CAIXA (df2)
+    # Esta análise usa filtros independentes, respeitando apenas a seleção de EMPRESA.
+    # ==============================================================================
+    st.divider()
+    st.header("💳 Análise de Movimento de Caixa")
+    st.markdown("*Esta seção possui filtros independentes da análise principal, exceto o filtro de empresa.*")
+    
+    # Preparar dados base - apenas filtrado por empresa
+    df2['data'] = pd.to_datetime(df2['data'], errors='coerce')
+    df2['valor'] = pd.to_numeric(df2['valor'], errors='coerce')
+    
+    df_movimento_base = df2[df2["empresa"] == empresa_selecionada].copy()
+    
+    # --- FILTROS INDEPENDENTES ---
+    st.subheader("Filtros")
+    col_mov1, col_mov2, col_mov3 = st.columns(3)
+    
+    with col_mov1:
+        # Filtro de Conta Bancária
+        contas_movimento = df_movimento_base['conta_bancaria'].dropna().unique().tolist()
+        contas_movimento_selecionadas = st.multiselect(
+            "Conta Bancária:",
+            options=sorted(contas_movimento),
+            default=sorted(contas_movimento),
+            key="filtro_conta_movimento"
+        )
+    
+    with col_mov2:
+        # Filtro de Data - INDEPENDENTE
+        # Calcula hoje de forma independente
+        hoje_movimento = pd.Timestamp.now(tz=TIMEZONE).date()
+        
+        # Obtém o range de datas disponível nos dados de movimento
+        data_min_mov = df_movimento_base['data'].min().date() if not df_movimento_base['data'].isna().all() else hoje_movimento
+        data_max_mov = df_movimento_base['data'].max().date() if not df_movimento_base['data'].isna().all() else hoje_movimento
+        
+        # Calcula o padrão (mês atual), mas garante que esteja dentro do range disponível
+        primeiro_dia_mes = hoje_movimento.replace(day=1)
+        ultimo_dia_mes = (primeiro_dia_mes + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+        
+        # Ajusta o início para estar dentro do range disponível
+        data_inicio_mov_padrao = max(primeiro_dia_mes, data_min_mov)
+        # Ajusta o fim para estar dentro do range disponível
+        data_fim_mov_padrao = min(ultimo_dia_mes.date(), data_max_mov)
+        
+        # Se o início calculado for maior que o fim, usa o range completo disponível
+        if data_inicio_mov_padrao > data_fim_mov_padrao:
+            data_inicio_mov_padrao = data_min_mov
+            data_fim_mov_padrao = data_max_mov
+        
+        periodo_movimento = st.date_input(
+            "Período:",
+            value=[data_inicio_mov_padrao, data_fim_mov_padrao],
+            min_value=data_min_mov,
+            max_value=data_max_mov,
+            key="filtro_data_movimento"
+        )
+    
+    with col_mov3:
+        # Filtro de Tipo
+        tipos_movimento = df_movimento_base['tipo'].dropna().unique().tolist()
+        tipos_movimento_selecionados = st.multiselect(
+            "Tipo de Movimento:",
+            options=sorted(tipos_movimento),
+            default=sorted(tipos_movimento),
+            key="filtro_tipo_movimento"
+        )
+    
+    # Aplicar filtros
+    df_movimento_filtrado = pd.DataFrame()
+    if len(periodo_movimento) == 2:
+        data_inicio_mov = pd.Timestamp(periodo_movimento[0])
+        data_fim_mov = pd.Timestamp(periodo_movimento[1]) + pd.Timedelta(days=1)
+        
+        df_movimento_filtrado = df_movimento_base[
+            (df_movimento_base['data'] >= data_inicio_mov) &
+            (df_movimento_base['data'] < data_fim_mov) &
+            (df_movimento_base['conta_bancaria'].isin(contas_movimento_selecionadas)) &
+            (df_movimento_base['tipo'].isin(tipos_movimento_selecionados))
+        ]
+    
+    # --- EXIBIÇÃO DOS DADOS ---
+    if not df_movimento_filtrado.empty:
+        # --- KPIs NO TOPO COM TRANSFERÊNCIAS SEPARADAS ---
+        st.subheader("Resumo do Período")
+        
+        # Calcular métricas separando transferências
+        df_entradas = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
+        df_saidas = df_movimento_filtrado[(df_movimento_filtrado['valor'] < 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
+        df_transferencias_entrada = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] == 'Transferência')]
+        df_transferencias_saida = df_movimento_filtrado[(df_movimento_filtrado['valor'] < 0) & (df_movimento_filtrado['tipo'] == 'Transferência')]
+        
+        total_entradas = df_entradas['valor'].sum()
+        total_saidas = abs(df_saidas['valor'].sum())
+        total_transf_entrada = df_transferencias_entrada['valor'].sum()
+        total_transf_saida = abs(df_transferencias_saida['valor'].sum())
+        saldo_periodo = total_entradas - total_saidas
+        
+        col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+        col_kpi1.metric("Apenas Entradas", formatar_reais(total_entradas))
+        col_kpi2.metric("Apenas Saídas", formatar_reais(total_saidas))
+        col_kpi3.metric("Transferências entre contas", formatar_reais(total_transf_entrada))
+        col_kpi4.metric("Saldo", formatar_reais(saldo_periodo))
+        
+        st.divider()
+        
+        # --- GRÁFICO DE PIZZA: Tipo x Valor ---
+        st.subheader("Distribuição por Tipo de Movimento")
+        
+        # Preparar dados para o gráfico de pizza (valores absolutos)
+        df_pizza = df_movimento_filtrado.copy()
+        df_pizza['valor_abs'] = df_pizza['valor'].abs()
+        df_tipo_valor = df_pizza.groupby('tipo')['valor_abs'].sum().reset_index()
+        
+        if not df_tipo_valor.empty:
+            fig_pizza_tipo = px.pie(
+                df_tipo_valor,
+                names='tipo',
+                values='valor_abs',
+                title='Distribuição de Valores por Tipo de Movimento',
+                hole=0.3  # Gráfico de rosca
+            )
+            fig_pizza_tipo.update_traces(
+                textinfo='percent+value',
+                texttemplate='%{percent:.1%}<br>R$ %{value:,.2f}'
+            )
+            st.plotly_chart(fig_pizza_tipo, use_container_width=True)
+        else:
+            st.info("Não há dados para exibir o gráfico de pizza.")
+        
+        st.divider()
+        
+        # --- GRÁFICO DE BARRAS EMPILHADAS: Contas x Tipo x Valor ---
+        st.subheader("Movimentação por Conta Bancária e Tipo")
+        
+        # Preparar dados para o gráfico de barras
+        df_barras = df_movimento_filtrado.copy()
+        df_barras['valor_abs'] = df_barras['valor'].abs()
+        df_conta_tipo = df_barras.groupby(['conta_bancaria', 'tipo'])['valor_abs'].sum().reset_index()
+        
+        if not df_conta_tipo.empty:
+            fig_barras = px.bar(
+                df_conta_tipo,
+                x='conta_bancaria',
+                y='valor_abs',
+                color='tipo',
+                title='Movimentação por Conta Bancária (Empilhado por Tipo)',
+                labels={'valor_abs': 'Valor (R$)', 'conta_bancaria': 'Conta Bancária', 'tipo': 'Tipo'},
+                barmode='stack',
+                text_auto='.2s'
+            )
+            fig_barras.update_layout(
+                xaxis_title="Conta Bancária",
+                yaxis_title="Valor (R$)",
+                legend_title="Tipo de Movimento"
+            )
+            st.plotly_chart(fig_barras, use_container_width=True)
+        else:
+            st.info("Não há dados para exibir o gráfico de barras.")
+        
+        st.divider()
+        
+        # --- EXTRATO DETALHADO (como extrato bancário) ---
+        st.subheader("Extrato Detalhado de Movimentações")
+        
+        # Preparar dados para o extrato
+        df_extrato = df_movimento_filtrado.copy()
+        df_extrato = df_extrato.sort_values('data')
+        
+        # Criar colunas de entrada e saída
+        df_extrato['Entrada'] = df_extrato['valor'].apply(lambda x: x if x > 0 else None)
+        df_extrato['Saída'] = df_extrato['valor'].apply(lambda x: abs(x) if x < 0 else None)
+        
+        # Selecionar e renomear colunas para exibição
+        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'Entrada', 'Saída']].copy()
+        
+        # Calcular totais ANTES de formatar (valores numéricos)
+        total_entradas_extrato = extrato_display['Entrada'].sum()
+        total_saidas_extrato = extrato_display['Saída'].sum()
+        
+        # Formatar data
+        extrato_display['data'] = extrato_display['data'].dt.strftime('%d/%m/%Y')
+        
+        # Formatar valores monetários
+        extrato_display['Entrada'] = extrato_display['Entrada'].apply(lambda x: formatar_reais(x) if pd.notna(x) else '-')
+        extrato_display['Saída'] = extrato_display['Saída'].apply(lambda x: formatar_reais(x) if pd.notna(x) else '-')
+        
+        # Renomear colunas
+        extrato_display.rename(columns={
+            'data': 'Data',
+            'tipo': 'Tipo',
+            'descricao': 'Descrição',
+            'fornecedor': 'Fornecedor',
+            'conta_bancaria': 'Conta Bancária'
+        }, inplace=True)
+        
+        # Exibir tabela com linha de totais
+        # Adicionar linha de totais (usando os totais calculados anteriormente)
+        linha_total = pd.DataFrame([{
+            'Data': 'TOTAL',
+            'Tipo': '',
+            'Descrição': '',
+            'Fornecedor': '',
+            'Conta Bancária': '',
+            'Entrada': formatar_reais(total_entradas_extrato),
+            'Saída': formatar_reais(total_saidas_extrato)
+        }])
+        
+        extrato_com_total = pd.concat([extrato_display, linha_total], ignore_index=True)
+        st.dataframe(extrato_com_total, use_container_width=True, hide_index=True)
+        
+        # Exportar extrato
+        st.divider()
+        
+        # Calcular métricas para o PDF
+        df_entradas_pdf = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
+        df_saidas_pdf = df_movimento_filtrado[(df_movimento_filtrado['valor'] < 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
+        df_transferencias_entrada_pdf = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] == 'Transferência')]
+        df_transferencias_saida_pdf = df_movimento_filtrado[(df_movimento_filtrado['valor'] < 0) & (df_movimento_filtrado['tipo'] == 'Transferência')]
+        
+        total_entradas_pdf = df_entradas_pdf['valor'].sum()
+        total_saidas_pdf = abs(df_saidas_pdf['valor'].sum())
+        total_transf_entrada_pdf = df_transferencias_entrada_pdf['valor'].sum()
+        total_transf_saida_pdf = abs(df_transferencias_saida_pdf['valor'].sum())
+        saldo_periodo_pdf = total_entradas_pdf - total_saidas_pdf
+        
+        col_export1, col_export2 = st.columns(2)
+        
+        with col_export1:
+            # Exportar Excel
+            buffer_movimento = io.BytesIO()
+            with ExcelWriter(buffer_movimento, engine='xlsxwriter') as writer:
+                # Exportar extrato detalhado
+                df_extrato_export = df_movimento_filtrado[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'valor']].copy()
+                df_extrato_export['data'] = df_extrato_export['data'].dt.date
+                df_extrato_export = df_extrato_export.sort_values('data')
+                
+                # Criar colunas de entrada e saída para o Excel
+                df_extrato_export['Entrada'] = df_extrato_export['valor'].apply(lambda x: x if x > 0 else None)
+                df_extrato_export['Saída'] = df_extrato_export['valor'].apply(lambda x: abs(x) if x < 0 else None)
+                df_extrato_export = df_extrato_export.drop('valor', axis=1)
+                
+                df_extrato_export.to_excel(writer, index=False, sheet_name='Extrato Detalhado')
+            
+            buffer_movimento.seek(0)
+            st.download_button(
+                label="📥 Exportar Excel",
+                data=buffer_movimento,
+                file_name=f"extrato_movimento_{periodo_movimento[0].strftime('%Y%m%d')}_{periodo_movimento[1].strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_movimento_excel"
+            )
+        
+        with col_export2:
+            # Exportar PDF
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+            
+            buffer_pdf = io.BytesIO()
+            
+            # Criar documento PDF em paisagem
+            doc = SimpleDocTemplate(buffer_pdf, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Estilo para cabeçalho
+            style_header = ParagraphStyle(
+                'CustomHeader',
+                parent=styles['Heading1'],
+                fontSize=14,
+                textColor=colors.HexColor('#1f77b4'),
+                alignment=TA_CENTER,
+                spaceAfter=12
+            )
+            
+            style_info = ParagraphStyle(
+                'CustomInfo',
+                parent=styles['Normal'],
+                fontSize=9,
+                alignment=TA_LEFT,
+                spaceAfter=6
+            )
+            
+            # Cabeçalho do PDF
+            elements.append(Paragraph("EXTRATO DE MOVIMENTAÇÕES BANCÁRIAS", style_header))
+            elements.append(Spacer(1, 0.3*cm))
+            
+            # Informações do filtro
+            periodo_str = f"{periodo_movimento[0].strftime('%d/%m/%Y')} a {periodo_movimento[1].strftime('%d/%m/%Y')}"
+            contas_str = ", ".join(contas_movimento_selecionadas) if len(contas_movimento_selecionadas) <= 3 else f"{len(contas_movimento_selecionadas)} contas selecionadas"
+            
+            elements.append(Paragraph(f"<b>Período:</b> {periodo_str}", style_info))
+            elements.append(Paragraph(f"<b>Conta(s):</b> {contas_str}", style_info))
+            elements.append(Spacer(1, 0.3*cm))
+            
+            # Resumo dos movimentos
+            elements.append(Paragraph("<b>RESUMO DOS MOVIMENTOS</b>", style_info))
+            resumo_data = [
+                ['Entradas', 'Saídas', 'Transf. Entrada', 'Transf. Saída', 'Saldo'],
+                [formatar_reais(total_entradas_pdf), formatar_reais(total_saidas_pdf), 
+                 formatar_reais(total_transf_entrada_pdf), formatar_reais(total_transf_saida_pdf), 
+                 formatar_reais(saldo_periodo_pdf)]
+            ]
+            
+            resumo_table = Table(resumo_data, colWidths=[4*cm, 4*cm, 4*cm, 4*cm, 4*cm])
+            resumo_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+            ]))
+            elements.append(resumo_table)
+            elements.append(Spacer(1, 0.5*cm))
+            
+            # Tabela de movimentações
+            elements.append(Paragraph("<b>MOVIMENTAÇÕES DETALHADAS</b>", style_info))
+            elements.append(Spacer(1, 0.2*cm))
+            
+            # Preparar dados da tabela
+            table_data = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Conta', 'Entrada', 'Saída']]
+            
+            for _, row in extrato_com_total.iterrows():
+                # Pular a linha de total pois será adicionada separadamente
+                if row['Data'] == 'TOTAL':
+                    continue
+                    
+                table_data.append([
+                    row['Data'],
+                    row['Tipo'][:15] if pd.notna(row['Tipo']) and row['Tipo'] != '' else '',
+                    row['Descrição'][:30] if pd.notna(row['Descrição']) and row['Descrição'] != '' else '',
+                    row['Fornecedor'][:20] if pd.notna(row['Fornecedor']) and row['Fornecedor'] != '' else '',
+                    row['Conta Bancária'][:15] if pd.notna(row['Conta Bancária']) and row['Conta Bancária'] != '' else '',
+                    row['Entrada'] if row['Entrada'] != '-' else '-',
+                    row['Saída'] if row['Saída'] != '-' else '-'
+                ])
+            
+            # Adicionar linha de totais (já formatados na tabela)
+            linha_total_pdf = extrato_com_total[extrato_com_total['Data'] == 'TOTAL'].iloc[0]
+            table_data.append(['TOTAL', '', '', '', '', linha_total_pdf['Entrada'], linha_total_pdf['Saída']])
+            
+            # Criar tabela
+            col_widths = [2*cm, 2.5*cm, 5*cm, 4*cm, 3*cm, 2.5*cm, 2.5*cm]
+            table = Table(table_data, colWidths=col_widths)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (5, 0), (6, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 7),
+                ('FONTSIZE', (0, 1), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+                ('TOPPADDING', (0, 0), (-1, 0), 6),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.lightgrey]),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffeb99')),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ]))
+            elements.append(table)
+            
+            # Gerar PDF
+            doc.build(elements)
+            buffer_pdf.seek(0)
+            
+            st.download_button(
+                label="📄 Exportar PDF",
+                data=buffer_pdf,
+                file_name=f"extrato_movimento_{periodo_movimento[0].strftime('%Y%m%d')}_{periodo_movimento[1].strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                key="download_movimento_pdf"
+            )
+
+        
+    else:
+        st.info("Não há dados de movimento para os filtros selecionados.")
+

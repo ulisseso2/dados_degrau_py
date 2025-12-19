@@ -73,26 +73,20 @@ def run_page():
         default=opcoes_ordenadas
     )
 
-    st.sidebar.subheader("Filtro de Turno")
-    turnos_disponiveis = df_filtrado_empresa['turno'].dropna().unique().tolist()
-    placeholder_turno_nulo = "Sem Turno"
-
-    opcoes_turno = sorted(turnos_disponiveis)
-    if df_filtrado_empresa['turno'].isna().any():
-        opcoes_turno = [placeholder_turno_nulo] + opcoes_turno
-
-    turno_selecionado = st.sidebar.multiselect(
-        "Selecione o(s) turno(s):",
-        options=opcoes_turno,
-        default=opcoes_turno
+    st.sidebar.subheader("Filtro de Método de Devolução")
+    metodos_devolucao_disponiveis = df_filtrado_empresa['metodo_devolucao'].dropna().unique().tolist()
+    metodo_devolucao_selecionado = st.sidebar.multiselect(
+        "Selecione o(s) método(s) de devolução:",
+        options=sorted(metodos_devolucao_disponiveis),
+        default=sorted(metodos_devolucao_disponiveis)
     )
 
-    st.sidebar.subheader("Filtro de Curso Venda")
-    cursos_venda_disponiveis = df_filtrado_empresa['curso_venda'].dropna().unique().tolist()
-    curso_venda_selecionado = st.sidebar.multiselect(
-        "Selecione o(s) curso(s) de venda:",
-        options=sorted(cursos_venda_disponiveis),
-        default=sorted(cursos_venda_disponiveis)
+    st.sidebar.subheader("Filtro de Status")
+    status_disponiveis = df_filtrado_empresa['status'].dropna().unique().tolist()
+    status_selecionado = st.sidebar.multiselect(
+        "Selecione o(s) status:",
+        options=sorted(status_disponiveis),
+        default=["Cancelado", "Em cancelamento"]
     )
 
     # Filtros adicionais recolhidos
@@ -108,22 +102,13 @@ def run_page():
     def formatar_reais(valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     
-    turnos_reais_selecionados = [t for t in turno_selecionado if t != placeholder_turno_nulo]
-    if placeholder_turno_nulo in turno_selecionado:
-        # Se "Sem Turno" estiver selecionado, inclui registros com turno null
-        mascara_turno = df['turno'].isin(turnos_reais_selecionados) | df['turno'].isna()
-    else:
-        # Caso contrário, inclui apenas os turnos específicos selecionados
-        mascara_turno = df['turno'].isin(turnos_reais_selecionados)
-    
-
     df_filtrado = df[
         (df["empresa"] == empresa_selecionada) &
         (df["unidade"].isin(unidade_selecionada)) &
         (df['categoria'].str.contains('|'.join(categoria_selecionada), na=False)) &
         (df['tipo_cancelamento'].isin(tipo_selecionado)) &
-        mascara_turno &  # Usando a máscara em vez do .isin() direto
-        (df['curso_venda'].isin(curso_venda_selecionado)) &
+        (df['metodo_devolucao'].isin(metodo_devolucao_selecionado)) &
+        (df['status'].isin(status_selecionado)) &
         (df["data_referencia"] >= data_inicio_aware) &
         (df["data_referencia"] < data_fim_aware) &
         (df["status_id"].isin([3, 15])) &
@@ -363,15 +348,21 @@ def run_page():
         st.info("Não há dados de cancelamento para exibir com os filtros atuais.")
 
     # Tabela detalhada de Cancelamento
-    tabela2 = df_filtrado[[
-        "ordem_id","unidade","turma","turno","cpf","nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "tipo_cancelamento", "vendedor" 
-    ]]
-    tabela_alunos = tabela2.copy()
-    tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)
-    tabela_alunos["data_pagamento"] = pd.to_datetime(tabela_alunos["data_pagamento"]).dt.strftime('%d/%m/%Y')
-    tabela_alunos["solicitacao_cancelamento"] = pd.to_datetime(tabela_alunos["solicitacao_cancelamento"], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
 
     st.subheader("Lista de Cancelamentos Detalhada")
+    
+
+    if not df_filtrado.empty:
+        tabela2 = df_filtrado[[
+            "ordem_id","unidade","turma","turno","cpf","nome_cliente", "email_cliente", "status", "curso_venda", "total_pedido", "data_pagamento", "solicitacao_cancelamento", "estorno_cancelamento", "data_devolucao", "metodo_devolucao",  "tipo_cancelamento", "vendedor" 
+        ]]
+        tabela_alunos = tabela2.copy()
+        tabela_alunos["estorno_cancelamento"] = tabela_alunos["estorno_cancelamento"].apply(formatar_reais)
+        tabela_alunos["data_pagamento"] = pd.to_datetime(tabela_alunos["data_pagamento"]).dt.strftime('%d/%m/%Y')
+        tabela_alunos["solicitacao_cancelamento"] = pd.to_datetime(tabela_alunos["solicitacao_cancelamento"], format='%d/%m/%Y').dt.strftime('%d/%m/%Y')
+    tabela_alunos["data_devolucao"] = pd.to_datetime(tabela_alunos["data_devolucao"]).dt.strftime('%d/%m/%Y')
+
+    
     st.dataframe(tabela_alunos, use_container_width=True)
 
     # Exportar como Excel
