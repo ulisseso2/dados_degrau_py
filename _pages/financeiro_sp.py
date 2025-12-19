@@ -22,6 +22,7 @@ def run_page():
     # --- Carregamento e Preparação dos Dados ---
     df = carregar_dados("consultas/contas/contas_a_pagar.sql")
     df2 = carregar_dados("consultas/contas/movimento_caixa.sql")
+    df3 = carregar_dados("consultas/contas/contas_bancarias.sql")
 
     # Converte para datetime, trata erros e ATRIBUI o fuso horário correto
     df['data_pagamento_parcela'] = pd.to_datetime(df['data_pagamento_parcela'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
@@ -542,6 +543,32 @@ def run_page():
     st.header("💳 Análise de Movimento de Caixa")
     st.markdown("*Esta seção possui filtros independentes da análise principal, exceto o filtro de empresa.*")
     
+    # --- SALDOS ATUAIS DAS CONTAS BANCÁRIAS (SEM FILTROS) ---
+    st.subheader("💰 Saldos Atuais das Contas Bancárias")
+    
+    # Filtrar apenas pela empresa selecionada
+    df_saldos = df3[df3['empresa'] == empresa_selecionada].copy()
+    
+    if not df_saldos.empty:
+        # Formatar valores para exibição
+        df_saldos_display = df_saldos[['conta_bancaria', 'saldo_atual']].copy()
+        df_saldos_display['saldo_atual'] = df_saldos_display['saldo_atual'].apply(formatar_reais)
+        df_saldos_display.rename(columns={
+            'conta_bancaria': 'Conta Bancária',
+            'saldo_atual': 'Saldo Atual'
+        }, inplace=True)
+        
+        # Exibir tabela
+        st.dataframe(df_saldos_display, use_container_width=True, hide_index=True)
+        
+        # Mostrar total geral
+        total_saldos = df_saldos['saldo_atual'].sum()
+        st.markdown(f"**Saldo Total:** {formatar_reais(total_saldos)}")
+    else:
+        st.info("Não há informações de saldo para a empresa selecionada.")
+    
+    st.divider()
+    
     # Preparar dados base - apenas filtrado por empresa
     df2['data'] = pd.to_datetime(df2['data'], errors='coerce')
     df2['valor'] = pd.to_numeric(df2['valor'], errors='coerce')
@@ -605,7 +632,8 @@ def run_page():
     
     # Aplicar filtros
     df_movimento_filtrado = pd.DataFrame()
-    if len(periodo_movimento) == 2:
+    # Proteger o campo de data - verificar se foi selecionado um período válido
+    if len(periodo_movimento) == 2 and periodo_movimento[0] is not None and periodo_movimento[1] is not None:
         data_inicio_mov = pd.Timestamp(periodo_movimento[0])
         data_fim_mov = pd.Timestamp(periodo_movimento[1]) + pd.Timedelta(days=1)
         
@@ -615,13 +643,25 @@ def run_page():
             (df_movimento_base['conta_bancaria'].isin(contas_movimento_selecionadas)) &
             (df_movimento_base['tipo'].isin(tipos_movimento_selecionados))
         ]
+    else:
+        st.warning("⚠️ Por favor, selecione um período válido (data inicial e data final).")
     
     # --- EXIBIÇÃO DOS DADOS ---
     if not df_movimento_filtrado.empty:
         # --- KPIs NO TOPO COM TRANSFERÊNCIAS SEPARADAS ---
         st.subheader("Resumo do Período")
         
-        # Calcular métricas separando transferências
+        # Calcular saldo anterior (movimentações antes do período selecionado)
+        data_inicio_mov = pd.Timestamp(periodo_movimento[0])
+        
+        # Filtrar movimentações anteriores ao período para calcular saldo anterior
+        df_anterior = df_movimento_base[
+            (df_movimento_base['data'] < data_inicio_mov) &
+            (df_movimento_base['conta_bancaria'].isin(contas_movimento_selecionadas))
+        ]
+        saldo_anterior = df_anterior['valor'].sum()
+        
+        # Calcular métricas do período separando transferências
         df_entradas = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
         df_saidas = df_movimento_filtrado[(df_movimento_filtrado['valor'] < 0) & (df_movimento_filtrado['tipo'] != 'Transferência')]
         df_transferencias_entrada = df_movimento_filtrado[(df_movimento_filtrado['valor'] > 0) & (df_movimento_filtrado['tipo'] == 'Transferência')]
@@ -631,69 +671,28 @@ def run_page():
         total_saidas = abs(df_saidas['valor'].sum())
         total_transf_entrada = df_transferencias_entrada['valor'].sum()
         total_transf_saida = abs(df_transferencias_saida['valor'].sum())
-        saldo_periodo = total_entradas - total_saidas
+        saldo_periodo = (total_entradas + total_transf_entrada) - (total_saidas + total_transf_saida)
         
-        col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+        # Calcular saldo atual (saldo anterior + movimentações do período)
+        saldo_atual = saldo_anterior + saldo_periodo
+        
+        # Exibir KPIs de saldo em destaque
+        col_saldo1, col_saldo2, col_saldo3 = st.columns(3)
+        col_saldo1.metric("💰 Saldo Anterior", formatar_reais(saldo_anterior))
+        col_saldo2.metric("📊 Movimentação do Período", formatar_reais(saldo_periodo), 
+                         delta=formatar_reais(saldo_periodo) if saldo_periodo != 0 else None)
+        col_saldo3.metric("💵 Saldo Atual", formatar_reais(saldo_atual),
+                         delta=formatar_reais(saldo_periodo) if saldo_periodo != 0 else None)
+        
+        st.divider()
+        
+        # Exibir detalhes das movimentações
+        col_kpi1, col_kpi2 = st.columns(2)
         col_kpi1.metric("Apenas Entradas", formatar_reais(total_entradas))
         col_kpi2.metric("Apenas Saídas", formatar_reais(total_saidas))
-        col_kpi3.metric("Transferências entre contas", formatar_reais(total_transf_entrada))
-        col_kpi4.metric("Saldo", formatar_reais(saldo_periodo))
-        
-        st.divider()
-        
-        # --- GRÁFICO DE PIZZA: Tipo x Valor ---
-        st.subheader("Distribuição por Tipo de Movimento")
-        
-        # Preparar dados para o gráfico de pizza (valores absolutos)
-        df_pizza = df_movimento_filtrado.copy()
-        df_pizza['valor_abs'] = df_pizza['valor'].abs()
-        df_tipo_valor = df_pizza.groupby('tipo')['valor_abs'].sum().reset_index()
-        
-        if not df_tipo_valor.empty:
-            fig_pizza_tipo = px.pie(
-                df_tipo_valor,
-                names='tipo',
-                values='valor_abs',
-                title='Distribuição de Valores por Tipo de Movimento',
-                hole=0.3  # Gráfico de rosca
-            )
-            fig_pizza_tipo.update_traces(
-                textinfo='percent+value',
-                texttemplate='%{percent:.1%}<br>R$ %{value:,.2f}'
-            )
-            st.plotly_chart(fig_pizza_tipo, use_container_width=True)
-        else:
-            st.info("Não há dados para exibir o gráfico de pizza.")
-        
-        st.divider()
-        
-        # --- GRÁFICO DE BARRAS EMPILHADAS: Contas x Tipo x Valor ---
-        st.subheader("Movimentação por Conta Bancária e Tipo")
-        
-        # Preparar dados para o gráfico de barras
-        df_barras = df_movimento_filtrado.copy()
-        df_barras['valor_abs'] = df_barras['valor'].abs()
-        df_conta_tipo = df_barras.groupby(['conta_bancaria', 'tipo'])['valor_abs'].sum().reset_index()
-        
-        if not df_conta_tipo.empty:
-            fig_barras = px.bar(
-                df_conta_tipo,
-                x='conta_bancaria',
-                y='valor_abs',
-                color='tipo',
-                title='Movimentação por Conta Bancária (Empilhado por Tipo)',
-                labels={'valor_abs': 'Valor (R$)', 'conta_bancaria': 'Conta Bancária', 'tipo': 'Tipo'},
-                barmode='stack',
-                text_auto='.2s'
-            )
-            fig_barras.update_layout(
-                xaxis_title="Conta Bancária",
-                yaxis_title="Valor (R$)",
-                legend_title="Tipo de Movimento"
-            )
-            st.plotly_chart(fig_barras, use_container_width=True)
-        else:
-            st.info("Não há dados para exibir o gráfico de barras.")
+        col_kpi3, col_kpi4 = st.columns(2)
+        col_kpi3.metric("Transferências entradas", formatar_reais(total_transf_entrada))
+        col_kpi4.metric("Transferências saídas", formatar_reais(total_transf_saida))
         
         st.divider()
         
@@ -919,4 +918,62 @@ def run_page():
         
     else:
         st.info("Não há dados de movimento para os filtros selecionados.")
+
+    # --- GRÁFICO DE PIZZA: Tipo x Valor ---
+    # Só mostrar gráficos se houver dados filtrados
+    if not df_movimento_filtrado.empty:
+        st.subheader("Distribuição por Tipo de Movimento")
+        
+        # Preparar dados para o gráfico de pizza (valores absolutos)
+        df_pizza = df_movimento_filtrado.copy()
+        df_pizza['valor_abs'] = df_pizza['valor'].abs()
+        df_tipo_valor = df_pizza.groupby('tipo')['valor_abs'].sum().reset_index()
+        
+        if not df_tipo_valor.empty:
+            fig_pizza_tipo = px.pie(
+                df_tipo_valor,
+                names='tipo',
+                values='valor_abs',
+                title='Distribuição de Valores por Tipo de Movimento',
+                hole=0.3  # Gráfico de rosca
+            )
+            fig_pizza_tipo.update_traces(
+                textinfo='percent+value',
+                texttemplate='%{percent:.1%}<br>R$ %{value:,.2f}'
+            )
+            st.plotly_chart(fig_pizza_tipo, use_container_width=True)
+        else:
+            st.info("Não há dados para exibir o gráfico de pizza.")
+        
+        st.divider()
+        
+        # --- GRÁFICO DE BARRAS EMPILHADAS: Contas x Tipo x Valor ---
+        st.subheader("Movimentação por Conta Bancária e Tipo")
+        
+        # Preparar dados para o gráfico de barras
+        df_barras = df_movimento_filtrado.copy()
+        df_barras['valor_abs'] = df_barras['valor'].abs()
+        df_conta_tipo = df_barras.groupby(['conta_bancaria', 'tipo'])['valor_abs'].sum().reset_index()
+        
+        if not df_conta_tipo.empty:
+            fig_barras = px.bar(
+                df_conta_tipo,
+                x='conta_bancaria',
+                y='valor_abs',
+                color='tipo',
+                title='Movimentação por Conta Bancária (Empilhado por Tipo)',
+                labels={'valor_abs': 'Valor (R$)', 'conta_bancaria': 'Conta Bancária', 'tipo': 'Tipo'},
+                barmode='stack',
+                text_auto='.2s'
+            )
+            fig_barras.update_layout(
+                xaxis_title="Conta Bancária",
+                yaxis_title="Valor (R$)",
+                legend_title="Tipo de Movimento"
+            )
+            st.plotly_chart(fig_barras, use_container_width=True)
+        else:
+            st.info("Não há dados para exibir o gráfico de barras.")
+        
+        st.divider()
 

@@ -13,16 +13,19 @@ INNER JOIN seducar.bank_accounts b ON cf.bank_account_id = b.id)
 UNION ALL
 
 (SELECT 
-    CAST(DATE(bl.created_at) AS CHAR) as data,
-    CAST('Transferência' AS CHAR(20)) as tipo,
+COALESCE(
+        STR_TO_DATE(REGEXP_SUBSTR(bl.description, '[0-9]{2}/[0-9]{2}/[0-9]{4}'), '%d/%m/%Y'),
+        DATE(bl.created_at)
+    ) as data,
+    CAST(CASE WHEN bl.operation_type = "transfer" THEN 'Transferência' ELSE 'Manual' END AS CHAR(20)) as tipo,
     CAST(CASE WHEN bl.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS CHAR(20)) as empresa,
     CAST(bl.amount AS DECIMAL(15,2)) as valor,
     CAST(bl.description AS CHAR(255)) as descricao,
-    CAST('Transferencia Entre Contas' AS CHAR(255)) as fornecedor,
+    CAST(CASE WHEN bl.operation_type = "transfer" THEN "Transferência entre contas" ELSE 'Ajuste manual' END AS CHAR(255)) as fornecedor,
     CAST(b2.name AS CHAR(255)) as conta_bancaria
 FROM seducar.bank_account_logs bl
 INNER JOIN seducar.bank_accounts b2 ON bl.bank_account_id = b2.id
-where bl.operation_type = 'transfer')
+where bl.operation_type in ('transfer', 'manual_adjustment'))
 
 UNION ALL
 
@@ -31,7 +34,7 @@ UNION ALL
     CAST('Pagamento' AS CHAR(20)) as tipo,
     CAST(CASE WHEN po.school_id = 1 THEN "Degral" ELSE "Central" END AS CHAR(20)) as empresa,
     CAST((poi.total_final * -1) AS DECIMAL(15,2)) as valor,
-    CAST(po.description AS CHAR(255)) as descricao,
+    CAST(CASE WHEN poi.comment is null THEN po.description ELSE poi.comment END AS CHAR(255)) as descricao,
     CAST(f.company_name as CHAR(255)) as fornecedor,
     CAST(b.name AS CHAR(255)) as conta_bancaria
 FROM seducar.purchase_order_installments poi
