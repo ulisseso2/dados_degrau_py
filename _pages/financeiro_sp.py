@@ -532,6 +532,61 @@ def run_page():
             }
         )
         
+        # --- EXPORTAÇÃO PARA EXCEL ---
+        st.divider()
+        
+        # Preparar dados para exportação
+        tabela_apagar_export = df_apagar_filtrado[[
+            'pedido_compra_id', 'parcelas_de', 'fornecedor', 'data_vencimento_parcela', 
+            'situacao', 'status_parcela', 'descricao_pedido_compra', 
+            'centro_custo', 'unidade_negocio', 'valor_corrigido'
+        ]].copy()
+        
+        # Remover timezone e converter para data
+        tabela_apagar_export['data_vencimento_parcela'] = tabela_apagar_export['data_vencimento_parcela'].dt.tz_localize(None).dt.date
+        
+        # Renomear colunas para exportação
+        tabela_apagar_export.rename(columns={
+            'pedido_compra_id': 'ID Pedido',
+            'parcelas_de': 'Parcela',
+            'data_vencimento_parcela': 'Vencimento',
+            'status_parcela': 'Status',
+            'situacao': 'Situação',
+            'descricao_pedido_compra': 'Histórico',
+            'centro_custo': 'Centro de Custo',
+            'unidade_negocio': 'Unidade de Negócio',
+            'valor_corrigido': 'Valor (R$)'
+        }, inplace=True)
+        
+        # Ordenar por vencimento
+        tabela_apagar_export = tabela_apagar_export.sort_values(by='Vencimento')
+        
+        # Criar buffer para o Excel
+        buffer_apagar = io.BytesIO()
+        with ExcelWriter(buffer_apagar, engine='xlsxwriter') as writer:
+            # Exportar tabela principal
+            tabela_apagar_export.to_excel(writer, index=False, sheet_name='Contas a Pagar')
+            
+            # Adicionar aba com resumo por situação
+            resumo_situacao = df_apagar_filtrado.groupby('situacao')['valor_corrigido'].sum().reset_index()
+            resumo_situacao.rename(columns={'situacao': 'Situação', 'valor_corrigido': 'Valor Total (R$)'}, inplace=True)
+            resumo_situacao.to_excel(writer, index=False, sheet_name='Resumo por Situação')
+            
+            # Adicionar aba com resumo por fornecedor
+            resumo_fornecedor = df_apagar_filtrado.groupby('fornecedor')['valor_corrigido'].sum().reset_index()
+            resumo_fornecedor = resumo_fornecedor.sort_values('valor_corrigido', ascending=False)
+            resumo_fornecedor.rename(columns={'fornecedor': 'Fornecedor', 'valor_corrigido': 'Valor Total (R$)'}, inplace=True)
+            resumo_fornecedor.to_excel(writer, index=False, sheet_name='Resumo por Fornecedor')
+        
+        buffer_apagar.seek(0)
+        st.download_button(
+            label="📥 Exportar Contas a Pagar para Excel",
+            data=buffer_apagar,
+            file_name=f"contas_apagar_{periodo_vencimento[0].strftime('%Y%m%d')}_{periodo_vencimento[1].strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Clique para baixar os dados em formato Excel com abas detalhadas"
+        )
+        
     else:
         st.info("Não há contas a pagar para os filtros selecionados.")
 
@@ -878,6 +933,15 @@ def run_page():
             elements.append(Paragraph("<b>MOVIMENTAÇÕES DETALHADAS</b>", style_info))
             elements.append(Spacer(1, 0.2*cm))
             
+            # Estilo para células da tabela
+            style_cell = ParagraphStyle(
+                'CellStyle',
+                parent=styles['Normal'],
+                fontSize=6,
+                leading=7,
+                wordWrap='CJK'
+            )
+            
             # Preparar dados da tabela
             table_data = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Entrada', 'Saída', 'Saldo']]
             
@@ -885,12 +949,20 @@ def run_page():
                 # Pular a linha de total pois será adicionada separadamente
                 if row['Data'] == 'TOTAL':
                     continue
+                
+                # Converter descrição em Paragraph para quebra automática
+                descricao_text = row['Descrição'] if pd.notna(row['Descrição']) and row['Descrição'] != '' else ''
+                descricao_para = Paragraph(descricao_text, style_cell)
+                
+                # Converter fornecedor em Paragraph para quebra automática
+                fornecedor_text = row['Fornecedor'] if pd.notna(row['Fornecedor']) and row['Fornecedor'] != '' else ''
+                fornecedor_para = Paragraph(fornecedor_text, style_cell)
                     
                 table_data.append([
                     row['Data'],
                     row['Tipo'][:10] if pd.notna(row['Tipo']) and row['Tipo'] != '' else '',
-                    row['Descrição'] if pd.notna(row['Descrição']) and row['Descrição'] != '' else '',  # Descrição completa
-                    row['Fornecedor'][:15] if pd.notna(row['Fornecedor']) and row['Fornecedor'] != '' else '',
+                    descricao_para,  # Usando Paragraph para quebra automática
+                    fornecedor_para,  # Usando Paragraph para quebra automática
                     row['Entrada'] if row['Entrada'] != '-' else '-',
                     row['Saída'] if row['Saída'] != '-' else '-',
                     row['Saldo'] if row['Saldo'] != '-' else '-'
@@ -918,6 +990,7 @@ def run_page():
                 ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffeb99')),
                 ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
                 ('WORDWRAP', (2, 1), (2, -1), True),  # Quebra de linha na coluna Descrição
+                ('WORDWRAP', (3, 1), (3, -1), True),  # Quebra de linha na coluna Fornecedor
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Alinhamento vertical no topo
             ]))
             elements.append(table)
