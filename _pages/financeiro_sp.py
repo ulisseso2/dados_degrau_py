@@ -39,12 +39,42 @@ def run_page():
 
     # Pega a data de "hoje" já com o fuso horário correto
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-    data_min_geral = df_para_opcoes['data_pagamento_parcela'].min().date() if not df_para_opcoes.empty else hoje_aware
-    data_max_geral = df_para_opcoes['data_pagamento_parcela'].max().date() if not df_para_opcoes.empty else hoje_aware
-    primeiro_dia_mes_atual = hoje_aware.replace(day=1)
-    ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
-    data_fim_padrao = min(ultimo_dia_mes_atual_ts.date(), data_max_geral)
-    periodo = st.sidebar.date_input("Período de Pagamento:", value=[primeiro_dia_mes_atual, data_fim_padrao], min_value=data_min_geral, max_value=data_max_geral)
+    
+    if df_para_opcoes.empty:
+        # Se não houver dados, usa um intervalo padrão
+        data_min_geral = hoje_aware
+        data_max_geral = hoje_aware
+        data_inicio_padrao = hoje_aware
+        data_fim_padrao = hoje_aware
+    else:
+        data_min_geral = df_para_opcoes['data_pagamento_parcela'].min().date()
+        data_max_geral = df_para_opcoes['data_pagamento_parcela'].max().date()
+        
+        # Calcula primeiro e último dia do mês atual
+        primeiro_dia_mes_atual = hoje_aware.replace(day=1)
+        ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+        ultimo_dia_mes_atual = ultimo_dia_mes_atual_ts.date()
+        
+        # Verifica se há dados no mês atual
+        if data_max_geral >= primeiro_dia_mes_atual:
+            # Se há dados no mês atual, usa o mês atual como padrão
+            data_inicio_padrao = max(primeiro_dia_mes_atual, data_min_geral)
+            data_fim_padrao = min(ultimo_dia_mes_atual, data_max_geral)
+        else:
+            # Se não há dados no mês atual, usa o último mês com dados
+            # Encontra o primeiro e último dia do mês da data_max_geral
+            primeiro_dia_ultimo_mes = data_max_geral.replace(day=1)
+            ultimo_dia_ultimo_mes_ts = (primeiro_dia_ultimo_mes + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+            ultimo_dia_ultimo_mes = ultimo_dia_ultimo_mes_ts.date()
+            
+            data_inicio_padrao = max(primeiro_dia_ultimo_mes, data_min_geral)
+            data_fim_padrao = min(ultimo_dia_ultimo_mes, data_max_geral)
+        
+        # Validação final: garante que início não seja posterior ao fim
+        if data_inicio_padrao > data_fim_padrao:
+            data_inicio_padrao = data_fim_padrao
+    
+    periodo = st.sidebar.date_input("Período de Pagamento:", value=[data_inicio_padrao, data_fim_padrao], min_value=data_min_geral, max_value=data_max_geral)
 
     # --- Abas para Filtros Detalhados ---
     tab_unidades, tab_contabil, tab_banco = st.sidebar.tabs(["🏢 Unidades", "🧾 Contábil", "🏦 Contas"])
@@ -102,11 +132,21 @@ def run_page():
 
     # --- Aplicação Final dos Filtros ---
     try:
+            # Valida se o período tem exatamente 2 datas
+            if len(periodo) != 2:
+                st.warning("Por favor, selecione um período com data de início e fim.")
+                st.stop()
+            
+            # Valida se as datas são válidas
+            if periodo[0] > periodo[1]:
+                st.error("A data de início deve ser anterior à data de fim.")
+                st.stop()
+            
             data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
             data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
-    except IndexError:
+    except (IndexError, TypeError, ValueError) as e:
             # Caso o usuário limpe o campo de data, evita o erro
-            st.warning("Por favor, selecione um período de datas.")
+            st.warning("Por favor, selecione um período de datas válido.")
             st.stop() # Interrompe a execução para evitar erros abaixo
 
     df_filtrado = df[
@@ -223,51 +263,54 @@ def run_page():
                 allow_unsafe_jscode=True,
                 fit_columns_on_grid_load=True
             )
-    # --- EXPORTAÇÃO PARA EXCEL ---    
-        # Cria uma cópia dos dados para exportação (sem formatação)
-    tabela_export = tabela_agrupada.copy()
-    tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
-    
-    # Remove timezone e converte para apenas data (sem hora)
-    if 'data_pagamento_parcela' in tabela_export.columns:
-        tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
-        
-        # Cria buffer para o Excel
-    buffer = io.BytesIO()
-    with ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            # Exporta a tabela principal
-            tabela_export.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Despesas Detalhadas',
-                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
-            )
             
-            # Adiciona uma aba com totais consolidados
-            totais_cc = tabela_export.groupby("centro_custo")["valor_total"].sum().reset_index()
-            totais_cc.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Totais por Centro Custo'
-            )
+            # --- EXPORTAÇÃO PARA EXCEL ---    
+            # Cria uma cópia dos dados para exportação (sem formatação)
+            tabela_export = tabela_agrupada.copy()
+            tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
             
-            # Adiciona uma aba com totais por categoria
-            totais_cat = tabela_export.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
-            totais_cat.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Totais por Categoria'
+            # Remove timezone e converte para apenas data (sem hora)
+            if 'data_pagamento_parcela' in tabela_export.columns:
+                tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
+                
+            # Cria buffer para o Excel
+            buffer = io.BytesIO()
+            with ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                # Exporta a tabela principal
+                tabela_export.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Despesas Detalhadas',
+                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
+                )
+                
+                # Adiciona uma aba com totais consolidados
+                totais_cc = tabela_export.groupby("centro_custo")["valor_total"].sum().reset_index()
+                totais_cc.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Totais por Centro Custo'
+                )
+                
+                # Adiciona uma aba com totais por categoria
+                totais_cat = tabela_export.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
+                totais_cat.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Totais por Categoria'
+                )
+            
+            # Prepara o botão de download
+            buffer.seek(0)
+            st.download_button(
+                label="📥 Exportar para Excel",
+                data=buffer,
+                file_name=f"despesas_{periodo[0].strftime('%Y%m%d')}_{periodo[1].strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Clique para baixar os dados em formato Excel com abas detalhadas"
             )
-        
-        # Prepara o botão de download
-    buffer.seek(0)
-    st.download_button(
-            label="📥 Exportar para Excel",
-            data=buffer,
-            file_name=f"despesas_{periodo[0].strftime('%Y%m%d')}_{periodo[1].strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Clique para baixar os dados em formato Excel com abas detalhadas"
-        )
+    else:
+        st.info("Nenhum dado encontrado para os filtros selecionados.")
 
     st.divider()  # Linha de separação
 

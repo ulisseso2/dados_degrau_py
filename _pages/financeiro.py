@@ -39,12 +39,42 @@ def run_page():
 
     # Pega a data de "hoje" já com o fuso horário correto
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-    data_min_geral = df_para_opcoes['data_pagamento_parcela'].min().date() if not df_para_opcoes.empty else hoje_aware
-    data_max_geral = df_para_opcoes['data_pagamento_parcela'].max().date() if not df_para_opcoes.empty else hoje_aware
-    primeiro_dia_mes_atual = hoje_aware.replace(day=1)
-    ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
-    data_fim_padrao = min(ultimo_dia_mes_atual_ts.date(), data_max_geral)
-    periodo = st.sidebar.date_input("Período de Pagamento:", value=[primeiro_dia_mes_atual, data_fim_padrao], min_value=data_min_geral, max_value=data_max_geral)
+    
+    if df_para_opcoes.empty:
+        # Se não houver dados, usa um intervalo padrão
+        data_min_geral = hoje_aware
+        data_max_geral = hoje_aware
+        data_inicio_padrao = hoje_aware
+        data_fim_padrao = hoje_aware
+    else:
+        data_min_geral = df_para_opcoes['data_pagamento_parcela'].min().date()
+        data_max_geral = df_para_opcoes['data_pagamento_parcela'].max().date()
+        
+        # Calcula primeiro e último dia do mês atual
+        primeiro_dia_mes_atual = hoje_aware.replace(day=1)
+        ultimo_dia_mes_atual_ts = (primeiro_dia_mes_atual + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+        ultimo_dia_mes_atual = ultimo_dia_mes_atual_ts.date()
+        
+        # Verifica se há dados no mês atual
+        if data_max_geral >= primeiro_dia_mes_atual:
+            # Se há dados no mês atual, usa o mês atual como padrão
+            data_inicio_padrao = max(primeiro_dia_mes_atual, data_min_geral)
+            data_fim_padrao = min(ultimo_dia_mes_atual, data_max_geral)
+        else:
+            # Se não há dados no mês atual, usa o último mês com dados
+            # Encontra o primeiro e último dia do mês da data_max_geral
+            primeiro_dia_ultimo_mes = data_max_geral.replace(day=1)
+            ultimo_dia_ultimo_mes_ts = (primeiro_dia_ultimo_mes + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
+            ultimo_dia_ultimo_mes = ultimo_dia_ultimo_mes_ts.date()
+            
+            data_inicio_padrao = max(primeiro_dia_ultimo_mes, data_min_geral)
+            data_fim_padrao = min(ultimo_dia_ultimo_mes, data_max_geral)
+        
+        # Validação final: garante que início não seja posterior ao fim
+        if data_inicio_padrao > data_fim_padrao:
+            data_inicio_padrao = data_fim_padrao
+    
+    periodo = st.sidebar.date_input("Período de Pagamento:", value=[data_inicio_padrao, data_fim_padrao], min_value=data_min_geral, max_value=data_max_geral)
 
     # --- Abas para Filtros Detalhados ---
     tab_unidades, tab_contabil, tab_banco = st.sidebar.tabs(["🏢 Unidades", "🧾 Contábil", "🏦 Contas"])
@@ -102,11 +132,21 @@ def run_page():
 
     # --- Aplicação Final dos Filtros ---
     try:
+            # Valida se o período tem exatamente 2 datas
+            if len(periodo) != 2:
+                st.warning("Por favor, selecione um período com data de início e fim.")
+                st.stop()
+            
+            # Valida se as datas são válidas
+            if periodo[0] > periodo[1]:
+                st.error("A data de início deve ser anterior à data de fim.")
+                st.stop()
+            
             data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
             data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
-    except IndexError:
+    except (IndexError, TypeError, ValueError) as e:
             # Caso o usuário limpe o campo de data, evita o erro
-            st.warning("Por favor, selecione um período de datas.")
+            st.warning("Por favor, selecione um período de datas válido.")
             st.stop() # Interrompe a execução para evitar erros abaixo
 
     df_filtrado = df[
@@ -224,51 +264,54 @@ def run_page():
                 allow_unsafe_jscode=True,
                 fit_columns_on_grid_load=True
             )
-    # --- EXPORTAÇÃO PARA EXCEL ---    
-        # Cria uma cópia dos dados para exportação (sem formatação)
-    tabela_export = tabela_agrupada.copy()
-    tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
-    
-    # Remove timezone e converte para apenas data (sem hora)
-    if 'data_pagamento_parcela' in tabela_export.columns:
-        tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
-        
-        # Cria buffer para o Excel
-    buffer = io.BytesIO()
-    with ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            # Exporta a tabela principal
-            tabela_export.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Despesas Detalhadas',
-                columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
-            )
             
-            # Adiciona uma aba com totais consolidados
-            totais_cc = tabela_export.groupby("centro_custo")["valor_total"].sum().reset_index()
-            totais_cc.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Totais por Centro Custo'
-            )
+            # --- EXPORTAÇÃO PARA EXCEL ---    
+            # Cria uma cópia dos dados para exportação (sem formatação)
+            tabela_export = tabela_agrupada.copy()
+            tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
             
-            # Adiciona uma aba com totais por categoria
-            totais_cat = tabela_export.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
-            totais_cat.to_excel(
-                writer, 
-                index=False, 
-                sheet_name='Totais por Categoria'
+            # Remove timezone e converte para apenas data (sem hora)
+            if 'data_pagamento_parcela' in tabela_export.columns:
+                tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
+                
+            # Cria buffer para o Excel
+            buffer = io.BytesIO()
+            with ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                # Exporta a tabela principal
+                tabela_export.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Despesas Detalhadas',
+                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
+                )
+                
+                # Adiciona uma aba com totais consolidados
+                totais_cc = tabela_export.groupby("centro_custo")["valor_total"].sum().reset_index()
+                totais_cc.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Totais por Centro Custo'
+                )
+                
+                # Adiciona uma aba com totais por categoria
+                totais_cat = tabela_export.groupby(["centro_custo", "categoria_pedido_compra"])["valor_total"].sum().reset_index()
+                totais_cat.to_excel(
+                    writer, 
+                    index=False, 
+                    sheet_name='Totais por Categoria'
+                )
+            
+            # Prepara o botão de download
+            buffer.seek(0)
+            st.download_button(
+                label="📥 Exportar para Excel",
+                data=buffer,
+                file_name=f"despesas_{periodo[0].strftime('%Y%m%d')}_{periodo[1].strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Clique para baixar os dados em formato Excel com abas detalhadas"
             )
-        
-        # Prepara o botão de download
-    buffer.seek(0)
-    st.download_button(
-            label="📥 Exportar para Excel",
-            data=buffer,
-            file_name=f"despesas_{periodo[0].strftime('%Y%m%d')}_{periodo[1].strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Clique para baixar os dados em formato Excel com abas detalhadas"
-        )
+    else:
+        st.info("Nenhum dado encontrado para os filtros selecionados.")
 
     st.divider()  # Linha de separação
 
@@ -710,12 +753,16 @@ def run_page():
         df_extrato['Entrada'] = df_extrato['valor'].apply(lambda x: x if x > 0 else None)
         df_extrato['Saída'] = df_extrato['valor'].apply(lambda x: abs(x) if x < 0 else None)
         
+        # Calcular saldo após cada transação
+        df_extrato['Saldo'] = saldo_anterior + df_extrato['valor'].cumsum()
+        
         # Selecionar e renomear colunas para exibição
-        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'Entrada', 'Saída']].copy()
+        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'Entrada', 'Saída', 'Saldo']].copy()
         
         # Calcular totais ANTES de formatar (valores numéricos)
         total_entradas_extrato = extrato_display['Entrada'].sum()
         total_saidas_extrato = extrato_display['Saída'].sum()
+        saldo_final_extrato = extrato_display['Saldo'].iloc[-1] if len(extrato_display) > 0 else saldo_anterior
         
         # Formatar data
         extrato_display['data'] = extrato_display['data'].dt.strftime('%d/%m/%Y')
@@ -723,6 +770,7 @@ def run_page():
         # Formatar valores monetários
         extrato_display['Entrada'] = extrato_display['Entrada'].apply(lambda x: formatar_reais(x) if pd.notna(x) else '-')
         extrato_display['Saída'] = extrato_display['Saída'].apply(lambda x: formatar_reais(x) if pd.notna(x) else '-')
+        extrato_display['Saldo'] = extrato_display['Saldo'].apply(lambda x: formatar_reais(x) if pd.notna(x) else '-')
         
         # Renomear colunas
         extrato_display.rename(columns={
@@ -742,7 +790,8 @@ def run_page():
             'Fornecedor': '',
             'Conta Bancária': '',
             'Entrada': formatar_reais(total_entradas_extrato),
-            'Saída': formatar_reais(total_saidas_extrato)
+            'Saída': formatar_reais(total_saidas_extrato),
+            'Saldo': formatar_reais(saldo_final_extrato)
         }])
         
         extrato_com_total = pd.concat([extrato_display, linha_total], ignore_index=True)
@@ -777,6 +826,10 @@ def run_page():
                 # Criar colunas de entrada e saída para o Excel
                 df_extrato_export['Entrada'] = df_extrato_export['valor'].apply(lambda x: x if x > 0 else None)
                 df_extrato_export['Saída'] = df_extrato_export['valor'].apply(lambda x: abs(x) if x < 0 else None)
+                
+                # Calcular saldo após cada transação
+                df_extrato_export['Saldo'] = saldo_anterior + df_extrato_export['valor'].cumsum()
+                
                 df_extrato_export = df_extrato_export.drop('valor', axis=1)
                 
                 df_extrato_export.to_excel(writer, index=False, sheet_name='Extrato Detalhado')
@@ -793,16 +846,17 @@ def run_page():
         with col_export2:
             # Exportar PDF
             from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.pagesizes import A4
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import cm
             from reportlab.lib.enums import TA_CENTER, TA_LEFT
+            from datetime import datetime
             
             buffer_pdf = io.BytesIO()
             
-            # Criar documento PDF em paisagem
-            doc = SimpleDocTemplate(buffer_pdf, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+            # Criar documento PDF em retrato
+            doc = SimpleDocTemplate(buffer_pdf, pagesize=A4, topMargin=1*cm, bottomMargin=1*cm, leftMargin=1*cm, rightMargin=1*cm)
             elements = []
             styles = getSampleStyleSheet()
             
@@ -828,72 +882,94 @@ def run_page():
             elements.append(Paragraph("EXTRATO DE MOVIMENTAÇÕES BANCÁRIAS", style_header))
             elements.append(Spacer(1, 0.3*cm))
             
-            # Informações do filtro
+            # Informações do filtro e empresa
             periodo_str = f"{periodo_movimento[0].strftime('%d/%m/%Y')} a {periodo_movimento[1].strftime('%d/%m/%Y')}"
             contas_str = ", ".join(contas_movimento_selecionadas) if len(contas_movimento_selecionadas) <= 3 else f"{len(contas_movimento_selecionadas)} contas selecionadas"
+            tipos_str = ", ".join(tipos_movimento_selecionados) if len(tipos_movimento_selecionados) <= 3 else f"{len(tipos_movimento_selecionados)} tipos selecionados"
+            data_geracao = datetime.now().strftime('%d/%m/%Y às %H:%M')
             
+            elements.append(Paragraph(f"<b>Empresa:</b> {empresa_selecionada}", style_info))
             elements.append(Paragraph(f"<b>Período:</b> {periodo_str}", style_info))
             elements.append(Paragraph(f"<b>Conta(s):</b> {contas_str}", style_info))
+            elements.append(Paragraph(f"<b>Tipo(s):</b> {tipos_str}", style_info))
+            elements.append(Paragraph(f"<b>Gerado em:</b> {data_geracao}", style_info))
             elements.append(Spacer(1, 0.3*cm))
             
             # Resumo dos movimentos
             elements.append(Paragraph("<b>RESUMO DOS MOVIMENTOS</b>", style_info))
             resumo_data = [
-                ['Entradas', 'Saídas', 'Transf. Entrada', 'Transf. Saída', 'Saldo'],
-                [formatar_reais(total_entradas_pdf), formatar_reais(total_saidas_pdf), 
+                ['Saldo Anterior', 'Entradas', 'Saídas', 'Transf. Entrada', 'Transf. Saída', 'Saldo Final'],
+                [formatar_reais(saldo_anterior), formatar_reais(total_entradas_pdf), formatar_reais(total_saidas_pdf), 
                  formatar_reais(total_transf_entrada_pdf), formatar_reais(total_transf_saida_pdf), 
-                 formatar_reais(saldo_periodo_pdf)]
+                 formatar_reais(saldo_atual)]
             ]
             
-            resumo_table = Table(resumo_data, colWidths=[4*cm, 4*cm, 4*cm, 4*cm, 4*cm])
+            resumo_table = Table(resumo_data, colWidths=[3*cm, 3*cm, 3*cm, 3*cm, 3*cm, 3*cm])
             resumo_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 9),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
             ]))
             elements.append(resumo_table)
-            elements.append(Spacer(1, 0.5*cm))
+            elements.append(Spacer(1, 0.4*cm))
             
             # Tabela de movimentações
             elements.append(Paragraph("<b>MOVIMENTAÇÕES DETALHADAS</b>", style_info))
             elements.append(Spacer(1, 0.2*cm))
             
+            # Estilo para células da tabela
+            style_cell = ParagraphStyle(
+                'CellStyle',
+                parent=styles['Normal'],
+                fontSize=6,
+                leading=7,
+                wordWrap='CJK'
+            )
+            
             # Preparar dados da tabela
-            table_data = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Conta', 'Entrada', 'Saída']]
+            table_data = [['Data', 'Tipo', 'Descrição', 'Fornecedor', 'Entrada', 'Saída', 'Saldo']]
             
             for _, row in extrato_com_total.iterrows():
                 # Pular a linha de total pois será adicionada separadamente
                 if row['Data'] == 'TOTAL':
                     continue
+                
+                # Converter descrição em Paragraph para quebra automática
+                descricao_text = row['Descrição'] if pd.notna(row['Descrição']) and row['Descrição'] != '' else ''
+                descricao_para = Paragraph(descricao_text, style_cell)
+                
+                # Converter fornecedor em Paragraph para quebra automática
+                fornecedor_text = row['Fornecedor'] if pd.notna(row['Fornecedor']) and row['Fornecedor'] != '' else ''
+                fornecedor_para = Paragraph(fornecedor_text, style_cell)
                     
                 table_data.append([
                     row['Data'],
-                    row['Tipo'][:15] if pd.notna(row['Tipo']) and row['Tipo'] != '' else '',
-                    row['Descrição'][:30] if pd.notna(row['Descrição']) and row['Descrição'] != '' else '',
-                    row['Fornecedor'][:20] if pd.notna(row['Fornecedor']) and row['Fornecedor'] != '' else '',
-                    row['Conta Bancária'][:15] if pd.notna(row['Conta Bancária']) and row['Conta Bancária'] != '' else '',
+                    row['Tipo'][:10] if pd.notna(row['Tipo']) and row['Tipo'] != '' else '',
+                    descricao_para,  # Usando Paragraph para quebra automática
+                    fornecedor_para,  # Usando Paragraph para quebra automática
                     row['Entrada'] if row['Entrada'] != '-' else '-',
-                    row['Saída'] if row['Saída'] != '-' else '-'
+                    row['Saída'] if row['Saída'] != '-' else '-',
+                    row['Saldo'] if row['Saldo'] != '-' else '-'
                 ])
             
             # Adicionar linha de totais (já formatados na tabela)
             linha_total_pdf = extrato_com_total[extrato_com_total['Data'] == 'TOTAL'].iloc[0]
-            table_data.append(['TOTAL', '', '', '', '', linha_total_pdf['Entrada'], linha_total_pdf['Saída']])
+            table_data.append(['TOTAL', '', '', '', linha_total_pdf['Entrada'], linha_total_pdf['Saída'], linha_total_pdf['Saldo']])
             
-            # Criar tabela
-            col_widths = [2*cm, 2.5*cm, 5*cm, 4*cm, 3*cm, 2.5*cm, 2.5*cm]
+            # Criar tabela com larguras ajustadas para retrato (descrição maior)
+            col_widths = [1.6*cm, 1.5*cm, 5.5*cm, 2.5*cm, 2*cm, 2*cm, 2.4*cm]
             table = Table(table_data, colWidths=col_widths)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('ALIGN', (5, 0), (6, -1), 'RIGHT'),
+                ('ALIGN', (4, 0), (6, -1), 'RIGHT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 7),
                 ('FONTSIZE', (0, 1), (-1, -1), 6),
@@ -903,6 +979,9 @@ def run_page():
                 ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.lightgrey]),
                 ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffeb99')),
                 ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('WORDWRAP', (2, 1), (2, -1), True),  # Quebra de linha na coluna Descrição
+                ('WORDWRAP', (3, 1), (3, -1), True),  # Quebra de linha na coluna Fornecedor
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Alinhamento vertical no topo
             ]))
             elements.append(table)
             
