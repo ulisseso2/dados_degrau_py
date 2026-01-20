@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg #fbclid_dashboard, #diagnostico_facebook
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg' #'fbclid_dashboard', #'diagnostico_facebook'
     ]
     
     for module_name in modules:
@@ -48,6 +48,7 @@ st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 
 PAGES = {
     "Oportunidades": oportunidades,
+    "Modelo MSG": modelo_msg,
     "Tendências": tendencias,
     "Relatório de Desempenho Mensal": analise_mensal,
     "Análise EAD": analise_ead,
@@ -77,7 +78,9 @@ PAGES = {
     "Matriculas Centro": centro,
     "Cancelamentos Centro": centro_cancelamento,
     "Mensagens Octadesk": octadesk,
-    "Central Backup": backup_central_consys
+    "Central Backup": backup_central_consys,
+    #"FBCLID Dashboard": fbclid_dashboard,
+    #"Diagnóstico Facebook": diagnostico_facebook
 }
 
 def check_credentials(username, password):

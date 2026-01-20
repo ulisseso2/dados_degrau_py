@@ -17,6 +17,11 @@ def run_page():
 
     df = carregar_dados("consultas/oportunidades/oportunidades.sql")
 
+    # Verifica se há dados antes de processar
+    if df.empty:
+        st.warning("⚠️ Não foi possível carregar os dados. Verifique a conexão com o banco de dados.")
+        st.stop()
+
     # Pré-filtros
     df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
 
@@ -37,6 +42,56 @@ def run_page():
         # Caso o usuário limpe o campo de data, evita o erro
         st.warning("Por favor, selecione um período de datas.")
         st.stop() # Interrompe a execução para evitar erros abaixo
+
+    # Filtros avançados de dia da semana e horário
+    with st.sidebar.expander("🕐 Filtros Avançados de Tempo", expanded=False):
+        st.markdown("#### Dias da Semana e Horários")
+        
+        dias_semana = {
+            0: "Segunda-feira",
+            1: "Terça-feira",
+            2: "Quarta-feira",
+            3: "Quinta-feira",
+            4: "Sexta-feira",
+            5: "Sábado",
+            6: "Domingo"
+        }
+        
+        # Seleção de dias da semana (por padrão todos selecionados)
+        dias_selecionados = st.multiselect(
+            "Selecione os dias da semana:",
+            options=list(dias_semana.keys()),
+            format_func=lambda x: dias_semana[x],
+            default=list(dias_semana.keys()),
+            key="dias_semana_filtro"
+        )
+        
+        st.markdown("#### Range de Horários por Dia")
+        st.caption("Defina o horário para cada dia selecionado (formato 24h)")
+        
+        # Dicionário para armazenar os ranges de hora por dia
+        horarios_por_dia = {}
+        
+        for dia in dias_selecionados:
+            st.markdown(f"**{dias_semana[dia]}**")
+            col1, col2 = st.columns(2)
+            with col1:
+                hora_inicio = st.number_input(
+                    "Hora inicial",
+                    min_value=0,
+                    max_value=23,
+                    value=0,
+                    key=f"hora_inicio_{dia}"
+                )
+            with col2:
+                hora_fim = st.number_input(
+                    "Hora final",
+                    min_value=0,
+                    max_value=23,
+                    value=23,
+                    key=f"hora_fim_{dia}"
+                )
+            horarios_por_dia[dia] = (hora_inicio, hora_fim)
 
     # Filtros adicionais recolhidos
 
@@ -64,6 +119,43 @@ def run_page():
     if empresa_selecionada:
         df_filtrado = df_filtrado[df_filtrado["empresa"] == empresa_selecionada]
 
+    # Filtro de data sempre aplicado
+    df_filtrado = df_filtrado[
+        (df_filtrado["criacao"] >= data_inicio_aware) &
+        (df_filtrado["criacao"] < data_fim_aware)
+    ]
+
+    # Aplicar filtros de dia da semana e horário
+    if dias_selecionados and len(df_filtrado) > 0:
+        # Adicionar colunas auxiliares para dia da semana e hora
+        df_filtrado = df_filtrado.copy()
+        df_filtrado['dia_semana'] = df_filtrado['criacao'].dt.dayofweek
+        df_filtrado['hora'] = df_filtrado['criacao'].dt.hour
+        
+        # Criar lista de condições para cada dia selecionado
+        condicoes = []
+        for dia in dias_selecionados:
+            hora_inicio, hora_fim = horarios_por_dia[dia]
+            
+            # Filtro para o dia específico e range de horas
+            condicao_dia = (
+                (df_filtrado['dia_semana'] == dia) &
+                (df_filtrado['hora'] >= hora_inicio) &
+                (df_filtrado['hora'] <= hora_fim)
+            )
+            condicoes.append(condicao_dia)
+        
+        # Combinar todas as condições com OR
+        if condicoes:
+            mascara_final = condicoes[0]
+            for condicao in condicoes[1:]:
+                mascara_final = mascara_final | condicao
+            
+            df_filtrado = df_filtrado[mascara_final]
+        
+        # Remover colunas auxiliares
+        df_filtrado = df_filtrado.drop(columns=['dia_semana', 'hora'], errors='ignore')
+
     if unidade_selecionada:
         # A lógica com .isna() é mantida para incluir valores nulos
         df_filtrado = df_filtrado[df_filtrado["unidade"].isin(unidade_selecionada) | df_filtrado["unidade"].isna()]
@@ -77,11 +169,7 @@ def run_page():
     if h_ligar_selecionada:
         df_filtrado = df_filtrado[df_filtrado["h_ligar"].isin(h_ligar_selecionada) | df_filtrado["h_ligar"].isna()]
 
-    # Filtro de data sempre aplicado
-    df_filtrado = df_filtrado[
-        (df_filtrado["criacao"] >= data_inicio_aware) &
-        (df_filtrado["criacao"] < data_fim_aware)
-    ]
+
 
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
@@ -399,7 +487,7 @@ def run_page():
     st.subheader("Oportunidades por Campanhas / Etapas")
     # 1. Obter ordem das etapas da query (sem duplicar e mantendo a ordem)
     tabela_campanha_origens = df_filtrado.pivot_table(
-        index="campanha",
+        index="utm_campaign",
         columns="origem",
         values="oportunidade",
         aggfunc="count",

@@ -408,7 +408,7 @@ def run_page():
     colunas_selecionadas = ["ordem_id", "curso_venda", "turma", "turno", "cpf", "nome_cliente", 
                           "email_cliente", "celular_cliente", "metodo_pagamento", "status", 
                           "unidade", "total_pedido", "data_pagamento", "cep_cliente", 
-                          "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor"]
+                          "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor", "idade_momento_compra"]
     
     # Filtra primeiro e depois seleciona as colunas
     tabela_base_sem_online = df_filtrado[df_filtrado["categoria"] != "Curso Online"].copy()
@@ -509,6 +509,63 @@ def run_page():
             file_name="matriculas_detalhadas.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        
+        # Métricas resumidas
+        st.markdown("### Resumo das Matrículas")
+        metricas_matriculas = st.columns(6)
+        with metricas_matriculas[0]:
+            st.metric("Total de Matrículas", tabela_final.shape[0])
+        with metricas_matriculas[1]:
+            valor_total_matriculas = tabela_final['total_pedido'].sum()
+            st.metric("Faturamento Total", formatar_reais(valor_total_matriculas))
+        with metricas_matriculas[2]:
+            ticket_medio_matriculas = valor_total_matriculas / tabela_final.shape[0] if tabela_final.shape[0] > 0 else 0
+            st.metric("Ticket Médio", formatar_reais(ticket_medio_matriculas))
+        with metricas_matriculas[3]:
+            cursos_distintos = len(tabela_final['curso_venda'].dropna().unique())
+            st.metric("Cursos Distintos", cursos_distintos)
+        with metricas_matriculas[4]:
+            # Calcula idade média tratando S/DN
+            idades_validas_mat = tabela_final[tabela_final['idade_momento_compra'] != 'S/DN']['idade_momento_compra']
+            if len(idades_validas_mat) > 0:
+                idade_media_mat = pd.to_numeric(idades_validas_mat, errors='coerce').mean()
+                st.metric("Idade Média", f"{idade_media_mat:.1f} anos")
+            else:
+                st.metric("Idade Média", "S/DN")
+        with metricas_matriculas[5]:
+            # Conta quantos têm idade S/DN
+            sem_idade_mat = len(tabela_final[tabela_final['idade_momento_compra'] == 'S/DN'])
+            st.metric("Sem Idade (S/DN)", sem_idade_mat)
+        
+        st.divider()
+        
+        # Tabela de distribuição por curso e idade
+        st.markdown("### Distribuição por Curso e Idade no Momento da Compra")
+        
+        # Agrupa os dados por curso_venda e idade
+        tabela_curso_idade = tabela_final.groupby(['curso_venda', 'idade_momento_compra']).agg(
+            quantidade_vendida=pd.NamedAgg(column='ordem_id', aggfunc='count')
+        ).reset_index()
+        
+        # Remove registros S/DN e converte idade para numérico
+        tabela_curso_idade = tabela_curso_idade[tabela_curso_idade['idade_momento_compra'] != 'S/DN'].copy()
+        tabela_curso_idade['idade_momento_compra'] = pd.to_numeric(tabela_curso_idade['idade_momento_compra'], errors='coerce')
+        tabela_curso_idade = tabela_curso_idade.dropna()
+        
+        # Converte idade para inteiro para melhor visualização
+        tabela_curso_idade['idade_momento_compra'] = tabela_curso_idade['idade_momento_compra'].astype(int)
+        
+        # Ordena por quantidade vendida (decrescente) e depois por curso
+        tabela_curso_idade = tabela_curso_idade.sort_values(['quantidade_vendida', 'curso_venda'], ascending=[False, True])
+        
+        # Renomeia colunas para exibição
+        tabela_curso_idade.columns = ['Curso', 'Idade', 'Quantidade Vendida']
+        
+        if not tabela_curso_idade.empty:
+            st.dataframe(tabela_curso_idade, use_container_width=True, hide_index=True)
+        else:
+            st.info("Não há dados de idade suficientes para gerar a tabela.")
+        
     else:
         if tabela_base_sem_online.empty:
             st.info("Nenhum aluno de curso presencial/live encontrado para os filtros selecionados.")
@@ -521,7 +578,7 @@ def run_page():
     st.divider()
     st.subheader("Lista de Alunos de Cursos Online (Detalhamento por Produto)")
 
-    colunas_selecionadas_online = ["ordem_id", "produto", "cpf", "nome_cliente", "email_cliente", "celular_cliente", "metodo_pagamento", "status", "unidade", "total_pedido", "data_pagamento", "cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor", "uuid"
+    colunas_selecionadas_online = ["ordem_id", "produto", "cpf", "nome_cliente", "email_cliente", "celular_cliente", "metodo_pagamento", "status", "unidade", "total_pedido", "data_pagamento", "cep_cliente", "endereco_cliente", "bairro_cliente", "cidade_cliente", "vendedor", "uuid", "idade_momento_compra"
     ]
     
     # Cria a tabela base para cursos online
@@ -569,7 +626,7 @@ def run_page():
             )
             
         # Lógica para o filtro de Produto
-        produtos_reais = [p for p in produtos_online if p != placeholder_produto_nulo]
+        produtos_reais = [p for p in produto_selecionado if p != placeholder_produto_nulo]
         mascara_produto = tabela_base_online['produto'].isin(produtos_reais)
         if placeholder_produto_nulo in produto_selecionado:
             mascara_produto = mascara_produto | tabela_base_online['produto'].isna()
@@ -695,7 +752,7 @@ def run_page():
             
             # Adiciona um indicador resumido
             st.markdown("### Resumo dos Cursos Online")
-            metricas_online = st.columns(4)
+            metricas_online = st.columns(6)
             with metricas_online[0]:
                 st.metric("Total de Matrículas", tabela_final_online.shape[0])
             with metricas_online[1]:
@@ -707,6 +764,47 @@ def run_page():
             with metricas_online[3]:
                 produtos_distintos = len(tabela_final_online['produto'].unique())
                 st.metric("Produtos Distintos", produtos_distintos)
+            with metricas_online[4]:
+                # Calcula idade média tratando S/DN
+                idades_validas = tabela_final_online[tabela_final_online['idade_momento_compra'] != 'S/DN']['idade_momento_compra']
+                if len(idades_validas) > 0:
+                    idade_media = pd.to_numeric(idades_validas, errors='coerce').mean()
+                    st.metric("Idade Média", f"{idade_media:.1f} anos")
+                else:
+                    st.metric("Idade Média", "S/DN")
+            with metricas_online[5]:
+                # Conta quantos têm idade S/DN
+                sem_idade_online = len(tabela_final_online[tabela_final_online['idade_momento_compra'] == 'S/DN'])
+                st.metric("Sem Idade (S/DN)", sem_idade_online)
+
+            st.divider()
+            
+            # Tabela de distribuição por idade
+            st.markdown("### Distribuição por Idade no Momento da Compra")
+            
+            # Agrupa os dados por idade
+            tabela_idade = tabela_final_online.groupby('idade_momento_compra').agg(
+                quantidade_vendida=pd.NamedAgg(column='ordem_id', aggfunc='count')
+            ).reset_index()
+            
+            # Remove registros S/DN e converte idade para numérico
+            tabela_idade = tabela_idade[tabela_idade['idade_momento_compra'] != 'S/DN'].copy()
+            tabela_idade['idade_momento_compra'] = pd.to_numeric(tabela_idade['idade_momento_compra'], errors='coerce')
+            tabela_idade = tabela_idade.dropna()
+            
+            # Converte idade para inteiro para melhor visualização
+            tabela_idade['idade_momento_compra'] = tabela_idade['idade_momento_compra'].astype(int)
+            
+            # Ordena por quantidade vendida (decrescente)
+            tabela_idade = tabela_idade.sort_values('quantidade_vendida', ascending=False)
+            
+            # Renomeia colunas para exibição
+            tabela_idade.columns = ['Idade', 'Quantidade Vendida']
+            
+            if not tabela_idade.empty:
+                st.dataframe(tabela_idade, use_container_width=True, hide_index=True)
+            else:
+                st.info("Não há dados de idade suficientes para gerar a tabela.")
                 
         else:
             st.info("Nenhum aluno de curso online encontrado para os filtros de produtos selecionados.")
