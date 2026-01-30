@@ -1111,3 +1111,196 @@ def run_page():
         
         st.divider()
 
+    # ==============================================================================
+    # ANÁLISE DE DESPESAS (AGRUPADA) COM FILTROS INDEPENDENTES
+    # Esta análise usa filtros independentes, respeitando apenas a seleção de EMPRESA.
+    # ==============================================================================
+    st.header("📌 Análise de Despesas (Agrupada - Filtros Independentes)")
+    st.markdown("*Esta seção replica a tabela agrupada de despesas, mas com filtros independentes da análise principal.*")
+
+    base_df_despesas = df_para_opcoes.copy()
+
+    with st.expander("Aplicar Filtros para a Análise de Despesas Agrupadas", expanded=True):
+        col_desp1, col_desp2, col_desp3 = st.columns(3)
+
+        # --- Filtro de Período de Vencimento ---
+        with col_desp1:
+            hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
+            data_min_venc = base_df_despesas['data_vencimento_parcela'].min().date() if not base_df_despesas.empty else hoje_aware
+            data_max_venc = base_df_despesas['data_vencimento_parcela'].max().date() if not base_df_despesas.empty else hoje_aware
+
+            data_inicio_padrao = max(hoje_aware, data_min_venc)
+            data_fim_padrao = min((hoje_aware + pd.Timedelta(days=30)), data_max_venc)
+
+            if data_inicio_padrao > data_fim_padrao:
+                data_inicio_padrao = data_min_venc
+                data_fim_padrao = data_max_venc
+
+            periodo_vencimento_desp = st.date_input(
+                "Período de Vencimento:",
+                value=[data_inicio_padrao, data_fim_padrao],
+                min_value=data_min_venc,
+                max_value=data_max_venc,
+                key="filtro_vencimento_despesas"
+            )
+
+        # --- Filtro de Situação ---
+        with col_desp2:
+            situacao_list = base_df_despesas['situacao'].dropna().unique().tolist()
+            default_situacao = [s for s in ["A Vencer", "Em Atraso"] if s in situacao_list]
+            if not default_situacao:
+                default_situacao = situacao_list
+            situacao_selecionada_desp = st.multiselect(
+                "Situação da Parcela:",
+                options=sorted(situacao_list),
+                default=default_situacao,
+                key="filtro_situacao_despesas"
+            )
+
+        # --- Filtro de Status ---
+        with col_desp3:
+            status_list = base_df_despesas['status_parcela'].dropna().unique().tolist()
+            default_status = [s for s in ["A pagar"] if s in status_list]
+            if not default_status:
+                default_status = status_list
+            status_selecionado_desp = st.multiselect(
+                "Status da Parcela:",
+                options=sorted(status_list),
+                default=default_status,
+                key="filtro_status_despesas"
+            )
+
+        col_desp4, col_desp5, col_desp6 = st.columns(3)
+
+        with col_desp4:
+            cc_list_desp = base_df_despesas['centro_custo'].dropna().unique().tolist()
+            cc_selecionado_desp = st.multiselect(
+                "Centro de Custo:",
+                options=sorted(cc_list_desp),
+                default=cc_list_desp,
+                key="filtro_cc_despesas"
+            )
+
+        with col_desp5:
+            categoria_list_desp = base_df_despesas['categoria_pedido_compra'].dropna().unique().tolist()
+            categoria_selecionada_desp = st.multiselect(
+                "Categoria do Pedido:",
+                options=sorted(categoria_list_desp),
+                default=categoria_list_desp,
+                key="filtro_categoria_despesas"
+            )
+
+        with col_desp6:
+            contas_list_desp = base_df_despesas['conta_bancaria'].dropna().unique().tolist()
+            contas_selecionadas_desp = st.multiselect(
+                "Conta Bancária:",
+                options=sorted(contas_list_desp),
+                default=contas_list_desp,
+                key="filtro_conta_despesas"
+            )
+
+    df_despesas_filtrado = pd.DataFrame()
+    if len(periodo_vencimento_desp) == 2:
+        inicio_venc_aware = pd.Timestamp(periodo_vencimento_desp[0], tz=TIMEZONE)
+        fim_venc_aware = pd.Timestamp(periodo_vencimento_desp[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+
+        df_despesas_filtrado = base_df_despesas[
+            (base_df_despesas['data_vencimento_parcela'] >= inicio_venc_aware) &
+            (base_df_despesas['data_vencimento_parcela'] < fim_venc_aware) &
+            (base_df_despesas['situacao'].isin(situacao_selecionada_desp)) &
+            (base_df_despesas['status_parcela'].isin(status_selecionado_desp)) &
+            (base_df_despesas['centro_custo'].isin(cc_selecionado_desp)) &
+            (base_df_despesas['categoria_pedido_compra'].isin(categoria_selecionada_desp)) &
+            (base_df_despesas['conta_bancaria'].isin(contas_selecionadas_desp))
+        ]
+
+    if not df_despesas_filtrado.empty:
+        tabela_despesas_agrupada = (
+            df_despesas_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
+            .agg(valor_total=("valor_corrigido", "sum"),
+                  data_vencimento_parcela=("data_vencimento_parcela", "max"))
+            .reset_index()
+        )
+
+        gb_desp = GridOptionsBuilder.from_dataframe(tabela_despesas_agrupada)
+
+        gb_desp.configure_column(
+            field="centro_custo",
+            header_name="Centro de Custo",
+            rowGroup=True,
+            hide=True
+        )
+
+        gb_desp.configure_column(
+            field="categoria_pedido_compra",
+            header_name="Categoria",
+            rowGroup=True,
+            hide=True
+        )
+
+        gb_desp.configure_column(
+            field="descricao_pedido_compra",
+            header_name="Histórico",
+            minWidth=200
+        )
+
+        gb_desp.configure_column(
+            field="data_vencimento_parcela",
+            header_name="Data de Vencimento",
+            type=["dateColumnFilter", "customDateTimeFormat"],
+            custom_format_string='dd/MM/yyyy',
+            minWidth=150
+        )
+
+        gb_desp.configure_column(
+            field="valor_total",
+            header_name="Valor",
+            type=["numericColumn"],
+            aggFunc="sum",
+            valueFormatter=JsCode("""
+                function(params) {
+                if (params.value === undefined || params.value === null) return '';
+                return 'R$ ' + params.value.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).replace('.', '#').replace(',', '.').replace('#', ',');
+                
+            }
+            """)
+        )
+
+        grid_options_desp = gb_desp.build()
+        grid_options_desp["autoGroupColumnDef"] = {
+            "headerName": "Centro de Custo / Categoria",
+            "minWidth": 350,
+            "cellRenderer": "agGroupCellRenderer",
+            "cellRendererParams": {
+                "suppressCount": False,
+            }
+        }
+        grid_options_desp["groupDisplayType"] = "groupRow"
+        grid_options_desp["groupDefaultExpanded"] = 0
+        grid_options_desp["groupIncludeFooter"] = True
+        grid_options_desp["groupIncludeTotalFooter"] = True
+
+        st.subheader("Despesas Agrupadas")
+        st.markdown(f"""
+        **Período selecionado:** {periodo_vencimento_desp[0].strftime('%d/%m/%Y')} a {periodo_vencimento_desp[1].strftime('%d/%m/%Y')}  
+        **Total de despesas:** {formatar_reais(tabela_despesas_agrupada['valor_total'].sum())}
+        """)
+
+        AgGrid(
+            tabela_despesas_agrupada,
+            gridOptions=grid_options_desp,
+            height=600,
+            width='100%',
+            theme='streamlit',
+            enable_enterprise_modules=True,
+            update_mode='MODEL_CHANGED',
+            allow_unsafe_jscode=True,
+            fit_columns_on_grid_load=True,
+            key="aggrid_despesas_indep"
+        )
+    else:
+        st.info("Não há despesas para os filtros selecionados.")
+
