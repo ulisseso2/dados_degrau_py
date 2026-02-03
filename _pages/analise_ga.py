@@ -926,6 +926,16 @@ def run_page():
             (df_conversoes_db['gclid'].notnull()) & 
             (df_conversoes_db['gclid'] != '')
         ].copy()
+
+        # Compatibilidade entre nomes de colunas (utm_campaign vs campanha)
+        if 'campanha' not in df_conversoes_filtrado.columns:
+            if 'utm_campaign' in df_conversoes_filtrado.columns:
+                df_conversoes_filtrado = df_conversoes_filtrado.rename(columns={
+                    'utm_campaign': 'campanha'
+                })
+            else:
+                df_conversoes_filtrado['campanha'] = pd.NA
+                st.warning("⚠️ Coluna de campanha não encontrada no CRM (campanha/utm_campaign).")
         
         if not df_conversoes_filtrado.empty:
             # Prepara DataFrame para exibição
