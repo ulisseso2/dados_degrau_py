@@ -26,6 +26,10 @@ PyYAML==6.0.2
 xlsxwriter==3.2.5
 toml==0.10.2
 reportlab==4.4.6
+python-docx==0.8.11
+
+# OpenAI para análise de transcrições
+openai==1.58.1
 
 # Dependências principais (resolvidas pelo pip)
 aiohttp
