@@ -7,6 +7,8 @@ SELECT
     o.total_discount AS desconto_ordem,
     o.total_refund AS estorno_cancelamento,
     o.request_date AS solicitacao_cancelamento,
+    o.geolocation AS dados_aceite,
+    o.date_acceptance AS data_aceite,
     COALESCE(o.request_date, o.paid_at) AS data_referencia,
     oct.name AS tipo_cancelamento,
     ont.description AS descricao,
