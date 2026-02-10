@@ -651,3 +651,139 @@ def run_page():
             st.info("Nenhum aluno de curso online encontrado para os filtros de produtos selecionados.")
     else:
         st.info("Não há dados de produtos online para o período selecionado.")
+
+    # =====================================================================
+    # Busca e recibo de aceite de contrato online
+    # =====================================================================
+    st.divider()
+    st.subheader("🔎 Buscar Aceite de Contrato Online por Pedido")
+
+    import json
+    from docx import Document
+    from docx.shared import Pt
+    import tempfile
+
+    pedido_id = st.text_input("Digite o ID do pedido para buscar o aceite:")
+    buscar = st.button("Pesquisar Aceite")
+
+    aceite_info = None
+    if buscar and pedido_id:
+        try:
+            pedido_id_int = int(pedido_id)
+            pedido_row = df[df["ordem_id"] == pedido_id_int]
+            if not pedido_row.empty:
+                dados_aceite = pedido_row.iloc[0].get("dados_aceite", None)
+                data_aceite = pedido_row.iloc[0].get("data_aceite", None)
+                nome_cliente = pedido_row.iloc[0].get("nome_cliente", "-")
+                cpf = pedido_row.iloc[0].get("cpf", "-")
+                email_cliente = pedido_row.iloc[0].get("email_cliente", "-")
+                ordem_id = pedido_row.iloc[0].get("ordem_id", "-")
+                if pd.notnull(dados_aceite) and pd.notnull(data_aceite):
+                    try:
+                        aceite_json = json.loads(dados_aceite)
+                    except Exception:
+                        aceite_json = {}
+                    aceite_info = {
+                        "nome_cliente": nome_cliente,
+                        "cpf": cpf,
+                        "email_cliente": email_cliente,
+                        "ordem_id": ordem_id,
+                        "data_aceite": data_aceite,
+                        **aceite_json
+                    }
+                else:
+                    st.warning("Aceite não encontrado para este pedido.")
+            else:
+                st.warning("Pedido não encontrado.")
+        except Exception as e:
+            st.error(f"Erro ao buscar pedido: {e}")
+
+    if aceite_info:
+        st.success("Aceite encontrado!")
+        st.markdown(f"""
+        **Nome:** {aceite_info.get('nome_cliente','-')}  
+        **CPF:** {aceite_info.get('cpf','-')}  
+        **E-mail:** {aceite_info.get('email_cliente','-')}  
+        **Pedido:** {aceite_info.get('ordem_id','-')}  
+        **Data e hora do aceite:** {aceite_info.get('data_aceite','-')}  
+        **IP:** {aceite_info.get('ip','-')}  
+        **Cidade:** {aceite_info.get('city','-')}  
+        **Estado:** {aceite_info.get('region','-')} ({aceite_info.get('region_code','-')})  
+        **País:** {aceite_info.get('country_name','-')} ({aceite_info.get('country_code','-')})  
+        **Organização/Provedor:** {aceite_info.get('org','-')}  
+        **ASN:** {aceite_info.get('asn','-')}  
+        **Latitude/Longitude:** {aceite_info.get('latitude','-')}, {aceite_info.get('longitude','-')}  
+        **Fuso horário:** {aceite_info.get('timezone','-')}  
+        **Código postal:** {aceite_info.get('postal','-')}  
+        **Rede:** {aceite_info.get('network','-')}  
+        **Navegador/idiomas:** {aceite_info.get('languages','-')}  
+        **Código de chamada do país:** {aceite_info.get('country_calling_code','-')}  
+        **Capital do país:** {aceite_info.get('country_capital','-')}  
+        **Continente:** {aceite_info.get('continent_code','-')}  
+
+        """)
+
+        def gerar_recibo_docx(aceite_info):
+            doc = Document()
+            style = doc.styles['Normal']
+            font = style.font
+            font.name = 'Arial'
+            font.size = Pt(11)
+            # Adiciona logo no canto superior
+            import os
+            logo_path = os.path.join(os.path.dirname(__file__), '../style/img/central_logo_completo.png')
+            try:
+                doc.sections[0].header.is_linked_to_previous = False
+                header = doc.sections[0].header
+                from docx.shared import Inches
+                paragraph = header.paragraphs[0]
+                run = paragraph.add_run()
+                run.add_picture(logo_path, width=Inches(1.5))
+            except Exception:
+                pass
+            # Heading menor
+            doc.add_heading('Recibo de Aceite de Contrato', 1)
+            doc.add_paragraph(f"Certificamos que o aluno(a) {aceite_info.get('nome_cliente','-')}, CPF {aceite_info.get('cpf','-')}, aceitou eletronicamente o contrato referente ao pedido {aceite_info.get('ordem_id','-')} na data de {aceite_info.get('data_aceite','-')}.")
+            doc.add_paragraph("Detalhes do aceite:")
+            detalhes = [
+                ("Nome", aceite_info.get('nome_cliente','-')),
+                ("E-mail", aceite_info.get('email_cliente','-')),
+                ("Pedido", aceite_info.get('ordem_id','-')),
+                ("Data e hora do aceite", aceite_info.get('data_aceite','-')),
+                ("IP", aceite_info.get('ip','-')),
+                ("Cidade", aceite_info.get('city','-')),
+                ("Estado", f"{aceite_info.get('region','-')} ({aceite_info.get('region_code','-')})"),
+                ("País", f"{aceite_info.get('country_name','-')} ({aceite_info.get('country_code','-')})"),
+                ("Organização/Provedor", aceite_info.get('org','-')),
+                ("ASN", aceite_info.get('asn','-')),
+                ("Latitude/Longitude", f"{aceite_info.get('latitude','-')}, {aceite_info.get('longitude','-')}") ,
+                ("Fuso horário", aceite_info.get('timezone','-')),
+                ("Código postal", aceite_info.get('postal','-')),
+                ("Rede", aceite_info.get('network','-')),
+                ("Navegador/idiomas", aceite_info.get('languages','-')),
+                ("Código de chamada do país", aceite_info.get('country_calling_code','-')),
+                ("Capital do país", aceite_info.get('country_capital','-')),
+                ("Continente", aceite_info.get('continent_code','-'))
+            ]
+            for k, v in detalhes:
+                doc.add_paragraph(f"- {k}: {v}")
+            from datetime import datetime
+            data_emissao = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            doc.add_paragraph("")
+            doc.add_paragraph(f"Este recibo foi emitido em {data_emissao}.")
+            doc.add_paragraph("")
+            return doc
+
+        # Gera o arquivo DOCX em memória para download imediato
+        doc = gerar_recibo_docx(aceite_info)
+        buffer_docx = io.BytesIO()
+        doc.save(buffer_docx)
+        buffer_docx.seek(0)
+        st.download_button(
+            label="📥 Download do Recibo de Aceite",
+            data=buffer_docx,
+            file_name=f"recibo_aceite_pedido_{aceite_info.get('ordem_id','-')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+
+    
