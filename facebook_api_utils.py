@@ -22,6 +22,8 @@ from fbclid_db import (
 
 # Carrega as variáveis do .env (só terá efeito no ambiente local)
 load_dotenv()
+# Carrega credenciais específicas do Facebook, se existirem
+load_dotenv('.facebook_credentials.env', override=True)
 
 def init_facebook_api():
     """

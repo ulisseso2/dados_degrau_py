@@ -24,8 +24,32 @@ def run_page():
 
     # --- Carregamento e Preparação dos Dados ---
     df = carregar_dados("consultas/notas/notas.sql")
-
-    df['data_emissao'] = pd.to_datetime(df['data_emissao']).dt.tz_localize('UTC').dt.tz_convert(TIMEZONE)
+    
+    # Verificar se o DataFrame está vazio ou não tem as colunas necessárias
+    if df.empty:
+        st.warning("Nenhum dado encontrado na consulta.")
+        st.stop()
+    
+    # Verificar se as colunas necessárias existem
+    colunas_necessarias = ['data_emissao', 'valor_total_nota']
+    colunas_faltantes = [col for col in colunas_necessarias if col not in df.columns]
+    
+    if colunas_faltantes:
+        st.error(f"❌ Colunas faltantes no banco de dados: {', '.join(colunas_faltantes)}")
+        st.info("Colunas disponíveis: " + ", ".join(df.columns.tolist()))
+        st.stop()
+    
+    # Converter data_emissao
+    df['data_emissao'] = pd.to_datetime(df['data_emissao'], errors='coerce')
+    
+    # Remover linhas com data inválida
+    df = df.dropna(subset=['data_emissao'])
+    
+    if df.empty:
+        st.warning("Nenhuma nota com data válida encontrada.")
+        st.stop()
+    
+    df['data_emissao'] = df['data_emissao'].dt.tz_localize('UTC').dt.tz_convert(TIMEZONE)
     
     # Converter valor_total_nota para numérico
     df['valor_total_nota'] = pd.to_numeric(df['valor_total_nota'], errors='coerce').fillna(0)

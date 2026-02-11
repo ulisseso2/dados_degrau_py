@@ -1,0 +1,147 @@
+```json
+{
+  "resumo_da_ligacao": [
+    "Vendedora apresenta o curso online do Banco do Brasil para Jennifer, mas está falando com a mãe dela, Andréia.",
+    "Andréia busca informações sobre o curso online gravado, mas demonstra interesse em tirar dúvidas.",
+    "A vendedora informa o valor do curso online completo com a plataforma Degrau Questões, as formas de pagamento e o período de acesso.",
+    "Andréia decide pensar e verificar o tempo disponível para estudo, e a vendedora orienta a acessar o site ou ligar de volta quando estiver decidida."
+  ],
+  "extracao": {
+    "concurso_area": "Banco do Brasil",
+    "prazo_prova": "Não mencionado",
+    "nivel_atual": "Não mencionado",
+    "tempo_estudo": "Precisa verificar",
+    "dores_principais": [
+      "Dificuldade em tirar dúvidas no formato EAD",
+      "Necessidade de verificar o tempo disponível para estudo"
+    ],
+    "restricoes": [
+      "Disponibilidade para estudar",
+      "Dúvidas sobre o conteúdo do curso online"
+    ],
+    "tomador_decisao": "Andréia (mãe de Jennifer)",
+    "produtos_citados": [
+      {
+        "produto": "EAD",
+        "foi_indicado_por_que": "Por conta da indisponibilidade para o presencial, sendo a opção online a mais viável.",
+        "ancoragem_de_valor": "Fraca",
+        "evidencias": [
+          "Eu não tenho disponibilidade pra fazer presencial, então seria online.",
+          "É a hora que você entrar, se você quiser ficar 24 horas estudando, vai estar."
+        ]
+      }
+    ]
+  },
+  "avaliacao_vendedor": {
+    "nota_final_0_100": 45,
+    "notas_por_categoria": {
+      "abertura_rapport_0_10": 6,
+      "investigacao_spin_0_30": 10,
+      "valor_capacidade_0_20": 8,
+      "gatilhos_0_10": 5,
+      "objecoes_0_10": 5,
+      "compromisso_prox_passos_0_15": 6,
+      "clareza_compliance_0_5": 5
+    },
+    "pontos_fortes": [
+      {
+        "ponto": "Apresentação clara dos dois formatos de curso online (gravado e ao vivo).",
+        "evidencia": "Eu tenho online igual o seu cadastro, que é o do método de tudo gravado, e tenho online de aula ao vivo, né, que é onde você consegue ter toda a interação com o professor."
+      },
+      {
+        "ponto": "Informação sobre o valor do curso e as formas de pagamento.",
+        "evidencia": "Ele hoje, ele está saindo que é o curso completo com a plataforma Degrau Questões, o curso todo por R$446,40. Esse valor pode ser parcelado em até 12 vezes sem juros."
+      },
+      {
+        "ponto": "Convite para retornar o contato quando estiver decidida.",
+        "evidencia": "Quando você tiver decidido a comprar, liga de volta para mim."
+      }
+    ],
+    "melhorias": [
+      {
+        "melhoria": "Investigar as necessidades e dores da lead através de perguntas SPIN.",
+        "como_fazer": "Poderia ter feito perguntas como: 'Quais foram os maiores desafios que você enfrentou nos concursos anteriores?' (Problema), 'Como a falta de um curso preparatório adequado impactou seus resultados?' (Implicação), 'O que seria ideal em um curso preparatório para te ajudar a alcançar a aprovação?' (Necessidade de Solução).",
+        "evidencia_do_gap": "A vendedora não aprofundou a investigação das necessidades da lead, focando mais em apresentar o produto."
+      },
+      {
+        "melhoria": "Ancorar o valor do curso online destacando os benefícios específicos para as necessidades da lead.",
+        "como_fazer": "Após identificar a necessidade de tirar dúvidas, poderia ter dito: 'Nosso curso online oferece um fórum de dúvidas exclusivo para alunos, onde você pode enviar suas perguntas e receber respostas rápidas dos nossos professores especializados'.",
+        "evidencia_do_gap": "A vendedora não conectou os benefícios do curso online às necessidades específicas da lead, como a dificuldade em tirar dúvidas."
+      },
+      {
+        "melhoria": "Obter um compromisso mais concreto da lead em relação ao próximo passo.",
+        "como_fazer": "Poderia ter sugerido: 'Que tal eu te enviar um link com uma aula demonstrativa gratuita para você conhecer a nossa plataforma e o nosso método de ensino?'.",
+        "evidencia_do_gap": "O próximo passo sugerido foi apenas acessar o site ou ligar de volta, sem um compromisso mais específico por parte da lead."
+      }
+    ],
+    "erro_mais_caro": {
+      "descricao": "Não investigar as necessidades e dores da lead, focando mais em apresentar o produto.",
+      "evidencia": "A vendedora não fez perguntas para entender os desafios e dificuldades da lead em relação aos concursos, o que impediu a construção de valor do curso online."
+    },
+    "alertas": []
+  },
+  "avaliacao_lead": {
+    "lead_score_0_100": 55,
+    "classificacao": "C",
+    "dimensoes": {
+      "fit_0_30": 15,
+      "intencao_micro_momentos_0_30": 15,
+      "orientacao_valor_0_20": 15,
+      "abertura_personalizacao_0_10": 5,
+      "restricoes_barreiras_0_10_invertido": 5
+    },
+    "sinais_quente": [
+      {
+        "sinal": "Busca por informações sobre o curso online.",
+        "evidencia": "É que tem um cadastro seu conosco, buscando informações sobre o curso do Banco do Brasil."
+      },
+      {
+        "sinal": "Interesse em tirar dúvidas sobre o curso online.",
+        "evidencia": "Porque eu achei que tinha alguma caixinha de dúvida, alguma coisa assim, entendeu?"
+      },
+      {
+        "sinal": "Preocupação com o tempo disponível para estudo.",
+        "evidencia": "Porque eu tenho que ver o tempo para poder fazer e ver se vai me compensar mesmo."
+      }
+    ],
+    "sinais_frio": [
+      {
+        "sinal": "Não demonstra urgência na decisão de compra.",
+        "evidencia": "Não, na verdade eu vou pensar porque eu tenho que ver o tempo para poder fazer."
+      },
+      {
+        "sinal": "Não faz perguntas específicas sobre o conteúdo do curso.",
+        "evidencia": "A lead não demonstrou interesse em detalhes específicos do curso, como disciplinas, professores ou materiais complementares."
+      },
+      {
+        "sinal": "Precisa verificar se o curso online compensa.",
+        "evidencia": "E ver se vai me compensar mesmo."
+      }
+    ],
+    "perguntas_que_faltaram": [
+      "Quais foram os maiores desafios que você enfrentou nos concursos anteriores?",
+      "Como a falta de um curso preparatório adequado impactou seus resultados?",
+      "O que seria ideal em um curso preparatório para te ajudar a alcançar a aprovação?",
+      "Qual a sua rotina de estudos atual?",
+      "Quanto tempo você pode dedicar aos estudos por dia?",
+      "Quais disciplinas você tem mais dificuldade?",
+      "Qual a sua principal motivação para prestar o concurso do Banco do Brasil?"
+    ]
+  },
+  "recomendacao_final": {
+    "proximo_passo": "Enviar um e-mail com o link da página do curso online e uma aula demonstrativa gratuita.",
+    "produto_principal": {
+      "produto": "EAD",
+      "por_que": "É o formato que se encaixa na disponibilidade da lead e atende à sua necessidade de estudar online."
+    },
+    "produto_alternativo": {
+      "produto": "Live",
+      "por_que": "Caso a lead priorize a interação com professores e a possibilidade de tirar dúvidas em tempo real, o curso Live pode ser uma opção mais adequada."
+    },
+    "riscos_de_desalinhamento": [
+      "A lead pode estar buscando apenas o curso mais barato, sem considerar a qualidade e os benefícios oferecidos.",
+      "A lead pode não ter tempo suficiente para se dedicar aos estudos, o que pode comprometer o seu desempenho."
+    ]
+  }
+}
+```

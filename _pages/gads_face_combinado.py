@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import yaml
 
 load_dotenv()
+load_dotenv('.facebook_credentials.env', override=True)
 
 # Função auxiliar para formatar valores monetários
 def formatar_reais(valor):
@@ -205,13 +206,17 @@ def get_facebook_campaign_insights(account, start_date, end_date):
                         cpa = float(cost_action.get('value', 0))
                         break
             
+            # Obtém valores com fallback para 0 caso não existam
+            ctr_value = float(insight.get(AdsInsights.Field.ctr, 0))
+            cpc_value = float(insight.get(AdsInsights.Field.cpc, 0))
+            
             rows.append({
                 'Campanha': insight[AdsInsights.Field.campaign_name],
                 'Custo': float(insight[AdsInsights.Field.spend]),
-                'Impressões': int(insight[AdsInsights.Field.impressions]),
-                'Cliques': int(insight[AdsInsights.Field.clicks]),
-                'CTR (%)': float(insight[AdsInsights.Field.ctr]),
-                'CPC': float(insight[AdsInsights.Field.cpc]),
+                'Impressões': int(insight.get(AdsInsights.Field.impressions, 0)),
+                'Cliques': int(insight.get(AdsInsights.Field.clicks, 0)),
+                'CTR (%)': ctr_value,
+                'CPC': cpc_value,
                 'Conversões': conversoes,
                 'CPA': cpa
             })
