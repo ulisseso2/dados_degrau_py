@@ -12,3 +12,8 @@ google-ads.yamlgoogle-ads.yaml
 *.pkl
 !data_cache/central_backup/*.parquet
 !data_cache/central_backup/metadata.json
+
+# Arquivos com credenciais sensíveis
+SECRETS_STREAMLIT_COMPLETO.toml
+INSTRUCOES_SECRETS_STREAMLIT.md
+gerar_token_rapido.py

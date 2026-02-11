@@ -9,6 +9,10 @@ import os
 from typing import Dict, List, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
+try:
+    import streamlit as st
+except ImportError:
+    st = None
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -19,14 +23,36 @@ class TranscricaoAnalyzer:
     
     def __init__(self):
         """Inicializa o analisador com configurações da OpenAI"""
-        api_key = os.getenv('OPENAI_API_KEY')
+        # Tenta buscar do st.secrets primeiro (produção), depois do .env (local)
+        api_key = None
+        if st:
+            try:
+                api_key = st.secrets.get("openai_api_key")
+            except:
+                pass
+        
         if not api_key:
-            raise ValueError("OPENAI_API_KEY não configurada no arquivo .env")
+            api_key = os.getenv('OPENAI_API_KEY')
+        
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY não configurada no arquivo .env ou secrets")
         
         self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-        self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-        self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
+        
+        # Busca configurações do modelo
+        if st:
+            try:
+                self.model = st.secrets.get('openai_model', 'gpt-4o-mini')
+                self.temperature = float(st.secrets.get('openai_temperature', '0.2'))
+                self.max_tokens = int(st.secrets.get('openai_max_tokens', '4000'))
+            except:
+                self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+                self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
+                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
+        else:
+            self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+            self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
+            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
         
         # Carrega o contexto de avaliação SPIN
         self.contexto_spin = self._carregar_contexto_spin()
@@ -291,14 +317,36 @@ class TranscricaoOpenAIAnalyzer:
     """Classe para avaliação de transcrições usando OpenAI (novo fluxo)"""
 
     def __init__(self):
-        api_key = os.getenv('OPENAI_API_KEY')
+        # Tenta buscar do st.secrets primeiro (produção), depois do .env (local)
+        api_key = None
+        if st:
+            try:
+                api_key = st.secrets.get("openai_api_key")
+            except:
+                pass
+        
         if not api_key:
-            raise ValueError("OPENAI_API_KEY não configurada no arquivo .env")
+            api_key = os.getenv('OPENAI_API_KEY')
+        
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY não configurada no arquivo .env ou secrets")
 
         self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-        self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-        self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
+        
+        # Busca configurações do modelo
+        if st:
+            try:
+                self.model = st.secrets.get('openai_model', 'gpt-4o-mini')
+                self.temperature = float(st.secrets.get('openai_temperature', '0.2'))
+                self.max_tokens = int(st.secrets.get('openai_max_tokens', '4000'))
+            except:
+                self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+                self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
+                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
+        else:
+            self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+            self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
+            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
 
         self.contexto = self._carregar_contexto()
 

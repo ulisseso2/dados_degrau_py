@@ -18,7 +18,8 @@ TIMEZONE = 'America/Sao_Paulo'
 def get_octadesk_base_url():
     """Recupera a base URL do tenant Octadesk."""
     try:
-        base_url = st.secrets["octadesk_api"]["base_url"]
+        # Tenta primeiro base_url, depois octadesk_base_url
+        base_url = st.secrets["octadesk_api"].get("base_url") or st.secrets["octadesk_api"].get("octadesk_base_url")
     except (st.errors.StreamlitAPIException, KeyError):
         base_url = os.getenv("OCTADESK_BASE_URL") or os.getenv("OCTADESK_API_BASE_URL")
 
