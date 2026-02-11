@@ -8,28 +8,53 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import re
+from collections import Counter
 from datetime import datetime
 from utils.sql_loader import carregar_dados
 from utils.transcricao_analyzer import TranscricaoOpenAIAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
 
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _parse_json_completo(valores_json):
+    resultados = []
+    for json_str in valores_json:
+        if not json_str:
+            resultados.append({})
+            continue
+        try:
+            resultados.append(json.loads(json_str))
+        except (json.JSONDecodeError, TypeError):
+            resultados.append({})
+    return resultados
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _parse_insight_json(valores_json):
+    resultados = []
+    for json_str in valores_json:
+        if not json_str:
+            resultados.append({})
+            continue
+        try:
+            resultados.append(json.loads(json_str))
+        except (json.JSONDecodeError, TypeError):
+            resultados.append({})
+    return resultados
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def carregar_transcricoes_cached():
+    return carregar_dados("consultas/transcricoes/transcricoes.sql")
+
 def extrair_dados_json(df):
     """Extrai dados do JSON e cria novas colunas"""
+
+    # Extrai campos do JSON (cacheado)
+    valores_json = tuple(df['json_completo'].fillna('').astype(str).tolist())
+    json_data = _parse_json_completo(valores_json)
     
-    def parse_json_safe(json_str):
-        """Parse JSON com tratamento de erros"""
-        if pd.isna(json_str) or json_str == '':
-            return {}
-        try:
-            return json.loads(json_str)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-    
-    # Extrai campos do JSON
-    json_data = df['json_completo'].apply(parse_json_safe)
-    
-    df['ramal'] = json_data.apply(lambda x: x.get('ramal', ''))
-    df['uuid'] = json_data.apply(lambda x: x.get('uuid', ''))
+    df['ramal'] = [x.get('ramal', '') for x in json_data]
+    df['uuid'] = [x.get('uuid', '') for x in json_data]
     
     # Extrai agente do JSON com tratamento robusto
     def extrair_agente(json_obj):
@@ -39,12 +64,12 @@ def extrair_dados_json(df):
             return 'Não identificado'
         return str(agente).strip()
     
-    df['agente'] = json_data.apply(extrair_agente)
-    df['data_ligacao_json'] = json_data.apply(lambda x: x.get('data', ''))
-    df['hora_ligacao_json'] = json_data.apply(lambda x: x.get('hora', ''))
-    df['telefone_json'] = json_data.apply(lambda x: x.get('telefone', ''))
-    df['duracao'] = json_data.apply(lambda x: x.get('duracao', 0.0))
-    df['tipo'] = json_data.apply(lambda x: x.get('tipo') or 'N/Informado')
+    df['agente'] = [extrair_agente(x) for x in json_data]
+    df['data_ligacao_json'] = [x.get('data', '') for x in json_data]
+    df['hora_ligacao_json'] = [x.get('hora', '') for x in json_data]
+    df['telefone_json'] = [x.get('telefone', '') for x in json_data]
+    df['duracao'] = [x.get('duracao', 0.0) for x in json_data]
+    df['tipo'] = [x.get('tipo') or 'N/Informado' for x in json_data]
     
     return df
 
@@ -65,7 +90,7 @@ def run_page():
                 del st.session_state[key]
     
     # Carrega dados
-    df = carregar_dados("consultas/transcricoes/transcricoes.sql")
+    df = carregar_transcricoes_cached()
     
     # Verifica se há dados antes de processar
     if df.empty:
@@ -611,10 +636,8 @@ def run_page():
                     
                     # Limpa seleção e atualiza
                     st.session_state.transcricoes_selecionadas = []
-                    carregar_dados.clear()
-                    
-                    # Resultado final
                     if sucesso > 0:
+                        carregar_transcricoes_cached.clear()
                         st.success(f"✅ {sucesso} avaliação(ões) concluída(s) com sucesso!")
                     if erros > 0:
                         st.warning(f"⚠️ {erros} erro(s) durante o processo")
@@ -641,15 +664,8 @@ def run_page():
         if avaliacoes.empty:
             st.info("Nenhuma avaliação realizada ainda.")
         else:
-            def _parse_insight(insight_value):
-                if insight_value is None:
-                    return {}
-                try:
-                    return json.loads(insight_value)
-                except (TypeError, json.JSONDecodeError):
-                    return {}
-
-            avaliacoes['insight_json'] = avaliacoes['insight_ia'].apply(_parse_insight)
+            valores_insight = tuple(avaliacoes['insight_ia'].fillna('').astype(str).tolist())
+            avaliacoes['insight_json'] = _parse_insight_json(valores_insight)
             avaliacoes['lead_classificacao'] = avaliacoes['insight_json'].apply(
                 lambda x: x.get('avaliacao_lead', {}).get('classificacao', 'N/A')
             )
@@ -759,7 +775,7 @@ def run_page():
                                                 evaluation_ia=evaluation_ia,
                                             )
                                             if atualizado:
-                                                carregar_dados.clear()
+                                                carregar_transcricoes_cached.clear()
                                                 st.success("Reavaliação concluída!")
                                                 st.rerun()
                                             else:
@@ -857,6 +873,84 @@ def run_page():
                     orientation='h'
                 )
             st.plotly_chart(fig_agente, use_container_width=True)
+
+            # Resumo de pontos fortes, fracos e erros mais caros
+            st.divider()
+            st.subheader("🧾 Resumo de Pontos e Erros")
+
+            def _normalizar_ponto(texto: str) -> str:
+                texto = re.sub(r"\s+", " ", str(texto).strip().lower())
+                texto = re.sub(r"[\.;:!\?\-_/]", " ", texto)
+                texto = re.sub(r"\s+", " ", texto).strip()
+
+                mapeamento = {
+                    "boa abertura": "abertura e rapport",
+                    "abertura e rapport": "abertura e rapport",
+                    "rapport": "abertura e rapport",
+                    "construção de valor": "construção de valor",
+                    "demonstração de valor": "construção de valor",
+                    "investigação": "investigação/spin",
+                    "spin": "investigação/spin",
+                    "perguntas spin": "investigação/spin",
+                    "próximo passo": "compromisso e próximos passos",
+                    "compromisso": "compromisso e próximos passos",
+                    "objeções": "tratamento de objeções",
+                    "tratamento de objeções": "tratamento de objeções",
+                    "clareza": "clareza e compliance",
+                    "compliance": "clareza e compliance",
+                }
+
+                for chave, valor in mapeamento.items():
+                    if chave in texto:
+                        return valor
+                return texto
+
+            pontos_fortes = []
+            pontos_fracos = []
+            erros_mais_caros = []
+
+            for item in avaliacoes_filtradas['insight_json']:
+                if not isinstance(item, dict):
+                    continue
+                avaliacao_vendedor = item.get('avaliacao_vendedor', {})
+                for pf in avaliacao_vendedor.get('pontos_fortes', []):
+                    ponto = (pf.get('ponto') or '').strip()
+                    if ponto:
+                        pontos_fortes.append(_normalizar_ponto(ponto))
+                for mf in avaliacao_vendedor.get('melhorias', []):
+                    melhoria = (mf.get('melhoria') or '').strip()
+                    if melhoria:
+                        pontos_fracos.append(_normalizar_ponto(melhoria))
+                erro = (avaliacao_vendedor.get('erro_mais_caro', {}) or {}).get('descricao')
+                if erro:
+                    erros_mais_caros.append(_normalizar_ponto(str(erro)))
+
+            top_fortes = Counter(pontos_fortes).most_common(10)
+            top_fracos = Counter(pontos_fracos).most_common(10)
+            top_erros = Counter(erros_mais_caros).most_common(10)
+
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                st.markdown("**Top 10 Pontos Fortes**")
+                if top_fortes:
+                    for texto, qtd in top_fortes:
+                        st.write(f"• {texto} ({qtd})")
+                else:
+                    st.caption("Sem dados")
+            with col_r2:
+                st.markdown("**Top 10 Pontos de Melhoria**")
+                if top_fracos:
+                    for texto, qtd in top_fracos:
+                        st.write(f"• {texto} ({qtd})")
+                else:
+                    st.caption("Sem dados")
+            with col_r3:
+                st.markdown("**Top 10 Erros Mais Caros**")
+                if top_erros:
+                    for texto, qtd in top_erros:
+                        st.write(f"• {texto} ({qtd})")
+                else:
+                    st.caption("Sem dados")
 
     
     with tab3:

@@ -27,8 +27,8 @@ class TranscricaoAnalyzer:
         api_key = None
         if st:
             try:
-                api_key = st.secrets.get("openai_api_key")
-            except:
+                api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("openai_api_key")
+            except Exception:
                 pass
         
         if not api_key:
@@ -42,10 +42,10 @@ class TranscricaoAnalyzer:
         # Busca configurações do modelo
         if st:
             try:
-                self.model = st.secrets.get('openai_model', 'gpt-4o-mini')
-                self.temperature = float(st.secrets.get('openai_temperature', '0.2'))
-                self.max_tokens = int(st.secrets.get('openai_max_tokens', '4000'))
-            except:
+                self.model = st.secrets.get('OPENAI_MODEL') or st.secrets.get('openai_model', 'gpt-4o-mini')
+                self.temperature = float(st.secrets.get('OPENAI_TEMPERATURE') or st.secrets.get('openai_temperature', '0.2'))
+                self.max_tokens = int(st.secrets.get('OPENAI_MAX_TOKENS') or st.secrets.get('openai_max_tokens', '4000'))
+            except Exception:
                 self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
                 self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))
@@ -321,8 +321,8 @@ class TranscricaoOpenAIAnalyzer:
         api_key = None
         if st:
             try:
-                api_key = st.secrets.get("openai_api_key")
-            except:
+                api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("openai_api_key")
+            except Exception:
                 pass
         
         if not api_key:
@@ -336,10 +336,10 @@ class TranscricaoOpenAIAnalyzer:
         # Busca configurações do modelo
         if st:
             try:
-                self.model = st.secrets.get('openai_model', 'gpt-4o-mini')
-                self.temperature = float(st.secrets.get('openai_temperature', '0.2'))
-                self.max_tokens = int(st.secrets.get('openai_max_tokens', '4000'))
-            except:
+                self.model = st.secrets.get('OPENAI_MODEL') or st.secrets.get('openai_model', 'gpt-4o-mini')
+                self.temperature = float(st.secrets.get('OPENAI_TEMPERATURE') or st.secrets.get('openai_temperature', '0.2'))
+                self.max_tokens = int(st.secrets.get('OPENAI_MAX_TOKENS') or st.secrets.get('openai_max_tokens', '4000'))
+            except Exception:
                 self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
                 self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '4000'))

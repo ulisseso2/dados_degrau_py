@@ -16,6 +16,7 @@ def run_page():
 
     # ✅ Carrega os dados com cache (10 min por padrão, pode ajustar no sql_loader.py)
     df = carregar_dados("consultas/orders/orders.sql")
+    
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
@@ -810,3 +811,95 @@ def run_page():
             st.info("Nenhum aluno de curso online encontrado para os filtros de produtos selecionados.")
     else:
         st.info("Não há dados de produtos online para o período selecionado.")
+
+    st.divider()
+    st.subheader("Transações Relacionadas aos Pedidos")
+    
+    df2 = carregar_dados("consultas/orders/orders_trasactions.sql")
+    
+    if not df2.empty:
+        # Converte para timezone aware
+        df2['data_transacao'] = pd.to_datetime(df2['data_transacao']).dt.tz_localize(TIMEZONE, ambiguous='infer')
+        
+        # Filtros específicos para transações
+        st.markdown("Filtre as transações abaixo:")
+        col1_trans, col2_trans = st.columns([1, 1])
+        
+        with col1_trans:
+            # Filtro de data em range (mês anterior como padrão)
+            hoje = pd.Timestamp.now(tz=TIMEZONE).date()
+            primeiro_dia_mes_anterior = (hoje.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
+            ultimo_dia_mes_anterior = hoje.replace(day=1) - pd.Timedelta(days=1)
+            
+            periodo_trans = st.date_input(
+                "Período da Transação:",
+                value=[primeiro_dia_mes_anterior, ultimo_dia_mes_anterior],
+                key="periodo_transacao"
+            )
+        
+        with col2_trans:
+            # Filtro de empresa
+            empresas_trans = sorted(df2['empresa'].dropna().unique().tolist())
+            empresa_selecionada_trans = st.multiselect(
+                "Filtrar por Empresa:",
+                options=empresas_trans,
+                default=empresas_trans,
+                key="filtro_empresa_transacao"
+            )
+        
+        # Valida o período selecionado
+        if len(periodo_trans) == 2:
+            data_inicio_trans_aware = pd.Timestamp(periodo_trans[0], tz=TIMEZONE)
+            data_fim_trans_aware = pd.Timestamp(periodo_trans[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+            
+            tabela_transacoes = df2[
+                (df2["data_transacao"] >= data_inicio_trans_aware) &
+                (df2["data_transacao"] < data_fim_trans_aware) &
+                (df2["empresa"].isin(empresa_selecionada_trans)) &
+                (df2["valor"] > 0) &
+                (df2["categoria_id"].isin([2, 6, 8]))  # Filtra apenas as categorias de interesse
+            ].copy()
+        else:
+            st.warning("Selecione um período válido (data inicial e final).")
+            tabela_transacoes = pd.DataFrame()
+        
+        if not tabela_transacoes.empty:
+            # Formata dados para exibição
+            tabela_para_exibir_trans = tabela_transacoes.copy()
+            tabela_para_exibir_trans["valor"] = tabela_para_exibir_trans["valor"].apply(formatar_reais)
+            tabela_para_exibir_trans["data_transacao"] = pd.to_datetime(tabela_para_exibir_trans["data_transacao"]).dt.strftime('%d/%m/%Y %H:%M:%S')
+            
+            st.dataframe(tabela_para_exibir_trans, use_container_width=True, hide_index=True)
+            
+            # Métricas resumidas
+            metricas_trans = st.columns(3)
+            with metricas_trans[0]:
+                st.metric("Total de Transações", len(tabela_transacoes))
+            with metricas_trans[1]:
+                valor_total_trans = tabela_transacoes['valor'].sum()
+                st.metric("Valor Total", formatar_reais(valor_total_trans))
+            with metricas_trans[2]:
+                pedidos_unicos = tabela_transacoes['pedido'].nunique()
+                st.metric("Pedidos Únicos", pedidos_unicos)
+            
+            # Exportar tabela de transações excel
+            tabela_para_exportar_trans = tabela_transacoes.copy()
+            if 'data_transacao' in tabela_para_exportar_trans.columns:
+                tabela_para_exportar_trans['data_transacao'] = tabela_para_exportar_trans['data_transacao'].dt.tz_localize(None)
+            
+            buffer_transacoes = io.BytesIO()
+            with pd.ExcelWriter(buffer_transacoes, engine='xlsxwriter') as writer:
+                tabela_para_exportar_trans.to_excel(writer, index=False, sheet_name='Transacoes')
+            buffer_transacoes.seek(0)
+            
+            st.download_button(
+                label="📥 Exportar Transações Filtradas",
+                data=buffer_transacoes,
+                file_name="transacoes_pedidos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_transacoes"
+            )
+        else:
+            st.info("Não há transações para os filtros selecionados.")
+    else:
+        st.info("Não há transações disponíveis no banco de dados.")
