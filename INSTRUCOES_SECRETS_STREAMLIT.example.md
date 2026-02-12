@@ -18,9 +18,11 @@ base_url = "https://SEU_SUBDOMINIO.api001.octadesk.services"
 ### 2. OpenAI API
 ```toml
 openai_api_key = "sk-proj-SEU_TOKEN_OPENAI"
-openai_model = "gpt-4o-mini"
+openai_model = "gpt-4o"
 openai_temperature = "0.2"
-openai_max_tokens = "4000"
+openai_max_tokens = "6000"
+openai_max_input_chars = "12000"
+openai_max_input_chars_classificacao = "4000"
 ```
 
 ### 3. Facebook API

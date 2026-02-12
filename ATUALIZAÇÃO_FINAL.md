@@ -1,8 +1,8 @@
 # ✅ ATUALIZAÇÃO FINAL - CORREÇÕES APLICADAS
 
-## 🎉 CÓDIGO CORRIGIDO COM SUCESSO!
+## 🎉 CÓDIGO CORRIGIDO COM SUCESSO
 
-### 📁 Arquivos Modificados:
+### 📁 Arquivos Modificados
 
 1. ✅ `_pages/octadesk.py` - Busca `base_url` ou `octadesk_base_url`
 2. ✅ `utils/transcricao_analyzer.py` - Busca `openai_api_key` do st.secrets
@@ -20,9 +20,11 @@ Adicione as seguintes configurações (veja o exemplo completo em `INSTRUCOES_SE
 ```toml
 # OpenAI (OBRIGATÓRIO para Transcrições)
 openai_api_key = "sua-chave-openai"
-openai_model = "gpt-4o-mini"
+openai_model = "gpt-4o"
 openai_temperature = "0.2"
-openai_max_tokens = "4000"
+openai_max_tokens = "6000"
+openai_max_input_chars = "12000"
+openai_max_input_chars_classificacao = "4000"
 
 # Facebook (use o token do seu .env local)
 [facebook_api]
@@ -43,6 +45,7 @@ base_url = "sua-base-url"
 ### 2. Token do Facebook
 
 O token válido está no seu arquivo `.env` local na linha:
+
 ```
 FB_ACCESS_TOKEN=...
 ```
@@ -51,9 +54,10 @@ Copie esse token para os secrets do Streamlit!
 
 ---
 
-## ✅ APÓS CONFIGURAR OS SECRETS:
+## ✅ APÓS CONFIGURAR OS SECRETS
 
 Todas as páginas funcionarão:
+
 - ✅ Octadesk
 - ✅ Transcrições (OpenAI)
 - ✅ Análise Facebook

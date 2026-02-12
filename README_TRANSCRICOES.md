@@ -3,6 +3,7 @@
 ## 📋 Visão Geral
 
 Sistema completo de análise de transcrições de ligações de vendas com:
+
 - **Análise Quantitativa**: Métricas, gráficos e estatísticas
 - **Análise Qualitativa com IA**: Classificação automática de ligações (válidas, caixa postal, etc.)
 - **Avaliação SPIN Selling**: Análise detalhada usando metodologia SPIN (Situação, Problema, Implicação, Necessidade)
@@ -13,11 +14,13 @@ Sistema completo de análise de transcrições de ligações de vendas com:
 ### ⚠️ PROBLEMAS CRÍTICOS IDENTIFICADOS (NÃO RESOLVIDOS)
 
 #### 1. BUG CRÍTICO: Migration Script com Dados Incorretos
+
 **Status**: 🔴 CRÍTICO - Bloqueando funcionalidade de avaliações
 
 **Problema**: O script de migração `migrar_transcricoes_hash.py` populou a coluna `transcricao_hash` com o TEXTO COMPLETO das transcrições ao invés dos hashes MD5.
 
 **Evidência**:
+
 ```python
 # Output do banco de dados:
 Primeiros hashes salvos: ['Vendedor: De grau cultural, Marilene, boa tarde...']
@@ -28,28 +31,33 @@ Primeiros hashes gerados: ['38fa4cc9ff84ec498d18c2deebab7eb5', 'be2ec5230fd5f8d6
 # ^ Estes são hashes MD5 válidos
 ```
 
-**Impacto**: 
+**Impacto**:
+
 - Comparação de hashes falhando (compara MD5 vs texto completo)
 - Status "Avaliada" nunca aparece na tabela
 - Sistema não consegue detectar transcrições já avaliadas
 
 **Próxima Ação Necessária**:
+
 1. Corrigir `migrar_transcricoes_hash.py` para gerar hashes MD5 corretamente
 2. Re-executar migração em todos os 11-12 registros existentes
 3. Verificar que transcricao_hash agora contém strings de 32 caracteres hexadecimais
 
 #### 2. BUG CRÍTICO: Análise IA Retornando Erros
+
 **Status**: 🔴 CRÍTICO - Bloqueando novas avaliações
 
 **Problema**: O `TranscricaoIAAnalyzer.analisar_transcricao()` está retornando `{'erro', 'classificacao_ligacao'}` ao invés de uma avaliação válida.
 
 **Evidência**:
+
 ```python
 Análise retornada: ['erro', 'classificacao_ligacao']
 # Esperado: dict com chaves como 'nota_vendedor', 'lead_score', 'avaliacao_completa', etc.
 ```
 
 **Possíveis Causas**:
+
 - Chave API Groq inválida ou expirada
 - Formato do prompt incompatível com modelo atual
 - Mudança na API do Groq (resposta em formato diferente)
@@ -57,6 +65,7 @@ Análise retornada: ['erro', 'classificacao_ligacao']
 - Erro de parsing do JSON retornado pela IA
 
 **Próxima Ação Necessária**:
+
 1. Verificar arquivo `utils/transcricao_ia_analyzer.py` linhas 46-103
 2. Testar chamada à API Groq isoladamente
 3. Verificar variáveis de ambiente com chaves da API
@@ -66,13 +75,15 @@ Análise retornada: ['erro', 'classificacao_ligacao']
 ### ✅ MELHORIAS IMPLEMENTADAS (ÚLTIMAS 24H)
 
 #### Correções de Bugs
+
 1. **IndentationError Corrigido**: Alinhamento incorreto em `transcricao_ia_analyzer.py:85`
 2. **Database Locked Resolvido**: Adicionado `timeout=30.0` em todas as conexões SQLite
 3. **NOT NULL Constraint Corrigido**: Tornado `oportunidade_id` nullable no schema
 4. **Duplicate Streamlit Keys**: Adicionado `idx` nos keys de checkboxes e botões
 
 #### Novas Funcionalidades
-1. **Sistema de Hashing**: 
+
+1. **Sistema de Hashing**:
    - Função `gerar_hash()` usando MD5 para identificar transcrições unicamente
    - Coluna `transcricao_hash` adicionada ao banco
    - Permite identificar transcrições sem oportunidade_id
@@ -88,6 +99,7 @@ Análise retornada: ['erro', 'classificacao_ligacao']
    - Schema atualizado (oportunidade_id nullable + transcricao_hash)
 
 #### Debug e Monitoramento
+
 - Logging extensivo adicionado em `_pages/transcricoes.py`
 - Logging em `utils/transcricao_avaliacao_db.py`
 - Prints de debug mostrando fluxo de dados completo
@@ -96,14 +108,17 @@ Análise retornada: ['erro', 'classificacao_ligacao']
 
 ### 1. Configuração Inicial
 
-#### Dependências Principais:
+#### Dependências Principais
+
 ```bash
 pip install streamlit pandas plotly groq python-dotenv
 # Groq API para análise com IA (substituiu OpenAI)
 ```
 
-#### Configurar variáveis de ambiente:
+#### Configurar variáveis de ambiente
+
 Crie um arquivo `.env` na raiz do projeto:
+
 ```bash
 # API Groq para análise de transcrições
 GROQ_API_KEY=sua_chave_groq_aqui
@@ -111,14 +126,17 @@ GROQ_MODEL=llama-3.3-70b-versatile
 
 # (Opcional) OpenAI - se ainda usar para outras análises
 OPENAI_API_KEY=sua_chave_openai_aqui
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4o
 OPENAI_TEMPERATURE=0.2
-OPENAI_MAX_TOKENS=4000
+OPENAI_MAX_TOKENS=6000
+OPENAI_MAX_INPUT_CHARS=12000
+OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO=4000
 ```
 
 ### 2. Executar a Análise
 
 Execute o Streamlit:
+
 ```bash
 streamlit run main.py
 ```
@@ -130,6 +148,7 @@ Navegue até: **📞 Transcrições**
 #### Banco de Dados: `transcricoes_avaliacoes.db` (SQLite)
 
 **Schema da Tabela `avaliacoes`**:
+
 ```sql
 CREATE TABLE avaliacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,7 +171,7 @@ CREATE TABLE avaliacoes (
 CREATE UNIQUE INDEX idx_transcricao_hash ON avaliacoes(transcricao_hash);
 ```
 
-#### Workflow de Avaliação:
+#### Workflow de Avaliação
 
 1. **Tab "Avaliar Transcrições"**:
    - Carrega transcrições do banco MySQL (opportunity_transcripts)
@@ -175,7 +194,7 @@ CREATE UNIQUE INDEX idx_transcricao_hash ON avaliacoes(transcricao_hash);
 4. **Tab "Exportar Dados"**:
    - Download em CSV de todas as avaliações
 
-#### Funções Principais (`utils/transcricao_avaliacao_db.py`):
+#### Funções Principais (`utils/transcricao_avaliacao_db.py`)
 
 ```python
 def salvar_avaliacao(transcricao_hash, dados_avaliacao, oportunidade_id=None)
@@ -192,7 +211,7 @@ def existe_avaliacao(transcricao_hash)
     # Verifica se transcrição já foi avaliada
 ```
 
-#### Hash System (`_pages/transcricoes.py`):
+#### Hash System (`_pages/transcricoes.py`)
 
 ```python
 def gerar_hash(transcricao: str) -> str:
@@ -204,7 +223,6 @@ hash_gerado = gerar_hash(df_row['transcricao'])
 ja_avaliada = hash_gerado in lista_hashes_salvos
 ```
 
-
 ## 📊 Funcionalidades
 
 ### Sistema de Avaliações (NOVO - Janeiro 2026)
@@ -212,6 +230,7 @@ ja_avaliada = hash_gerado in lista_hashes_salvos
 **Status**: ⚠️ Em desenvolvimento - 2 bugs críticos impedem uso completo
 
 **Funcionalidades Implementadas**:
+
 - ✅ Seleção de transcrições com checkboxes
 - ✅ Preview de transcrição antes de avaliar (botão "👁️ Ver")
 - ✅ Avaliação em lote via Groq API
@@ -221,10 +240,12 @@ ja_avaliada = hash_gerado in lista_hashes_salvos
 - ✅ Coluna "Avaliada" para mostrar status
 
 **Bugs Ativos**:
+
 - 🔴 Hash MD5 armazenado como texto completo (comparação quebrada)
 - 🔴 API Groq retornando erro ao invés de avaliação válida
 
 **Campos da Avaliação**:
+
 - Nota do Vendedor (0-100)
 - Lead Score (0-100)
 - Lead Classificação (Quente/Morno/Frio/Não Qualificado)
@@ -235,12 +256,14 @@ ja_avaliada = hash_gerado in lista_hashes_salvos
 ### 1. Visão Geral (Análise Quantitativa) - LEGADO
 
 **Métricas Principais:**
+
 - Total de ligações
 - Ligações com transcrição
 - Leads identificados
 - Agentes únicos
 
 **Análises Disponíveis:**
+
 - Distribuição por empresa (Degrau/Central)
 - Ligações por etapa do funil
 - Ligações por modalidade (Presencial/Live/Online)
@@ -249,6 +272,7 @@ ja_avaliada = hash_gerado in lista_hashes_salvos
 - Ligações por origem
 
 **Dados Extraídos do JSON:**
+
 - Data e hora da ligação
 - UUID da chamada
 - Ramal utilizado
@@ -259,6 +283,7 @@ ja_avaliada = hash_gerado in lista_hashes_salvos
 
 **Classificação Automática:**
 A IA classifica cada ligação em:
+
 - ✅ **Válida**: Conversa completa com conteúdo relevante
 - 📞 **Caixa Postal**: Caiu em secretária eletrônica
 - ❌ **Não Atendeu**: Apenas música/URA
@@ -266,6 +291,7 @@ A IA classifica cada ligação em:
 - ⚠️ **Inválida**: Outros motivos (trote, muito curta, etc.)
 
 **Métricas Geradas:**
+
 - Quantidade de cada tipo
 - Taxa de sucesso (ligações válidas)
 - Distribuição em gráfico de pizza
@@ -274,12 +300,14 @@ A IA classifica cada ligação em:
 ### 3. Avaliação SPIN Selling - LEGADO (OpenAI)
 
 **Metodologia SPIN:**
+
 - **S**ituação: Perguntas sobre contexto do cliente
 - **P**roblema: Identificação de dores e insatisfações
 - **I**mplicação: Consequências de não resolver o problema
 - **N**ecessidade: Benefícios da solução (need-payoff)
 
 **Scores Avaliados:**
+
 - Score Total (0-100)
 - Score de Investigação SPIN
 - Score de Necessidades
@@ -288,6 +316,7 @@ A IA classifica cada ligação em:
 - Score de Gatilhos Mentais
 
 **Análise Detalhada Inclui:**
+
 - Produto principal abordado (Presencial/Live/EAD)
 - Contagem de perguntas SPIN (S/P/I/N)
 - Necessidades implícitas vs explícitas
@@ -299,6 +328,7 @@ A IA classifica cada ligação em:
 - Alertas de compliance (promessas irreais, pressão excessiva, etc.)
 
 **Classificação de Qualidade:**
+
 - 90-100: Execução excelente
 - 75-89: Bom, com ajustes pontuais
 - 60-74: Mediano, necessita melhorias
@@ -306,10 +336,10 @@ A IA classifica cada ligação em:
 
 ## 🔧 Arquitetura Técnica
 
-### Arquivos do Sistema de Avaliações:
+### Arquivos do Sistema de Avaliações
 
 1. **`utils/transcricao_ia_analyzer.py`** (127 linhas)
-   - Classe `TranscricaoIAAnalyzer` 
+   - Classe `TranscricaoIAAnalyzer`
    - Integração com **Groq API** (não OpenAI)
    - Método principal: `analisar_transcricao(transcricao: str) -> dict`
    - Retorna: nota_vendedor, lead_score, lead_classificacao, concurso_area, produto_recomendado, avaliacao_completa
@@ -343,7 +373,7 @@ A IA classifica cada ligação em:
    - 11-12 registros atualmente
    - Índice único: `idx_transcricao_hash`
 
-### Arquivos Legados (Sistema Antigo):
+### Arquivos Legados (Sistema Antigo)
 
 1. **`utils/transcricao_analyzer.py`**
    - Sistema antigo com OpenAI
@@ -356,7 +386,7 @@ A IA classifica cada ligação em:
    - Tab de "Avaliação SPIN" usa OpenAI
    - Novo sistema de avaliações é adicional, não substituição completa
 
-### Fluxo de Dados Atual:
+### Fluxo de Dados Atual
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -409,7 +439,7 @@ A IA classifica cada ligação em:
                      └─────────────────────────┘
 ```
 
-### Conexões e Dependências:
+### Conexões e Dependências
 
 ```python
 # MySQL - Banco principal
@@ -435,10 +465,12 @@ import plotly.express as px
 ### PRIORIDADE 1 - CRÍTICO 🔴
 
 #### 1. Corrigir Bug do Migration Script
+
 **Arquivo**: `migrar_transcricoes_hash.py`
 **Problema**: Salvando texto completo ao invés de hash MD5
 
 **Código Atual (ERRADO)**:
+
 ```python
 # Provavelmente está assim:
 cursor.execute("""
@@ -449,6 +481,7 @@ cursor.execute("""
 ```
 
 **Código Correto (ESPERADO)**:
+
 ```python
 import hashlib
 
@@ -464,18 +497,22 @@ cursor.execute("""
 ```
 
 **Ações**:
+
 1. Abrir e revisar `migrar_transcricoes_hash.py`
 2. Corrigir lógica de geração de hash
 3. Re-executar script em TODOS os registros
 4. Validar: `SELECT LENGTH(transcricao_hash) FROM avaliacoes LIMIT 1` deve retornar 32 (tamanho de MD5 em hex)
 
 #### 2. Debugar Erro da API Groq
+
 **Arquivo**: `utils/transcricao_ia_analyzer.py` (linhas 46-103)
 **Problema**: Retornando `{'erro', 'classificacao_ligacao'}` ao invés de dict válido
 
 **Investigação Necessária**:
+
 1. Verificar se `GROQ_API_KEY` está definida em `.env`
 2. Testar chamada à API isoladamente:
+
 ```python
 from groq import Groq
 import os
@@ -489,8 +526,9 @@ response = client.chat.completions.create(...)
 print(response)  # Ver formato da resposta bruta
 ```
 
-3. Verificar parsing do JSON retornado
-4. Adicionar try/except robusto:
+1. Verificar parsing do JSON retornado
+2. Adicionar try/except robusto:
+
 ```python
 try:
     resultado = json.loads(resposta_texto)
@@ -500,10 +538,11 @@ except json.JSONDecodeError as e:
     return {'erro': str(e), 'resposta_bruta': resposta_texto}
 ```
 
-5. Verificar limites da API (rate limit, tokens)
-6. Testar com modelo diferente se necessário
+1. Verificar limites da API (rate limit, tokens)
+2. Testar com modelo diferente se necessário
 
 **Possíveis Causas**:
+
 - Chave API inválida/expirada
 - Prompt muito longo (limite de tokens)
 - Formato de resposta mudou
@@ -513,12 +552,16 @@ except json.JSONDecodeError as e:
 ### PRIORIDADE 2 - MELHORIAS 🟡
 
 #### 3. Remover Debug Logging
+
 Após correções, limpar prints de debug:
+
 - `_pages/transcricoes.py` (múltiplos prints)
 - `utils/transcricao_avaliacao_db.py` (logging SQL)
 
 #### 4. Validação de Dados
+
 Adicionar validações:
+
 ```python
 def validar_hash(hash_str: str) -> bool:
     """Valida se string é um hash MD5 válido"""
@@ -530,6 +573,7 @@ if not validar_hash(transcricao_hash):
 ```
 
 #### 5. Tratamento de Erros Melhorado
+
 ```python
 def salvar_avaliacao(transcricao_hash, dados_avaliacao, oportunidade_id=None):
     try:
@@ -548,17 +592,20 @@ def salvar_avaliacao(transcricao_hash, dados_avaliacao, oportunidade_id=None):
 ### PRIORIDADE 3 - FUTURO 🟢
 
 #### 6. Melhorias de Performance
+
 - Cache de hashes salvos (evitar query repetida)
 - Batch insert para múltiplas avaliações
 - Índices adicionais se necessário
 
 #### 7. UI Enhancements
+
 - Progress bar durante avaliação em lote
 - Mensagem de sucesso/erro mais clara
 - Filtros na tab "Ver Avaliações"
 - Ordenação por data, nota, etc.
 
 #### 8. Testes Automatizados
+
 ```python
 # tests/test_transcricao_hash.py
 def test_gerar_hash():
@@ -571,11 +618,10 @@ def test_gerar_hash():
     assert hash1 != gerar_hash("Outro texto")
 ```
 
-
-
 ## � Histórico de Desenvolvimento (Janeiro 2026)
 
 ### Dia 1 - Problemas de Conectividade
+
 - Usuário reportou instabilidade de internet
 - App Streamlit com erros não especificados
 - Sessão interrompida
@@ -583,31 +629,38 @@ def test_gerar_hash():
 ### Dia 2 - Sessão de Correção Intensiva
 
 #### Problema 1: IndentationError
+
 **Erro**: `IndentationError: expected an indented block after 'except' statement on line 85`
 **Arquivo**: `utils/transcricao_ia_analyzer.py`
 **Solução**: Corrigido alinhamento com 8 espaços corretos
 **Status**: ✅ Resolvido
 
 #### Problema 2: Database is Locked
+
 **Erro**: `sqlite3.OperationalError: database is locked`
 **Causa**: Múltiplas conexões SQLite simultâneas sem timeout
 **Solução**: Adicionado `timeout=30.0` em TODAS as chamadas `sqlite3.connect()`
-**Arquivos Modificados**: 
+**Arquivos Modificados**:
+
 - `utils/transcricao_avaliacao_db.py` (todas as 15+ ocorrências)
 **Status**: ✅ Resolvido
 
 #### Problema 3: NOT NULL Constraint Failed
+
 **Erro**: `IntegrityError: NOT NULL constraint failed: avaliacoes.oportunidade_id`
 **Causa**: Nem todas as transcrições têm um `oportunidade_id` vinculado
-**Solução**: 
+**Solução**:
+
 1. Tornado `oportunidade_id` nullable no schema
 2. Criado script de migração `migrar_transcricoes_hash.py`
 3. Migrados 12 registros existentes
 **Status**: ✅ Resolvido (mas migration tem bug)
 
 #### Problema 4: Sistema de Identificação Única
+
 **Requisito**: Identificar transcrições sem oportunidade_id
 **Solução Implementada**:
+
 1. Adicionada coluna `transcricao_hash TEXT UNIQUE NOT NULL`
 2. Função `gerar_hash()` usando MD5: `hashlib.md5(texto.encode()).hexdigest()`
 3. Índice único: `CREATE UNIQUE INDEX idx_transcricao_hash ON avaliacoes(transcricao_hash)`
@@ -615,9 +668,11 @@ def test_gerar_hash():
 **Status**: ⚠️ Implementado mas com bug (hash = texto completo)
 
 #### Problema 5: Streamlit Duplicate Keys
+
 **Erro**: `StreamlitDuplicateElementKey: There are multiple identical st.checkbox widgets with the same generated key`
 **Causa**: Loop sem identificador único nas keys dos widgets
 **Solução**: Adicionado `idx` do loop em todas as keys:
+
 ```python
 # Antes:
 st.checkbox("Selecionar", key=f"select_{row['oportunidade_id']}")
@@ -625,45 +680,55 @@ st.checkbox("Selecionar", key=f"select_{row['oportunidade_id']}")
 # Depois:
 st.checkbox("Selecionar", key=f"select_{idx}_{row['oportunidade_id']}")
 ```
+
 **Arquivos Modificados**: `_pages/transcricoes.py`
 **Status**: ✅ Resolvido
 
 #### Problema 6: Falta de Preview
+
 **Requisito**: "Gostaria de poder ver a transcrição antes de rodar a avaliação"
 **Solução**: Botão "👁️ Ver" com `st.expander()` mostrando transcrição completa
 **Status**: ✅ Implementado
 
 #### Problema 7: Seleção Individual
+
 **Requisito**: "Coloque um select para que eu possa selecionar quais quero avaliar"
 **Solução**: Checkboxes em cada linha da tabela
 **Status**: ✅ Implementado
 
 #### Problema 8: Status de Avaliação
+
 **Requisito**: "Mantenha as transcrições avaliadas na tabela, com uma coluna, Avaliada"
-**Solução**: 
+**Solução**:
+
 1. Coluna "Avaliada" com valores "Sim" ou "Pendente"
 2. Lógica: compara hash MD5 da transcrição com hashes salvos no banco
+
 ```python
 df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
     lambda x: 'Sim' if x in hashes_salvos else 'Pendente'
 )
 ```
+
 **Status**: ⚠️ Implementado mas não funciona (bug de comparação hash)
 
 #### Problema 9: Avaliações Não Salvam
+
 **Erro**: "Não está salvando as avaliações e nem mudando o status para avaliada"
-**Debug Adicionado**: 
+**Debug Adicionado**:
+
 - Prints extensivos em `_pages/transcricoes.py`
 - Logging em `transcricao_avaliacao_db.py`
 - Rastreamento de fluxo completo
 
 **Bugs Descobertos**:
+
 1. **Migration Bug**: `transcricao_hash` contém texto completo, não MD5
 2. **API Error**: Groq retornando `{'erro', 'classificacao_ligacao'}` ao invés de avaliação válida
 
 **Status**: 🔴 NÃO RESOLVIDO - Dois bugs críticos bloqueando
 
-### Linha do Tempo de Commits/Changes:
+### Linha do Tempo de Commits/Changes
 
 1. **Fix IndentationError** → transcricao_ia_analyzer.py
 2. **Add timeout=30.0** → transcricao_avaliacao_db.py (15+ locais)
@@ -677,9 +742,10 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 10. **Add debug logging** → _pages/transcricoes.py + transcricao_avaliacao_db.py
 11. **Discover bugs** → Terminal output analysis
 
-### Estado Atual do Código:
+### Estado Atual do Código
 
 **Funcionando**:
+
 - ✅ App inicia sem erros
 - ✅ Conexões SQLite estáveis (sem "database is locked")
 - ✅ UI de seleção com checkboxes
@@ -688,25 +754,28 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 - ✅ Migração executada (12 registros)
 
 **Quebrado**:
+
 - 🔴 Hashes no banco = texto completo (deveria ser MD5)
 - 🔴 Groq API retornando erro ao invés de avaliação
 - 🔴 Status "Avaliada" sempre mostra "Pendente" (comparação hash falha)
 - 🔴 Novas avaliações não salvam (API retorna erro)
 
+### Análise Quantitativa (Diária)
 
-### Análise Quantitativa (Diária):
 - Monitorar volume de ligações
 - Identificar agentes mais ativos
 - Acompanhar horários de pico
 - Analisar distribuição por modalidade
 
-### Classificação com IA (Semanal):
+### Classificação com IA (Semanal)
+
 - Avaliar taxa de sucesso nas ligações
 - Identificar problemas técnicos recorrentes
 - Otimizar horários de ligação
 - Limite sugerido: 50-100 ligações por vez
 
-### Avaliação SPIN (Mensal/Por Demanda):
+### Avaliação SPIN (Mensal/Por Demanda)
+
 - Avaliação detalhada de qualidade
 - Treinamento de vendedores
 - Identificação de melhores práticas
@@ -756,6 +825,7 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 ## 📈 Próximos Passos
 
 ### Correções Urgentes (Janeiro 2026)
+
 - [ ] **CRÍTICO**: Corrigir migration script para gerar hash MD5 real
 - [ ] **CRÍTICO**: Debugar erro da API Groq e corrigir resposta
 - [ ] Re-executar migração com hash correto em todos os 11-12 registros
@@ -764,6 +834,7 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 - [ ] Remover debug logging após correções
 
 ### Melhorias Futuras (Sistema de Avaliações)
+
 - [ ] Progress bar durante avaliação em lote
 - [ ] Cache de hashes para performance
 - [ ] Validação de hash MD5 ao salvar
@@ -775,6 +846,7 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 - [ ] Dashboard com estatísticas das avaliações
 
 ### Melhorias Futuras (Sistema Legado)
+
 - [ ] Cache de avaliações no banco de dados
 - [ ] Análise de sentimento
 - [ ] Identificação de objeções comuns
@@ -788,22 +860,26 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 ### Problemas Resolvidos
 
 **❌ "IndentationError: expected an indented block"**
+
 - Causa: Alinhamento incorreto em transcricao_ia_analyzer.py:85
 - Solução: Corrigido para 8 espaços
 - Status: ✅ Resolvido
 
 **❌ "sqlite3.OperationalError: database is locked"**
+
 - Causa: Múltiplas conexões simultâneas sem timeout
 - Solução: Adicionado `timeout=30.0` em TODAS as conexões SQLite
 - Arquivo: utils/transcricao_avaliacao_db.py
 - Status: ✅ Resolvido
 
 **❌ "NOT NULL constraint failed: avaliacoes.oportunidade_id"**
+
 - Causa: Schema não aceitava transcrições sem oportunidade
 - Solução: Tornado oportunidade_id nullable + sistema de hash MD5
 - Status: ✅ Resolvido
 
 **❌ "StreamlitDuplicateElementKey"**
+
 - Causa: Loop sem identificador único nas keys dos widgets
 - Solução: Adicionado `idx` em todas as keys (ex: `f"select_{idx}_{id}"`)
 - Arquivo: _pages/transcricoes.py
@@ -812,6 +888,7 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 ### Problemas Ativos
 
 **🔴 Status "Avaliada" sempre mostra "Pendente"**
+
 - Causa: Coluna transcricao_hash contém TEXTO COMPLETO ao invés de hash MD5
 - Debug: `SELECT transcricao_hash FROM avaliacoes LIMIT 1` retorna texto longo
 - Esperado: String de 32 caracteres (ex: 'd35a09cb262c8ee65787bf846978a7f7')
@@ -820,6 +897,7 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 - Status: 🔴 NÃO RESOLVIDO
 
 **🔴 Avaliações não salvam - API retorna erro**
+
 - Sintoma: `Análise retornada: ['erro', 'classificacao_ligacao']`
 - Causa: Groq API não retornando dict válido
 - Debug necessário:
@@ -833,45 +911,53 @@ df_com_transcricao['avaliada'] = df_com_transcricao['hash_gerado'].apply(
 ### Problemas Históricos (Sistema Legado)
 
 **"OPENAI_API_KEY não configurada"**
+
 - Solução: Criar arquivo `.env` com chave da OpenAI
 
 **Erro ao conectar no banco de dados (MySQL)**
+
 - Solução: Verificar configuração em `conexao/conexao_seducar.py`
 
 **Erro ao conectar no banco SQLite**
+
 - Verificar se arquivo `transcricoes_avaliacoes.db` existe
 - Verificar permissões de escrita no diretório
 - Se persistir, deletar DB e deixar sistema recriar schema
 
 **Análise muito lenta**
+
 - Solução: Reduzir limite de ligações a analisar
 - Sistema de avaliações: Selecionar menos transcrições por vez
 
 **JSON inválido na coluna json_completo**
+
 - Sistema trata automaticamente, retornando dados vazios para JSONs inválidos
 
 ## 📞 Suporte e Documentação
 
-### Documentação Relacionada:
+### Documentação Relacionada
+
 - Arquivo atual: `README_TRANSCRICOES.md`
 - Outros READMEs no projeto:
   - `README.md` - Geral do projeto
   - `README_FBCLID.md` - Facebook tracking
   - `README_GCLID_REPROCESSAMENTO.md` - Google tracking
 
-### APIs Utilizadas:
+### APIs Utilizadas
+
 - [Documentação Groq](https://console.groq.com/docs) - Sistema de Avaliações (NOVO)
 - [Documentação OpenAI](https://platform.openai.com/docs) - Sistema Legado
 - [Documentação Streamlit](https://docs.streamlit.io) - Interface
 
-### Arquivos-Chave para Debug:
+### Arquivos-Chave para Debug
+
 1. `_pages/transcricoes.py` - UI principal
 2. `utils/transcricao_ia_analyzer.py` - Integração Groq API
 3. `utils/transcricao_avaliacao_db.py` - Operações SQLite
 4. `migrar_transcricoes_hash.py` - Script de migração (⚠️ com bug)
 5. `transcricoes_avaliacoes.db` - Banco de dados local
 
-### Comandos Úteis:
+### Comandos Úteis
 
 ```bash
 # Iniciar aplicação
@@ -894,30 +980,35 @@ cat .env | grep GROQ
 tail -f ~/.streamlit/logs/*.log
 ```
 
-### Informações para Novo Agente de IA:
+### Informações para Novo Agente de IA
 
 **Contexto Geral**:
+
 - Projeto Streamlit de análise de transcrições de ligações de vendas
 - Dois sistemas coexistindo: Legado (OpenAI) + Novo (Groq + SQLite)
 - Usuário teve instabilidade de internet ontem, sessão de debug intensiva hoje
 
 **Estado Atual (30/Jan/2026)**:
+
 - App funciona e inicia corretamente
 - UI implementada com seleção, preview e status
 - Database aceita dados sem oportunidade_id
 - **2 bugs críticos bloqueando funcionalidade completa**
 
 **Bugs Ativos**:
+
 1. Migration script salvou texto completo ao invés de hash MD5 em `transcricao_hash`
 2. Groq API retornando `{'erro', 'classificacao_ligacao'}` ao invés de avaliação válida
 
 **Próxima Ação Recomendada**:
+
 1. Revisar e corrigir `migrar_transcricoes_hash.py`
 2. Debugar chamada à Groq API em `utils/transcricao_ia_analyzer.py`
 3. Re-executar migração
 4. Testar fluxo end-to-end de avaliação
 
 **Última Interação**:
+
 - Debug logging extensivo adicionado
 - Terminal mostrando evidências dos bugs
 - Sistema pronto para correção dos problemas identificados

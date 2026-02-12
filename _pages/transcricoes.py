@@ -15,7 +15,9 @@ from utils.transcricao_analyzer import TranscricaoOpenAIAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+TIMEZONE = 'America/Sao_Paulo'
+
+@st.cache_data(ttl=21600, show_spinner=False)
 def _parse_json_completo(valores_json):
     resultados = []
     for json_str in valores_json:
@@ -29,7 +31,7 @@ def _parse_json_completo(valores_json):
     return resultados
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=21600, show_spinner=False)
 def _parse_insight_json(valores_json):
     resultados = []
     for json_str in valores_json:
@@ -42,9 +44,36 @@ def _parse_insight_json(valores_json):
             resultados.append({})
     return resultados
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def carregar_transcricoes_cached():
-    return carregar_dados("consultas/transcricoes/transcricoes.sql")
+def _transcricao_avaliavel(texto: str) -> bool:
+    if not isinstance(texto, str):
+        return False
+    texto_norm = " ".join(texto.lower().split())
+
+    tem_dialogo = ("vendedor:" in texto_norm) and ("cliente:" in texto_norm)
+    padroes_ura = [
+        "caixa postal",
+        "correio de voz",
+        "grave seu recado",
+        "deixe a sua mensagem",
+        "deixe sua mensagem",
+        "não receber recados",
+        "este número está configurado para não receber recados",
+        "mensagem na caixa postal",
+        "pessoa não está disponível",
+        "não está disponível",
+        "grave a sua mensagem",
+        "após o sinal",
+        "deixe outra mensagem"
+    ]
+
+    if not tem_dialogo and any(p in texto_norm for p in padroes_ura):
+        return False
+
+    if len(texto_norm) > 255:
+        return True
+
+    return False
+
 
 def extrair_dados_json(df):
     """Extrai dados do JSON e cria novas colunas"""
@@ -74,10 +103,19 @@ def extrair_dados_json(df):
     return df
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+def carregar_transcricoes_base():
+    df = carregar_dados("consultas/transcricoes/transcricoes.sql")
+    if df.empty:
+        return df
+    df["data_ligacao"] = pd.to_datetime(df["data_ligacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df = extrair_dados_json(df)
+    df['avaliavel'] = df['transcricao'].apply(_transcricao_avaliavel)
+    return df
+
+
 def run_page():
     """Página de análise de transcrições de ligações"""
-    
-    TIMEZONE = 'America/Sao_Paulo'
     
     st.title("📞 Análise de Transcrições de Ligações")
 
@@ -90,18 +128,12 @@ def run_page():
                 del st.session_state[key]
     
     # Carrega dados
-    df = carregar_transcricoes_cached()
+    df = carregar_transcricoes_base()
     
     # Verifica se há dados antes de processar
     if df.empty:
         st.warning("⚠️ Não foi possível carregar os dados. Verifique a conexão com o banco de dados.")
         st.stop()
-    
-    # Pré-processamento
-    df["data_ligacao"] = pd.to_datetime(df["data_ligacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
-    
-    # Extrai dados do JSON
-    df = extrair_dados_json(df)
     
     # === FILTROS SIDEBAR ===
     
@@ -265,37 +297,7 @@ def run_page():
             else:
                 st.markdown(conteudo)
 
-    def _transcricao_avaliavel(texto: str) -> bool:
-        if not isinstance(texto, str):
-            return False
-        texto_norm = " ".join(texto.lower().split())
 
-        tem_dialogo = ("vendedor:" in texto_norm) and ("cliente:" in texto_norm)
-        padroes_ura = [
-            "caixa postal",
-            "correio de voz",
-            "grave seu recado",
-            "deixe a sua mensagem",
-            "deixe sua mensagem",
-            "não receber recados",
-            "este número está configurado para não receber recados",
-            "mensagem na caixa postal",
-            "pessoa não está disponível",
-            "não está disponível",
-            "grave a sua mensagem",
-            "após o sinal",
-            "deixe outra mensagem"
-        ]
-
-        if not tem_dialogo and any(p in texto_norm for p in padroes_ura):
-            return False
-
-        if len(texto_norm) > 255:
-            return True
-
-        return False
-
-    df_filtrado['avaliavel'] = df_filtrado['transcricao'].apply(_transcricao_avaliavel)
     
     # === MÉTRICAS PRINCIPAIS ===
     
@@ -571,6 +573,7 @@ def run_page():
                     
                     sucesso = 0
                     erros = 0
+                    houve_atualizacao = False
                     
                     for idx, (i, row) in enumerate(df_selecionadas.iterrows()):
                         nome_lead = row.get('nome_lead', 'Lead sem nome')
@@ -613,10 +616,12 @@ def run_page():
                                     transcricao_id=transcricao_id,
                                     insight_ia=insight_ia,
                                     evaluation_ia=evaluation_ia,
+                                    created_at=row.get('data_trancricao'),
                                 )
 
                             if atualizado:
                                 sucesso += 1
+                                houve_atualizacao = True
                                 st.success(f"✅ {nome_lead} avaliado!", icon="✅")
                             else:
                                 detalhe = f" ({erro_mysql})" if erro_mysql else ""
@@ -636,9 +641,10 @@ def run_page():
                     
                     # Limpa seleção e atualiza
                     st.session_state.transcricoes_selecionadas = []
-                    if sucesso > 0:
-                        carregar_transcricoes_cached.clear()
+                    if houve_atualizacao:
+                        carregar_transcricoes_base.clear()
                         st.success(f"✅ {sucesso} avaliação(ões) concluída(s) com sucesso!")
+                        st.rerun()
                     if erros > 0:
                         st.warning(f"⚠️ {erros} erro(s) durante o processo")
                     
@@ -666,12 +672,20 @@ def run_page():
         else:
             valores_insight = tuple(avaliacoes['insight_ia'].fillna('').astype(str).tolist())
             avaliacoes['insight_json'] = _parse_insight_json(valores_insight)
-            avaliacoes['lead_classificacao'] = avaliacoes['insight_json'].apply(
-                lambda x: x.get('avaliacao_lead', {}).get('classificacao', 'N/A')
-            )
-            avaliacoes['lead_score'] = avaliacoes['insight_json'].apply(
-                lambda x: x.get('avaliacao_lead', {}).get('lead_score_0_100', 0)
-            )
+            if 'lead_classification' in avaliacoes.columns:
+                avaliacoes['lead_classificacao'] = avaliacoes['lead_classification'].fillna('N/A')
+            else:
+                avaliacoes['lead_classificacao'] = avaliacoes['insight_json'].apply(
+                    lambda x: x.get('avaliacao_lead', {}).get('classificacao', 'N/A')
+                )
+
+            if 'lead_score' in avaliacoes.columns:
+                avaliacoes['lead_score'] = pd.to_numeric(avaliacoes['lead_score'], errors='coerce').fillna(0)
+            else:
+                avaliacoes['lead_score'] = avaliacoes['insight_json'].apply(
+                    lambda x: x.get('avaliacao_lead', {}).get('lead_score_0_100', 0)
+                )
+
             if 'evaluation_ia' in avaliacoes.columns:
                 avaliacoes['nota_vendedor'] = pd.to_numeric(avaliacoes['evaluation_ia'], errors='coerce').fillna(0)
             else:
@@ -773,9 +787,10 @@ def run_page():
                                                 transcricao_id=transcricao_id,
                                                 insight_ia=insight_ia,
                                                 evaluation_ia=evaluation_ia,
+                                                created_at=row.get('data_trancricao'),
                                             )
                                             if atualizado:
-                                                carregar_transcricoes_cached.clear()
+                                                carregar_transcricoes_base.clear()
                                                 st.success("Reavaliação concluída!")
                                                 st.rerun()
                                             else:
@@ -878,52 +893,25 @@ def run_page():
             st.divider()
             st.subheader("🧾 Resumo de Pontos e Erros")
 
-            def _normalizar_ponto(texto: str) -> str:
-                texto = re.sub(r"\s+", " ", str(texto).strip().lower())
-                texto = re.sub(r"[\.;:!\?\-_/]", " ", texto)
-                texto = re.sub(r"\s+", " ", texto).strip()
-
-                mapeamento = {
-                    "boa abertura": "abertura e rapport",
-                    "abertura e rapport": "abertura e rapport",
-                    "rapport": "abertura e rapport",
-                    "construção de valor": "construção de valor",
-                    "demonstração de valor": "construção de valor",
-                    "investigação": "investigação/spin",
-                    "spin": "investigação/spin",
-                    "perguntas spin": "investigação/spin",
-                    "próximo passo": "compromisso e próximos passos",
-                    "compromisso": "compromisso e próximos passos",
-                    "objeções": "tratamento de objeções",
-                    "tratamento de objeções": "tratamento de objeções",
-                    "clareza": "clareza e compliance",
-                    "compliance": "clareza e compliance",
-                }
-
-                for chave, valor in mapeamento.items():
-                    if chave in texto:
-                        return valor
-                return texto
+            def _split_lista(texto: str) -> list:
+                if not texto:
+                    return []
+                return [t.strip() for t in str(texto).split(";") if t and str(t).strip()]
 
             pontos_fortes = []
             pontos_fracos = []
             erros_mais_caros = []
 
-            for item in avaliacoes_filtradas['insight_json']:
-                if not isinstance(item, dict):
-                    continue
-                avaliacao_vendedor = item.get('avaliacao_vendedor', {})
-                for pf in avaliacao_vendedor.get('pontos_fortes', []):
-                    ponto = (pf.get('ponto') or '').strip()
-                    if ponto:
-                        pontos_fortes.append(_normalizar_ponto(ponto))
-                for mf in avaliacao_vendedor.get('melhorias', []):
-                    melhoria = (mf.get('melhoria') or '').strip()
-                    if melhoria:
-                        pontos_fracos.append(_normalizar_ponto(melhoria))
-                erro = (avaliacao_vendedor.get('erro_mais_caro', {}) or {}).get('descricao')
-                if erro:
-                    erros_mais_caros.append(_normalizar_ponto(str(erro)))
+            if 'strengths' in avaliacoes_filtradas.columns:
+                for val in avaliacoes_filtradas['strengths']:
+                    pontos_fortes.extend(_split_lista(val))
+            if 'improvements' in avaliacoes_filtradas.columns:
+                for val in avaliacoes_filtradas['improvements']:
+                    pontos_fracos.extend(_split_lista(val))
+            if 'most_expensive_mistake' in avaliacoes_filtradas.columns:
+                for val in avaliacoes_filtradas['most_expensive_mistake']:
+                    if val and str(val).strip():
+                        erros_mais_caros.append(str(val).strip())
 
             top_fortes = Counter(pontos_fortes).most_common(10)
             top_fracos = Counter(pontos_fracos).most_common(10)
