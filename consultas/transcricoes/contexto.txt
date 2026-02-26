@@ -147,16 +147,25 @@ FORMATO DE SAÍDA (obrigatório em JSON válido):
       "clareza_compliance_0_5": 0
     },
     "pontos_fortes": [
-      {"ponto": "...", "evidencia": "..."},
-      {"ponto": "...", "evidencia": "..."},
-      {"ponto": "...", "evidencia": "..."}
+      {
+        "categoria": "rapport|investigacao_spin|valor_produto|gatilho_mental|objecao|fechamento|clareza",
+        "ponto": "Verbo no passado + ação concreta, máx 80 chars. Ex: 'Usou pergunta de implicação ao abordar risco de reprovar novamente'",
+        "evidencia": "citação direta da transcrição, máx 15 palavras"
+      }
     ],
     "melhorias": [
-      {"melhoria": "...", "como_fazer": "sugestão prática de fala/pergunta", "evidencia_do_gap": "..."},
-      {"melhoria": "...", "como_fazer": "...", "evidencia_do_gap": "..."},
-      {"melhoria": "...", "como_fazer": "...", "evidencia_do_gap": "..."}
+      {
+        "categoria": "rapport|investigacao_spin|valor_produto|gatilho_mental|objecao|fechamento|clareza",
+        "melhoria": "Verbo no infinitivo + lacuna específica, máx 80 chars. Ex: 'Explorar dores de implicação antes de apresentar o produto'",
+        "como_fazer": "Sugestão de fala/pergunta direta para usar na próxima ligação, máx 120 chars",
+        "evidencia_do_gap": "citação direta da transcrição, máx 15 palavras"
+      }
     ],
-    "erro_mais_caro": {"descricao": "...", "evidencia": "..."},
+    "erro_mais_caro": {
+      "categoria": "rapport|investigacao_spin|valor_produto|gatilho_mental|objecao|fechamento|clareza",
+      "descricao": "Verbo no passado + consequência, máx 100 chars. Ex: 'Apresentou preço sem ancoragem de valor, facilitando objeção de custo'",
+      "evidencia": "citação direta da transcrição, máx 15 palavras"
+    },
     "alertas": ["..."]
   },
   "avaliacao_lead": {

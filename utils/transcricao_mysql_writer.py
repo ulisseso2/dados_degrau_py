@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 from sqlalchemy import text
 import json
-import pandas as pd
 from uuid import uuid4
 from conexao.mysql_connector import conectar_mysql_writer
 
@@ -11,7 +10,11 @@ def atualizar_avaliacao_transcricao(
     insight_ia: str,
     evaluation_ia: Optional[int],
     uuid: Optional[str] = None,
-    created_at: Optional[str] = None,
+    created_at: Optional[str] = None,  # mantido por compatibilidade, não utilizado
+    agent: Optional[str] = None,
+    duration: Optional[str] = None,
+    phone: Optional[str] = None,
+    type_: Optional[str] = None,
 ) -> Tuple[bool, Optional[str]]:
     if not transcricao_id:
         return False, "transcricao_id ausente"
@@ -38,9 +41,30 @@ def atualizar_avaliacao_transcricao(
         recomendacao = data.get('recomendacao_final', {}) or {}
         produto_principal = (recomendacao.get('produto_principal', {}) or {}).get('produto')
 
-        strengths = [pf.get('ponto') for pf in avaliacao_vendedor.get('pontos_fortes', []) if isinstance(pf, dict)]
-        improvements = [mf.get('melhoria') for mf in avaliacao_vendedor.get('melhorias', []) if isinstance(mf, dict)]
-        most_expensive_mistake = (avaliacao_vendedor.get('erro_mais_caro', {}) or {}).get('descricao')
+        strengths_raw = avaliacao_vendedor.get('pontos_fortes', [])
+        improvements_raw = avaliacao_vendedor.get('melhorias', [])
+
+        def _formatar_item_forte(item):
+            if not isinstance(item, dict):
+                return None
+            cat = item.get('categoria', '')
+            ponto = item.get('ponto', '').strip()
+            return f"[{cat}] {ponto}" if cat else ponto
+
+        def _formatar_item_melhoria(item):
+            if not isinstance(item, dict):
+                return None
+            cat = item.get('categoria', '')
+            melhoria = item.get('melhoria', '').strip()
+            return f"[{cat}] {melhoria}" if cat else melhoria
+
+        strengths = [s for s in (_formatar_item_forte(i) for i in strengths_raw) if s]
+        improvements = [s for s in (_formatar_item_melhoria(i) for i in improvements_raw) if s]
+
+        erro_mais_caro = avaliacao_vendedor.get('erro_mais_caro', {}) or {}
+        cat_erro = erro_mais_caro.get('categoria', '')
+        desc_erro = (erro_mais_caro.get('descricao', '') or '').strip()
+        most_expensive_mistake = f"[{cat_erro}] {desc_erro}" if (cat_erro and desc_erro) else desc_erro or None
 
         return {
             "lead_score": avaliacao_lead.get('lead_score_0_100'),
@@ -57,13 +81,11 @@ def atualizar_avaliacao_transcricao(
     campos = _extrair_campos(insight_ia)
     if not uuid:
         uuid = str(uuid4())
-    if created_at is not None:
-        try:
-            created_at = pd.to_datetime(created_at).to_pydatetime()
-        except Exception:
-            created_at = None
 
-    query = text(
+    # 1) Upsert em transcription_ai_summaries
+    # created_at e updated_at sempre refletem o momento da avaliação (CURRENT_TIMESTAMP),
+    # não a data da transcrição original.
+    query_summary = text(
         """
         INSERT INTO seducar.transcription_ai_summaries (
             transcription_id,
@@ -84,8 +106,8 @@ def atualizar_avaliacao_transcricao(
         ) VALUES (
             :transcricao_id,
             :uuid,
-            COALESCE(:created_at, CURRENT_TIMESTAMP),
-            COALESCE(:created_at, CURRENT_TIMESTAMP),
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
             :ai_insight,
             :ai_evaluation,
             :lead_score,
@@ -110,26 +132,49 @@ def atualizar_avaliacao_transcricao(
             restrictions = VALUES(restrictions),
             contest_area = VALUES(contest_area),
             main_product = VALUES(main_product),
-            created_at = COALESCE(VALUES(created_at), created_at),
             updated_at = CURRENT_TIMESTAMP
+        """
+    )
+
+    # 2) Atualiza colunas de avaliação na tabela principal de transcrições
+    query_transcricao = text(
+        """
+        UPDATE seducar.opportunity_transcripts
+        SET
+            insight_ia    = :ai_insight,
+            evaluation_ia = :ai_evaluation,
+            agent         = COALESCE(:agent, agent),
+            duration      = COALESCE(:duration, duration),
+            phone         = COALESCE(:phone, phone),
+            type          = COALESCE(:type_, type)
+        WHERE id = :transcricao_id
         """
     )
 
     try:
         with engine.begin() as conn:
-            result = conn.execute(
-                query,
+            conn.execute(
+                query_summary,
                 {
                     "ai_insight": insight_ia,
                     "ai_evaluation": evaluation_ia,
                     "transcricao_id": transcricao_id,
                     "uuid": uuid,
-                    "created_at": created_at,
                     **campos,
                 },
             )
-        if result.rowcount > 0:
-            return True, None
-        return False, "nenhuma linha atualizada"
+            conn.execute(
+                query_transcricao,
+                {
+                    "ai_insight": insight_ia,
+                    "ai_evaluation": evaluation_ia,
+                    "transcricao_id": transcricao_id,
+                    "agent": agent,
+                    "duration": duration,
+                    "phone": phone,
+                    "type_": type_,
+                },
+            )
+        return True, None
     except Exception as e:
         return False, str(e)

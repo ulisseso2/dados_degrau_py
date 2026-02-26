@@ -50,20 +50,20 @@ class TranscricaoAnalyzer:
                 secrets_lookup = openai_section if openai_section else st.secrets
                 self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-4o')
                 self.temperature = float(secrets_lookup.get('OPENAI_TEMPERATURE') or secrets_lookup.get('openai_temperature', '0.2'))
-                self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '6000'))
-                self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '12000'))
+                self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '8000'))
+                self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '25000'))
                 self.max_input_chars_classificacao = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO') or secrets_lookup.get('openai_max_input_chars_classificacao', '4000'))
             except Exception:
                 self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '6000'))
-                self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '12000'))
+                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
+                self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
                 self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
         else:
             self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
             self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '6000'))
-            self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '12000'))
+            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
+            self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
             self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
         
         # Carrega o contexto de avaliação SPIN
@@ -355,21 +355,24 @@ class TranscricaoOpenAIAnalyzer:
                 openai_section = st.secrets.get("openai") if hasattr(st.secrets, "get") else None
                 secrets_lookup = openai_section if openai_section else st.secrets
                 self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-4o')
+                self.model_classificacao = secrets_lookup.get('OPENAI_MODEL_CLASSIFICACAO') or secrets_lookup.get('openai_model_classificacao', 'gpt-4o-mini')
                 self.temperature = float(secrets_lookup.get('OPENAI_TEMPERATURE') or secrets_lookup.get('openai_temperature', '0.2'))
-                self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '6000'))
-                self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '12000'))
+                self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '8000'))
+                self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '25000'))
                 self.max_input_chars_classificacao = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO') or secrets_lookup.get('openai_max_input_chars_classificacao', '4000'))
             except Exception:
                 self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+                self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-4o-mini')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '6000'))
-                self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '12000'))
+                self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
+                self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
                 self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
         else:
             self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+            self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-4o-mini')
             self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
-            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '6000'))
-            self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '12000'))
+            self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
+            self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
             self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
 
         self.contexto = self._carregar_contexto()
@@ -544,7 +547,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.model_classificacao,
                 messages=[
                     {
                         "role": "system",

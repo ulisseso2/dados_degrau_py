@@ -5,962 +5,630 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-import plotly.graph_objects as go
-import json
-import re
 from collections import Counter
 from datetime import datetime
 from utils.sql_loader import carregar_dados
 from utils.transcricao_analyzer import TranscricaoOpenAIAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
 
-
 TIMEZONE = 'America/Sao_Paulo'
 
-@st.cache_data(ttl=21600, show_spinner=False)
-def _parse_json_completo(valores_json):
-    resultados = []
-    for json_str in valores_json:
-        if not json_str:
-            resultados.append({})
-            continue
-        try:
-            resultados.append(json.loads(json_str))
-        except (json.JSONDecodeError, TypeError):
-            resultados.append({})
-    return resultados
-
-
-@st.cache_data(ttl=21600, show_spinner=False)
-def _parse_insight_json(valores_json):
-    resultados = []
-    for json_str in valores_json:
-        if not json_str:
-            resultados.append({})
-            continue
-        try:
-            resultados.append(json.loads(json_str))
-        except (json.JSONDecodeError, TypeError):
-            resultados.append({})
-    return resultados
-
-def _transcricao_avaliavel(texto: str) -> bool:
-    if not isinstance(texto, str):
-        return False
-    texto_norm = " ".join(texto.lower().split())
-
-    tem_dialogo = ("vendedor:" in texto_norm) and ("cliente:" in texto_norm)
-    padroes_ura = [
-        "caixa postal",
-        "correio de voz",
-        "grave seu recado",
-        "deixe a sua mensagem",
-        "deixe sua mensagem",
-        "não receber recados",
-        "este número está configurado para não receber recados",
-        "mensagem na caixa postal",
-        "pessoa não está disponível",
-        "não está disponível",
-        "grave a sua mensagem",
-        "após o sinal",
-        "deixe outra mensagem"
-    ]
-
-    if not tem_dialogo and any(p in texto_norm for p in padroes_ura):
-        return False
-
-    if len(texto_norm) > 255:
-        return True
-
-    return False
-
-
-def extrair_dados_json(df):
-    """Extrai dados do JSON e cria novas colunas"""
-
-    # Extrai campos do JSON (cacheado)
-    valores_json = tuple(df['json_completo'].fillna('').astype(str).tolist())
-    json_data = _parse_json_completo(valores_json)
-    
-    df['ramal'] = [x.get('ramal', '') for x in json_data]
-    df['uuid'] = [x.get('uuid', '') for x in json_data]
-    
-    # Extrai agente do JSON com tratamento robusto
-    def extrair_agente(json_obj):
-        agente = json_obj.get('agente', '')
-        # Trata valores vazios, None, ou apenas espaços
-        if not agente or (isinstance(agente, str) and agente.strip() == ''):
-            return 'Não identificado'
-        return str(agente).strip()
-    
-    df['agente'] = [extrair_agente(x) for x in json_data]
-    df['data_ligacao_json'] = [x.get('data', '') for x in json_data]
-    df['hora_ligacao_json'] = [x.get('hora', '') for x in json_data]
-    df['telefone_json'] = [x.get('telefone', '') for x in json_data]
-    df['duracao'] = [x.get('duracao', 0.0) for x in json_data]
-    df['tipo'] = [x.get('tipo') or 'N/Informado' for x in json_data]
-    
-    return df
-
-
+# ──────────────────────────────────────────────
+# CACHE: lista principal (sem transcrição, sem JSON_EXTRACT)
+# ──────────────────────────────────────────────
 @st.cache_data(ttl=21600, show_spinner=False)
 def carregar_transcricoes_base():
     df = carregar_dados("consultas/transcricoes/transcricoes.sql")
     if df.empty:
         return df
     df["data_ligacao"] = pd.to_datetime(df["data_ligacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
-    df = extrair_dados_json(df)
-    df['avaliavel'] = df['transcricao'].apply(_transcricao_avaliavel)
+    df['avaliada'] = (
+        df.get('insight_ia', pd.Series(dtype=str))
+        .fillna('').astype(str).str.strip().ne('')
+    )
+    df['avaliavel'] = df.get('avaliavel', pd.Series(0, index=df.index)).astype(bool)
     return df
 
 
-def run_page():
-    """Página de análise de transcrições de ligações"""
-    
-    st.title("📞 Análise de Transcrições de Ligações")
-
-    def _limpar_selecao(zerar_select_all: bool = False):
-        st.session_state.transcricoes_selecionadas = []
-        if zerar_select_all and "selecionar_todas" in st.session_state:
-            st.session_state.pop("selecionar_todas", None)
-        for key in list(st.session_state.keys()):
-            if key.startswith("select_"):
-                del st.session_state[key]
-    
-    # Carrega dados
-    df = carregar_transcricoes_base()
-    
-    # Verifica se há dados antes de processar
-    if df.empty:
-        st.warning("⚠️ Não foi possível carregar os dados. Verifique a conexão com o banco de dados.")
-        st.stop()
-    
-    # === FILTROS SIDEBAR ===
-    
-    # Filtro: empresa
-    empresas = df["empresa"].dropna().unique().tolist()
-    
-    if not empresas:
-        st.warning("⚠️ Nenhuma empresa encontrada nos dados.")
-        st.stop()
-    
-    empresa_selecionada = st.sidebar.radio(
-        "Selecione uma empresa:",
-        empresas,
-        key="empresa_selecionada",
-        on_change=lambda: _limpar_selecao(True)
-    )
-    df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
-    
-    # Filtro: data (padrão: últimos 7 dias)
-    hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-    data_inicio_padrao = hoje_aware - pd.Timedelta(days=7)
-    
-    periodo = st.sidebar.date_input(
-        "Período de criação:",
-        [data_inicio_padrao, hoje_aware],
-        key="date_transcricoes",
-        on_change=lambda: _limpar_selecao(True)
-    )
-    
+# ──────────────────────────────────────────────
+# CACHE: detalhe individual (transcrição + agente/duração/tipo)
+# ──────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)
+def carregar_detalhe_transcricao(transcricao_id: int) -> dict:
+    """Carrega transcrição, agente, duração e tipo de uma única linha via JSON_EXTRACT."""
+    from conexao.mysql_connector import conectar_mysql
+    from pathlib import Path
+    engine = conectar_mysql()
+    if not engine:
+        return {}
+    sql = Path("consultas/transcricoes/transcricao_detalhe.sql").read_text()
+    sql = sql.replace("{ids}", str(int(transcricao_id)))
     try:
-        data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
-        data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
-    except IndexError:
-        st.warning("Por favor, selecione um período de datas.")
+        df = pd.read_sql(sql, engine)
+        if df.empty:
+            return {}
+        row = df.iloc[0]
+        return {
+            "transcricao": row.get("transcricao", ""),
+            "agente": row.get("agente") or "Não identificado",
+            "duracao": row.get("duracao"),
+            "telefone": row.get("telefone"),
+            "tipo": row.get("tipo") or "N/Informado",
+            "insight_ia": row.get("insight_ia"),
+        }
+    except Exception as e:
+        return {"erro": str(e)}
+
+
+# ──────────────────────────────────────────────
+# HELPERS
+# ──────────────────────────────────────────────
+def _formatar_duracao(segundos) -> str:
+    try:
+        total = float(segundos)
+    except (TypeError, ValueError):
+        return "--:--"
+    total = max(0.0, total)
+    m, s = divmod(int(total), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def _cor_nota(nota) -> str:
+    try:
+        n = float(nota)
+    except (TypeError, ValueError):
+        return ""
+    if n >= 75:
+        return "🟢"
+    if n >= 50:
+        return "🟡"
+    return "🔴"
+
+
+def _renderizar_transcricao(transcricao: str):
+    import re
+    texto = str(transcricao)
+    padrao = re.compile(r"(?i)\b(ura|vendedor|cliente)\s*:")
+    matches = list(padrao.finditer(texto))
+    if not matches:
+        st.markdown(texto)
+        return
+    for idx, match in enumerate(matches):
+        marcador = match.group(1).lower()
+        inicio = match.end()
+        fim = matches[idx + 1].start() if idx + 1 < len(matches) else len(texto)
+        conteudo = texto[inicio:fim].strip()
+        if not conteudo:
+            continue
+        if marcador == "ura":
+            st.markdown(f"**URA:** {conteudo}")
+        elif marcador == "vendedor":
+            st.markdown(f"**🎙️ Vendedor:** {conteudo}")
+        else:
+            st.markdown(f"**👤 Cliente:** {conteudo}")
+
+
+def _limpar_selecao():
+    st.session_state.transcricoes_selecionadas = []
+    for key in list(st.session_state.keys()):
+        if key.startswith("sel_"):
+            del st.session_state[key]
+
+
+# ──────────────────────────────────────────────
+# EXECUÇÃO EM LOTE
+# ──────────────────────────────────────────────
+def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
+    if not ids_selecionados:
+        return
+
+    ia = TranscricaoOpenAIAnalyzer()
+    total = len(ids_selecionados)
+    bar = st.progress(0)
+    status = st.empty()
+    sucesso = erros = 0
+
+    for i, tid in enumerate(ids_selecionados):
+        row_list = df_base[df_base['transcricao_id'] == tid]
+        nome = row_list.iloc[0].get('nome_lead', f'ID {tid}') if not row_list.empty else f'ID {tid}'
+        status.text(f"Avaliando {i+1}/{total}: {nome}...")
+
+        detalhe = carregar_detalhe_transcricao(int(tid))
+        tx = detalhe.get("transcricao", "")
+
+        if not tx or len(tx.strip()) < 30:
+            st.warning(f"Transcrição insuficiente: {nome}")
+            erros += 1
+            bar.progress((i + 1) / total)
+            continue
+
+        try:
+            analise = ia.analisar_transcricao(tx)
+            if 'erro' in analise:
+                st.error(f"Erro na análise de {nome}: {analise['erro']}")
+                erros += 1
+            else:
+                row_data = row_list.iloc[0] if not row_list.empty else {}
+                ok, err = atualizar_avaliacao_transcricao(
+                    transcricao_id=tid,
+                    insight_ia=analise.get('avaliacao_completa'),
+                    evaluation_ia=analise.get('nota_vendedor'),
+                    created_at=row_data.get('data_trancricao') if not row_list.empty else None,
+                    agent=detalhe.get('agente'),
+                    duration=detalhe.get('duracao'),
+                    phone=detalhe.get('telefone'),
+                    type_=detalhe.get('tipo'),
+                )
+                if ok:
+                    sucesso += 1
+                else:
+                    msg = err or "Erro desconhecido"
+                    st.error(f"Erro ao salvar {nome}: {msg}")
+                    st.session_state.ultimo_erro = msg
+                    erros += 1
+        except Exception as e:
+            st.error(f"Erro inesperado em {nome}: {e}")
+            erros += 1
+
+        bar.progress((i + 1) / total)
+
+    bar.empty()
+    status.empty()
+    st.session_state.transcricoes_selecionadas = []
+
+    if sucesso:
+        carregar_transcricoes_base.clear()
+        carregar_detalhe_transcricao.clear()
+        st.success(f"✅ {sucesso} avaliação(ões) concluída(s).")
+    if erros:
+        st.warning(f"⚠️ {erros} erro(s).")
+
+    st.rerun()
+
+
+# ──────────────────────────────────────────────
+# PÁGINA PRINCIPAL
+# ──────────────────────────────────────────────
+def run_page():
+    st.title("📞 Transcrições de Ligações")
+
+    if 'transcricoes_selecionadas' not in st.session_state:
+        st.session_state.transcricoes_selecionadas = []
+    if 'ultimo_erro' not in st.session_state:
+        st.session_state.ultimo_erro = None
+
+    # ── Carregamento ─────────────────────────────
+    with st.spinner("Carregando dados..."):
+        df = carregar_transcricoes_base()
+
+    if df.empty:
+        st.warning("⚠️ Nenhum dado encontrado. Verifique a conexão com o banco.")
         st.stop()
-    
-    # Filtros adicionais
-    etapas = sorted(df_filtrado_empresa["etapa"].dropna().unique())
-    etapa_selecionada = st.sidebar.multiselect(
-        "Selecione a etapa:",
-        etapas,
-        default=etapas,
-        key="etapa_selecionada",
-        on_change=lambda: _limpar_selecao(True)
-    )
-    
-    modalidades = sorted(df_filtrado_empresa["modalidade"].dropna().unique())
-    modalidade_selecionada = st.sidebar.multiselect(
-        "Selecione a modalidade:",
-        modalidades,
-        default=modalidades,
-        key="modalidade_selecionada",
-        on_change=lambda: _limpar_selecao(True)
-    )
-    
-    origens = sorted(df_filtrado_empresa["origem"].dropna().unique())
-    origem_selecionada = st.sidebar.multiselect(
-        "Selecione a origem:",
-        origens,
-        default=origens,
-        key="origem_selecionada",
-        on_change=lambda: _limpar_selecao(True)
-    )
-    
-    tipo_ligacao = sorted(df_filtrado_empresa["tipo"].dropna().unique())
-    tipo_ligacao_selecionada = st.sidebar.multiselect(
-        "Selecione o tipo de ligação:",
-        tipo_ligacao,
-        default=tipo_ligacao,
-        key="tipo_ligacao_selecionada",
-        on_change=lambda: _limpar_selecao(True)
+
+    # ── Filtros sidebar ───────────────────────────
+    empresas = sorted(df["empresa"].dropna().unique().tolist())
+    empresa = st.sidebar.radio(
+        "Empresa:",
+        empresas,
+        key="empresa_sel",
+        on_change=_limpar_selecao,
     )
 
-    agentes = sorted(df_filtrado_empresa["agente"].fillna('Não identificado').unique())
-    agente_selecionado = st.sidebar.multiselect(
-        "Selecione o agente:",
-        agentes,
-        default=agentes,
-        key="agente_selecionado",
-        on_change=lambda: _limpar_selecao(True)
+    hoje = pd.Timestamp.now(tz=TIMEZONE).date()
+    periodo = st.sidebar.date_input(
+        "Período:",
+        [hoje - pd.Timedelta(days=7), hoje],
+        key="periodo_sel",
+        on_change=_limpar_selecao,
     )
-    
-    # === APLICAR FILTROS ===
-    
-    df_filtrado = df.copy()
-    
-    # Filtro empresa
-    if empresa_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["empresa"] == empresa_selecionada]
-    
-    # Filtro de data sempre aplicado
-    df_filtrado = df_filtrado[
-        (df_filtrado["data_ligacao"] >= data_inicio_aware) &
-        (df_filtrado["data_ligacao"] < data_fim_aware)
-    ]
-    
-    # Filtros adicionais
-    if etapa_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["etapa"].isin(etapa_selecionada) | df_filtrado["etapa"].isna()]
-    
-    if modalidade_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["modalidade"].isin(modalidade_selecionada) | df_filtrado["modalidade"].isna()]
-    
-    if tipo_ligacao_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["tipo"].isin(tipo_ligacao_selecionada)]
-    
-    if origem_selecionada:
-        df_filtrado = df_filtrado[df_filtrado["origem"].isin(origem_selecionada) | df_filtrado["origem"].isna()]
+    try:
+        d_ini = pd.Timestamp(periodo[0], tz=TIMEZONE)
+        d_fim = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    except (IndexError, TypeError):
+        st.sidebar.warning("Selecione um período completo.")
+        st.stop()
 
-    if agente_selecionado:
-        df_filtrado = df_filtrado[df_filtrado["agente"].isin(agente_selecionado)]
+    # ── Filtros aplicados ─────────────────────────
+    df_f = df[
+        (df["empresa"] == empresa) &
+        (df["data_ligacao"] >= d_ini) &
+        (df["data_ligacao"] < d_fim)
+    ].copy()
 
-    def _formatar_duracao(segundos) -> str:
-        try:
-            total = float(segundos)
-        except (TypeError, ValueError):
-            return "00:00"
+    # ── Métricas ──────────────────────────────────
+    total = len(df_f)
+    avaliaveis = int(df_f['avaliavel'].sum())
+    avaliadas = int(df_f['avaliada'].sum())
+    pendentes = avaliaveis - avaliadas
 
-        total = max(0.0, total)
-        minutos = int(total // 60)
-        segundos_rest = int(total % 60)
-        if minutos >= 60:
-            horas = minutos // 60
-            minutos = minutos % 60
-            return f"{horas:02d}:{minutos:02d}:{segundos_rest:02d}"
-        return f"{minutos:02d}:{segundos_rest:02d}"
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total de ligações", total)
+    c2.metric("Avaliáveis", avaliaveis)
+    c3.metric("Avaliadas", avaliadas)
+    c4.metric("Pendentes", max(0, pendentes))
 
-    def _cor_duracao(segundos) -> str:
-        try:
-            total = float(segundos)
-        except (TypeError, ValueError):
-            return "🔴"
-        if total > 60:
-            return "🔵"
-        if total >= 30:
-            return "🟡"
-        return "🔴"
+    if st.session_state.ultimo_erro:
+        st.error(st.session_state.ultimo_erro)
+        if st.button("Limpar erro"):
+            st.session_state.ultimo_erro = None
 
-    def _renderizar_transcricao_linhas(transcricao: str):
-        texto = str(transcricao)
-        padrao = re.compile(r"(?i)\b(ura|vendedor|cliente)\s*:")
-        matches = list(padrao.finditer(texto))
-        if not matches:
-            st.markdown(texto)
-            return
+    # ── Abas ──────────────────────────────────────
+    tab1, tab2, tab3 = st.tabs(["🤖 Avaliar", "✅ Avaliações", "📤 Exportar"])
 
-        for idx, match in enumerate(matches):
-            marcador = match.group(1).lower()
-            inicio = match.end()
-            fim = matches[idx + 1].start() if idx + 1 < len(matches) else len(texto)
-            conteudo = texto[inicio:fim].strip()
-            if not conteudo:
-                continue
-
-            if marcador == "ura":
-                st.markdown(f"**URA:** {conteudo}")
-            elif marcador == "vendedor":
-                st.markdown(f"**Vendedor:** {conteudo}")
-            elif marcador == "cliente":
-                st.markdown(f"**Cliente:** {conteudo}")
-            else:
-                st.markdown(conteudo)
-
-
-    
-    # === MÉTRICAS PRINCIPAIS ===
-    
-    col2, col3, col4 = st.columns(3)
-    
-    with col2:
-        com_transcricao = df_filtrado['transcricao'].notna().sum()
-        st.metric("Transcrições", com_transcricao)
-
-    with col3:
-        avaliaveis = int(df_filtrado['avaliavel'].sum())
-        st.metric("Transcrições Avaliáveis", avaliaveis)
-
-    with col4:
-        ruins = max(0, com_transcricao - avaliaveis)
-        st.metric("Transcrições Ruins", ruins)
-    
-    
-    # === GRÁFICOS ===
-    
-    # Transcrições por dia
-    st.subheader("📊 Transcrições por Dia")
-    df_diario = df_filtrado.groupby(df_filtrado["data_ligacao"].dt.date).size().reset_index()
-    df_diario.columns = ["Data", "Total"]
-    df_diario["Data"] = pd.to_datetime(df_diario["Data"]).dt.strftime('%d/%m')
-    
-    fig_diario = px.bar(
-        df_diario,
-        x="Data",
-        y="Total",
-        title="Transcrições por Dia",
-        text_auto=True
-    )
-    st.plotly_chart(fig_diario, use_container_width=True)
-    
-    # Gráficos em 2 colunas
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Por Modalidade CRM")
-        df_modalidade = df_filtrado.groupby("modalidade").size().reset_index(name='Quantidade')
-        fig_modalidade = px.pie(
-            df_modalidade,
-            names="modalidade",
-            values="Quantidade",
-            hole=0.4
-        )
-        st.plotly_chart(fig_modalidade, use_container_width=True)
-        
-    
-    with col2:
-        st.subheader("Por Origem CRM")
-        df_origem = df_filtrado.groupby("origem").size().reset_index(name='Quantidade')
-        fig_origem = px.pie(
-            df_origem,
-            names="origem",
-            values="Quantidade"
-        )
-        st.plotly_chart(fig_origem, use_container_width=True)
-        
-    st.subheader("Por Tipo de Ligação")
-    df_tipo_ligacao = df_filtrado.groupby("tipo").size().reset_index(name='Quantidade')
-    fig_tipo_ligacao = px.bar(
-        df_tipo_ligacao,
-        x="tipo",
-        y="Quantidade",
-        text_auto=True
-    )
-    st.plotly_chart(fig_tipo_ligacao, use_container_width=True)
-    
-    
-    # === TABELA DE DADOS COM AVALIAÇÃO ===
-    
-    st.subheader("📋 Detalhamento das Transcrições")
-    
-    # Inicializa IA
-    ia_analyzer = TranscricaoOpenAIAnalyzer()
-
-    if 'ultimo_erro_mysql' not in st.session_state:
-        st.session_state.ultimo_erro_mysql = None
-    
-
-    # Estatísticas de avaliações (MySQL)
-    total_avaliacoes = 0
-    if 'insight_ia' in df_filtrado.columns:
-        total_avaliacoes = int(
-            df_filtrado['insight_ia']
-            .fillna('')
-            .astype(str)
-            .str.strip()
-            .ne('')
-            .sum()
-        )
-    col_stat1, col_stat2, col_stat4 = st.columns(3)
-    with col_stat1:
-        st.metric("Avaliações Realizadas", total_avaliacoes)
-    with col_stat2:
-        st.metric("Base", "MySQL")
-    with col_stat4:
-        total_avaliaveis = len(df_filtrado[(df_filtrado['transcricao'].notna()) & (df_filtrado['avaliavel'] == True)])
-        nao_avaliadas = total_avaliaveis - total_avaliacoes
-        st.metric("Não Avaliadas", max(0, nao_avaliadas))
-
-    if st.session_state.ultimo_erro_mysql:
-        st.error(st.session_state.ultimo_erro_mysql)
-        if st.button("Limpar erro", key="limpar_erro_mysql"):
-            st.session_state.ultimo_erro_mysql = None
-    
-    # Tabs para visualização
-    tab1, tab2, tab3 = st.tabs(["📊 Avaliar Transcrições", "✅ Avaliações Realizadas", "📤 Exportar"])
-    
+    # ════════════════════════════════════════════
+    # TAB 1 — AVALIAR
+    # ════════════════════════════════════════════
     with tab1:
-        st.subheader("Transcrições Disponíveis")
 
-        filtro_avaliavel = st.sidebar.radio(
-            "Exibir transcrições:",
-            ["Avaliáveis", "Não avaliáveis", "Todas"],
-            index=0,
-            key="filtro_avaliavel",
-            on_change=lambda: _limpar_selecao(True)
-        )
-        
-        # Filtro: apenas com transcrição
-        df_com_transcricao = df_filtrado[df_filtrado['transcricao'].notna()].sort_values('data_ligacao', ascending=False).reset_index(drop=True)
-
-        if filtro_avaliavel == "Avaliáveis":
-            df_com_transcricao = df_com_transcricao[df_com_transcricao['avaliavel'] == True]
-        elif filtro_avaliavel == "Não avaliáveis":
-            df_com_transcricao = df_com_transcricao[df_com_transcricao['avaliavel'] == False]
-        
-        # Adiciona coluna de status de avaliação
-        if 'insight_ia' in df_com_transcricao.columns:
-            df_com_transcricao['avaliada'] = (
-                df_com_transcricao['insight_ia']
-                .fillna('')
-                .astype(str)
-                .str.strip()
-                .ne('')
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            filtro_avaliavel = st.radio(
+                "Transcrições:",
+                ["Avaliáveis", "Todas"],
+                horizontal=True,
+                key="filtro_avaliavel_tab1",
+                on_change=_limpar_selecao,
             )
+        with col_f2:
+            filtro_status = st.radio(
+                "Status:",
+                ["Pendentes", "Avaliadas", "Todas"],
+                horizontal=True,
+                key="filtro_status_tab1",
+                on_change=_limpar_selecao,
+            )
+
+        df_t1 = df_f.sort_values("data_ligacao", ascending=False).copy()
+        if filtro_avaliavel == "Avaliáveis":
+            df_t1 = df_t1[df_t1['avaliavel']]
+        if filtro_status == "Pendentes":
+            df_t1 = df_t1[~df_t1['avaliada']]
+        elif filtro_status == "Avaliadas":
+            df_t1 = df_t1[df_t1['avaliada']]
+
+        st.caption(f"{len(df_t1)} registro(s)")
+
+        if df_t1.empty:
+            st.info("Nenhuma transcrição encontrada com este filtro.")
         else:
-            df_com_transcricao['avaliada'] = False
-        
-        # Métricas
-        total_transcricoes = len(df_com_transcricao)
-        ja_avaliadas = df_com_transcricao['avaliada'].sum()
-        pendentes = total_transcricoes - ja_avaliadas
-        
-        col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1:
-            st.metric("Total", total_transcricoes)
-        with col_m2:
-            st.metric("Avaliadas", ja_avaliadas)
-        with col_m3:
-            st.metric("Pendentes", pendentes)
-        
-        # Inicializa estado de seleção
-        if 'transcricoes_selecionadas' not in st.session_state:
-            st.session_state.transcricoes_selecionadas = []
-
-        # Tabela interativa
-        st.divider()
-        
-        # Preparar dados para exibição
-        colunas_exibir = ['data_ligacao', 'nome_lead', 'empresa', 'telefone_lead', 'etapa', 'modalidade', 'tipo', 'duracao', 'avaliavel', 'avaliada', 'transcricao', 'agente']
-        if 'transcricao_id' in df_com_transcricao.columns:
-            colunas_exibir.append('transcricao_id')
-        if 'insight_ia' in df_com_transcricao.columns:
-            colunas_exibir.append('insight_ia')
-        if 'evaluation_ia' in df_com_transcricao.columns:
-            colunas_exibir.append('evaluation_ia')
-
-        df_exibir = df_com_transcricao[colunas_exibir].copy()
-        df_exibir['data_ligacao'] = df_exibir['data_ligacao'].dt.strftime('%d/%m/%Y %H:%M')
-        df_exibir['status'] = df_exibir['avaliada'].apply(lambda x: '✅ Avaliada' if x else '⏳ Pendente')
-        df_exibir['selo_avaliavel'] = df_exibir['avaliavel'].apply(lambda x: '🟢 Avaliável' if x else '🔴 Não avaliável')
-        df_exibir['duracao_fmt'] = df_exibir['duracao'].apply(_formatar_duracao)
-        df_exibir['duracao_cor'] = df_exibir['duracao'].apply(_cor_duracao)
-        
-        # Filtro por status
-        filtro_status = st.radio(
-            "Filtrar por:",
-            ["Todas", "Apenas Pendentes", "Apenas Avaliadas"],
-            horizontal=True,
-            key="filtro_status",
-            on_change=lambda: _limpar_selecao(True)
-        )
-        
-        if filtro_status == "Apenas Pendentes":
-            df_exibir = df_exibir[df_exibir['avaliada'] == False]
-        elif filtro_status == "Apenas Avaliadas":
-            df_exibir = df_exibir[df_exibir['avaliada'] == True]
-
-        
-        st.write(f"**Exibindo:** {len(df_exibir)} transcrições")
-        
-        if len(df_exibir) == 0:
-            st.info("Nenhuma transcrição encontrada com os filtros aplicados.")
-        else:
-            col_p1, col_p2, col_p3 = st.columns([2, 1, 1])
+            # ── paginação ──
+            col_p1, col_p2 = st.columns([3, 1])
             with col_p1:
-                page_size = st.selectbox("Itens por página:", [25, 50, 100], index=1)
-            total_pages = max(1, (len(df_exibir) + page_size - 1) // page_size)
+                page_size = st.selectbox("Por página:", [20, 50, 100], key="ps_t1")
+            total_pages = max(1, -(-len(df_t1) // page_size))
             with col_p2:
-                pagina = st.number_input("Página", min_value=1, max_value=total_pages, value=1, step=1)
-            with col_p3:
-                selecionar_todas = st.checkbox("Selecionar todas", key="selecionar_todas")
+                pagina = st.number_input("Pág.", 1, total_pages, 1, key="pg_t1")
+
             inicio = (pagina - 1) * page_size
-            fim = inicio + page_size
+            fatia = df_t1.iloc[inicio: inicio + page_size]
 
-            # Renderizar lista amigável
-            pagina_df = df_exibir.iloc[inicio:fim]
-            if selecionar_todas:
-                ids_pagina = pagina_df[pagina_df['avaliada'] == False]['transcricao_id'].dropna().tolist()
-                for tid in ids_pagina:
-                    if tid not in st.session_state.transcricoes_selecionadas:
+            # ── ações rápidas ──
+            col_sa, col_sb, col_av = st.columns([1, 1, 1])
+            with col_sa:
+                if st.button("☑️ Selecionar pendentes desta página"):
+                    ids_pendentes = fatia[~fatia['avaliada']]['transcricao_id'].dropna().tolist()
+                    for tid in ids_pendentes:
+                        if tid not in st.session_state.transcricoes_selecionadas:
+                            st.session_state.transcricoes_selecionadas.append(tid)
+                    st.rerun()
+            with col_sb:
+                if st.button("🔁 Selecionar avaliadas desta página"):
+                    ids_avaliadas = fatia[fatia['avaliada']]['transcricao_id'].dropna().tolist()
+                    for tid in ids_avaliadas:
+                        if tid not in st.session_state.transcricoes_selecionadas:
+                            st.session_state.transcricoes_selecionadas.append(tid)
+                    st.rerun()
+                n_sel = len(st.session_state.transcricoes_selecionadas)
+                if n_sel > 0:
+                    if st.button(f"🤖 Avaliar {n_sel} selecionada(s)", type="primary", key="btn_avaliar_top"):
+                        _executar_avaliacoes(df_t1, st.session_state.transcricoes_selecionadas)
+
+            # ── tabela compacta ──
+            df_tabela = fatia[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa', 'avaliavel', 'avaliada']].copy()
+            df_tabela['data_ligacao'] = fatia['data_ligacao'].dt.strftime('%d/%m/%Y %H:%M')
+            df_tabela['Status'] = fatia['avaliada'].apply(lambda x: '✅' if x else '⏳')
+            df_tabela['Avaliável'] = fatia['avaliavel'].apply(lambda x: '🟢' if x else '🔴')
+            df_tabela = df_tabela.rename(columns={
+                'transcricao_id': 'ID',
+                'data_ligacao': 'Data',
+                'nome_lead': 'Lead',
+                'agente': 'Agente',
+                'etapa': 'Etapa',
+            }).drop(columns=['avaliavel', 'avaliada'])
+
+            st.dataframe(
+                df_tabela.set_index('ID'),
+                use_container_width=True,
+                height=min(400, 36 * len(df_tabela) + 38),
+            )
+
+            # ── detalhe sob demanda ──
+            st.divider()
+            st.markdown("**Ver detalhes / selecionar para avaliação:**")
+
+            ids_disponiveis = fatia['transcricao_id'].dropna().astype(int).tolist()
+            id_escolhido = st.selectbox(
+                "Selecione o ID da ligação:",
+                options=["—"] + ids_disponiveis,
+                key="id_detalhe",
+            )
+
+            if id_escolhido != "—":
+                tid = int(id_escolhido)
+                row_sel = fatia[fatia['transcricao_id'] == tid].iloc[0]
+
+                col_d1, col_d2 = st.columns([3, 1])
+                with col_d1:
+                    st.markdown(
+                        f"**Lead:** {row_sel.get('nome_lead', '—')}  \n"
+                        f"**Telefone:** {row_sel.get('telefone_lead', '—')}  \n"
+                        f"**Etapa:** {row_sel.get('etapa', '—')} | "
+                        f"**Modalidade:** {row_sel.get('modalidade', '—')} | "
+                        f"**Origem:** {row_sel.get('origem', '—')}"
+                    )
+                with col_d2:
+                    status_str = "✅ Avaliada" if row_sel['avaliada'] else "⏳ Pendente"
+                    st.markdown(f"**Status:** {status_str}")
+                    label_checkbox = "🔁 Reavaliar" if row_sel['avaliada'] else "Incluir na avaliação"
+                    sel_key = f"sel_{tid}"
+                    marcado = st.checkbox(
+                        label_checkbox,
+                        value=tid in st.session_state.transcricoes_selecionadas,
+                        key=sel_key,
+                    )
+                    if marcado and tid not in st.session_state.transcricoes_selecionadas:
                         st.session_state.transcricoes_selecionadas.append(tid)
-            else:
-                ids_pagina = set(pagina_df['transcricao_id'].dropna().tolist())
-                st.session_state.transcricoes_selecionadas = [
-                    tid for tid in st.session_state.transcricoes_selecionadas if tid not in ids_pagina
-                ]
+                    elif not marcado and tid in st.session_state.transcricoes_selecionadas:
+                        st.session_state.transcricoes_selecionadas.remove(tid)
 
-            for idx, row in pagina_df.iterrows():
-                with st.container(border=True):
-                    topo1, topo2, topo3 = st.columns([5, 2, 1])
-                    with topo1:
-                        st.markdown(f"**{row['nome_lead']}**")
-                        agente_nome = row.get('agente', 'Não identificado')
-                        st.caption(f"{row['data_ligacao']} • {row['empresa']} • {agente_nome} • Tel: {row['telefone_lead']}")
-                    with topo2:
-                        st.write(f"{row['duracao_cor']} {row['duracao_fmt']} | {row['selo_avaliavel']}")
-                        st.caption(f"Etapa: {row['etapa']} • Modalidade: {row['modalidade']} • {row['tipo']}")
-                    with topo3:
-                        st.write(row['status'])
-                        if not row['avaliada']:
-                            transcricao_id = row.get('transcricao_id')
-                            key = f"select_{idx}_{transcricao_id}"
-                            if st.checkbox("Selecionar", key=key, value=transcricao_id in st.session_state.transcricoes_selecionadas):
-                                if transcricao_id not in st.session_state.transcricoes_selecionadas:
-                                    st.session_state.transcricoes_selecionadas.append(transcricao_id)
-                            else:
-                                if transcricao_id in st.session_state.transcricoes_selecionadas:
-                                    st.session_state.transcricoes_selecionadas.remove(transcricao_id)
+                # Carrega transcrição só ao selecionar
+                detalhe = carregar_detalhe_transcricao(tid)
+                if detalhe.get("erro"):
+                    st.error(f"Erro ao carregar: {detalhe['erro']}")
+                elif detalhe.get("transcricao"):
+                    info_cols = st.columns(3)
+                    info_cols[0].caption(f"Agente: {detalhe.get('agente', '—')}")
+                    info_cols[1].caption(f"Duração: {_formatar_duracao(detalhe.get('duracao'))}")
+                    info_cols[2].caption(f"Tipo: {detalhe.get('tipo', '—')}")
 
-                    with st.expander("📝 Transcrição Completa", expanded=False):
-                        with st.container(height=220):
-                            _renderizar_transcricao_linhas(row['transcricao'])
-        
-        # Ações em lote
-        st.divider()
-        
-        num_selecionadas = len(st.session_state.transcricoes_selecionadas)
-        
-        col_acao1, col_acao2, col_acao3 = st.columns([2, 1, 1])
-        
-        with col_acao1:
-            st.write(f"**{num_selecionadas} transcrição(ões) selecionada(s)**")
-        
-        with col_acao2:
-            if num_selecionadas > 0:
-                if st.button("🗑️ Limpar Seleção"):
-                    _limpar_selecao(False)
-                    st.rerun()
-        
-        with col_acao3:
-            if num_selecionadas > 0:
-                if st.button(f"🤖 Avaliar {num_selecionadas} Selecionada(s)", type="primary"):
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    # Filtrar apenas as transcrições selecionadas
-                    df_selecionadas = df_com_transcricao[df_com_transcricao['transcricao_id'].isin(st.session_state.transcricoes_selecionadas)]
-                    
-                    sucesso = 0
-                    erros = 0
-                    houve_atualizacao = False
-                    
-                    for idx, (i, row) in enumerate(df_selecionadas.iterrows()):
-                        nome_lead = row.get('nome_lead', 'Lead sem nome')
-                        status_text.text(f"Avaliando {idx + 1}/{num_selecionadas}: {nome_lead}...")
-                        
-                        try:
-                            # Validação mínima - apenas verifica se tem transcrição
-                            if pd.isna(row.get('transcricao')) or len(str(row.get('transcricao', '')).strip()) < 10:
-                                st.warning(f"Transcrição insuficiente: {nome_lead}")
-                                erros += 1
-                                continue
-                            
-                            # Executa análise
-                            analise = ia_analyzer.analisar_transcricao(row['transcricao'])
-                            
-                            # Debug: mostra resultado da análise
-                            print(f"Análise retornada: {list(analise.keys())}")
-                            
-                            # Verifica se houve erro na análise
-                            if 'erro' in analise:
-                                print(f"Erro detalhado da análise: {analise.get('erro')}")
-                                st.error(f"Erro na análise de {nome_lead}: {analise['erro']}")
-                                erros += 1
-                                continue
-                            
-                            # Prepara dados - oportunidade_id é opcional
-                            oportunidade_id = row.get('oportunidade')
-                            if pd.notna(oportunidade_id):
-                                oportunidade_id = int(oportunidade_id)
-                            else:
-                                oportunidade_id = None
-                            
-                            transcricao_id = row.get('transcricao_id')
-                            insight_ia = analise.get('avaliacao_completa')
-                            evaluation_ia = analise.get('nota_vendedor')
-                            atualizado = False
-                            erro_mysql = None
-                            if insight_ia is not None:
-                                atualizado, erro_mysql = atualizar_avaliacao_transcricao(
-                                    transcricao_id=transcricao_id,
-                                    insight_ia=insight_ia,
-                                    evaluation_ia=evaluation_ia,
-                                    created_at=row.get('data_trancricao'),
-                                )
+                    with st.expander("📝 Transcrição", expanded=False):
+                        with st.container(height=250):
+                            _renderizar_transcricao(detalhe["transcricao"])
+                else:
+                    st.info("Transcrição não disponível para esta ligação.")
 
-                            if atualizado:
-                                sucesso += 1
-                                houve_atualizacao = True
-                                st.success(f"✅ {nome_lead} avaliado!", icon="✅")
-                            else:
-                                detalhe = f" ({erro_mysql})" if erro_mysql else ""
-                                print(f"Erro MySQL ao salvar {nome_lead}{detalhe}")
-                                st.error(f"❌ Erro ao salvar avaliação no MySQL de {nome_lead}{detalhe}")
-                                st.session_state.ultimo_erro_mysql = f"Erro MySQL: {nome_lead}{detalhe}"
-                                erros += 1
-                            
-                        except Exception as e:
-                            st.error(f"Erro ao avaliar {nome_lead}: {str(e)}")
-                            erros += 1
-                        
-                        progress_bar.progress((idx + 1) / num_selecionadas)
-                    
-                    status_text.empty()
-                    progress_bar.empty()
-                    
-                    # Limpa seleção e atualiza
-                    st.session_state.transcricoes_selecionadas = []
-                    if houve_atualizacao:
-                        carregar_transcricoes_base.clear()
-                        st.success(f"✅ {sucesso} avaliação(ões) concluída(s) com sucesso!")
+            # ── barra de ação final ──
+            st.divider()
+            n_sel = len(st.session_state.transcricoes_selecionadas)
+            col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+            col_b1.write(f"**{n_sel} selecionada(s)**")
+            if n_sel > 0:
+                with col_b2:
+                    if st.button("🗑️ Limpar seleção"):
+                        _limpar_selecao()
                         st.rerun()
-                    if erros > 0:
-                        st.warning(f"⚠️ {erros} erro(s) durante o processo")
-                    
-                    st.rerun()
-            
-            # Preview - removido, já mostramos na tabela acima
-    
+                with col_b3:
+                    if st.button(f"🤖 Avaliar {n_sel}", type="primary"):
+                        _executar_avaliacoes(df_t1, st.session_state.transcricoes_selecionadas)
+
+    # ════════════════════════════════════════════
+    # TAB 2 — AVALIAÇÕES
+    # ════════════════════════════════════════════
     with tab2:
-        st.subheader("Avaliações Concluídas")
-        
-        avaliacoes = df_filtrado[df_filtrado['transcricao'].notna()].copy()
-        if 'insight_ia' in avaliacoes.columns:
-            avaliacoes = avaliacoes[
-                avaliacoes['insight_ia']
-                .fillna('')
-                .astype(str)
-                .str.strip()
-                .ne('')
-            ]
+        df_av = df_f[df_f['avaliada']].copy()
+
+        if df_av.empty:
+            st.info("Nenhuma avaliação realizada no período.")
         else:
-            avaliacoes = avaliacoes.iloc[0:0]
+            df_av['lead_score'] = pd.to_numeric(df_av.get('lead_score', 0), errors='coerce').fillna(0)
+            df_av['evaluation_ia'] = pd.to_numeric(df_av.get('evaluation_ia', 0), errors='coerce').fillna(0)
+            df_av['lead_classification'] = df_av.get('lead_classification', pd.Series(dtype=str)).fillna('—')
 
-        if avaliacoes.empty:
-            st.info("Nenhuma avaliação realizada ainda.")
-        else:
-            valores_insight = tuple(avaliacoes['insight_ia'].fillna('').astype(str).tolist())
-            avaliacoes['insight_json'] = _parse_insight_json(valores_insight)
-            if 'lead_classification' in avaliacoes.columns:
-                avaliacoes['lead_classificacao'] = avaliacoes['lead_classification'].fillna('N/A')
-            else:
-                avaliacoes['lead_classificacao'] = avaliacoes['insight_json'].apply(
-                    lambda x: x.get('avaliacao_lead', {}).get('classificacao', 'N/A')
-                )
-
-            if 'lead_score' in avaliacoes.columns:
-                avaliacoes['lead_score'] = pd.to_numeric(avaliacoes['lead_score'], errors='coerce').fillna(0)
-            else:
-                avaliacoes['lead_score'] = avaliacoes['insight_json'].apply(
-                    lambda x: x.get('avaliacao_lead', {}).get('lead_score_0_100', 0)
-                )
-
-            if 'evaluation_ia' in avaliacoes.columns:
-                avaliacoes['nota_vendedor'] = pd.to_numeric(avaliacoes['evaluation_ia'], errors='coerce').fillna(0)
-            else:
-                avaliacoes['nota_vendedor'] = avaliacoes['insight_json'].apply(
-                    lambda x: x.get('avaliacao_vendedor', {}).get('nota_final_0_100', 0)
-                )
-
-            # Filtros
+            # filtros rápidos
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                classificacoes = avaliacoes['lead_classificacao'].unique().tolist()
-                filtro_class = st.multiselect("Filtrar por classificação do lead:", classificacoes, default=classificacoes)
+                min_nota = st.slider("Nota mínima do vendedor:", 0, 100, 0, key="min_nota_t2")
             with col_f2:
-                min_nota = st.slider("Nota mínima do vendedor:", 0, 100, 0)
+                classes = sorted(df_av['lead_classification'].unique())
+                class_sel = st.multiselect("Classificação do lead:", classes, default=classes, key="class_t2")
 
-            avaliacoes_filtradas = avaliacoes[
-                (avaliacoes['lead_classificacao'].isin(filtro_class)) &
-                (avaliacoes['nota_vendedor'] >= min_nota)
+            col_f3, col_f4 = st.columns(2)
+            with col_f3:
+                agentes_disp = sorted([a for a in df_av.get('agente', pd.Series(dtype=str)).dropna().unique() if str(a).strip()])
+                agente_sel = st.multiselect("Agente:", agentes_disp, default=agentes_disp, key="agente_t2") if agentes_disp else agentes_disp
+            with col_f4:
+                tipos_disp = sorted([t for t in df_av.get('tipo_ligacao', pd.Series(dtype=str)).dropna().unique() if str(t).strip()])
+                tipo_sel = st.multiselect("Tipo de ligação:", tipos_disp, default=tipos_disp, key="tipo_t2") if tipos_disp else tipos_disp
+
+            df_av = df_av[
+                (df_av['evaluation_ia'] >= min_nota) &
+                (df_av['lead_classification'].isin(class_sel))
             ]
-            
-            st.write(f"**Exibindo:** {len(avaliacoes_filtradas)} avaliações")
-            
-            # Visualização por linha
-            st.subheader("Visualizar Avaliações")
+            if agente_sel:
+                df_av = df_av[df_av['agente'].isin(agente_sel)]
+            if tipo_sel:
+                df_av = df_av[df_av['tipo_ligacao'].isin(tipo_sel)]
 
-            for _, row in avaliacoes_filtradas.iterrows():
-                nome = row.get('nome_lead', 'Lead sem nome')
-                oportunidade_id = row.get('oportunidade')
-                titulo = f"#{int(oportunidade_id)} - {nome}" if pd.notna(oportunidade_id) else f"Sem oportunidade - {nome}"
+            st.caption(f"{len(df_av)} avaliação(ões)")
 
-                nota_vendedor = row.get('nota_vendedor', 0)
-                lead_score = row.get('lead_score', 0)
-                lead_classificacao = row.get('lead_classificacao', 'N/A')
+            # métricas
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total", len(df_av))
+            nota_media = df_av['evaluation_ia'].mean()
+            m2.metric("Nota média vendedor", f"{nota_media:.1f}" if pd.notna(nota_media) else "—")
+            lead_media = df_av['lead_score'].mean()
+            m3.metric("Lead score médio", f"{lead_media:.1f}" if pd.notna(lead_media) else "—")
 
-                with st.container(border=True):
-                    topo1, topo2, topo3, topo4 = st.columns([4, 1, 1, 1])
-                    with topo1:
-                        st.markdown(f"**{titulo}**")
-                        empresa = row.get('empresa', 'N/A')
-                        agente_nome = row.get('agente', 'Não identificado')
-                        st.caption(f"Empresa: {empresa} • Agente: {agente_nome}")
-                    with topo2:
-                        st.metric("Nota", nota_vendedor)
-                    with topo3:
-                        st.metric("Lead", lead_score)
-                    with topo4:
-                        st.metric("Class", lead_classificacao)
-
-                    with st.expander("Ver Avaliação", expanded=False):
-                        try:
-                            avaliacao_json = row.get('insight_json') or {}
-
-                            if row.get('transcricao'):
-                                st.subheader("📝 Transcrição")
-                                with st.container(height=220):
-                                    _renderizar_transcricao_linhas(row['transcricao'])
-
-                            melhorias = avaliacao_json.get('avaliacao_vendedor', {}).get('melhorias', [])
-                            if melhorias:
-                                st.subheader("🛠️ Pontos de Melhoria")
-                                for item in melhorias:
-                                    melhoria = item.get('melhoria', '')
-                                    como_fazer = item.get('como_fazer', '')
-                                    evidencia = item.get('evidencia_do_gap', '')
-                                    st.write(f"• **{melhoria}**")
-                                    if como_fazer:
-                                        st.caption(f"Como fazer: {como_fazer}")
-                                    if evidencia:
-                                        st.caption(f"Evidência: {evidencia}")
-
-                            col_s1, col_s2, col_s3 = st.columns(3)
-                            with col_s1:
-                                nota_vend = avaliacao_json.get('avaliacao_vendedor', {}).get('nota_final_0_100', 0)
-                                st.metric("Nota do Vendedor", f"{nota_vend}/100")
-                            with col_s2:
-                                score_lead = avaliacao_json.get('avaliacao_lead', {}).get('lead_score_0_100', 0)
-                                st.metric("Score do Lead", f"{score_lead}/100")
-                            with col_s3:
-                                class_lead = avaliacao_json.get('avaliacao_lead', {}).get('classificacao', 'N/A')
-                                st.metric("Classificação", class_lead)
-
-                            with st.expander("🔍 Ver Avaliação Completa (JSON)"):
-                                st.json(avaliacao_json)
-
-                            ac1, ac2 = st.columns([1, 3])
-                            with ac1:
-                                if st.button("🔁 Reavaliar", key=f"reavaliar_{row.name}"):
-                                    if not row.get('transcricao'):
-                                        st.error("Transcrição não encontrada para reavaliar.")
-                                    else:
-                                        analise = ia_analyzer.analisar_transcricao(row['transcricao'])
-                                        if 'erro' in analise:
-                                            st.error(f"Erro na reavaliação: {analise['erro']}")
-                                        else:
-                                            transcricao_id = row.get('transcricao_id')
-                                            insight_ia = analise.get('avaliacao_completa')
-                                            evaluation_ia = analise.get('nota_vendedor')
-                                            atualizado, erro_mysql = atualizar_avaliacao_transcricao(
-                                                transcricao_id=transcricao_id,
-                                                insight_ia=insight_ia,
-                                                evaluation_ia=evaluation_ia,
-                                                created_at=row.get('data_trancricao'),
-                                            )
-                                            if atualizado:
-                                                carregar_transcricoes_base.clear()
-                                                st.success("Reavaliação concluída!")
-                                                st.rerun()
-                                            else:
-                                                detalhe = f" ({erro_mysql})" if erro_mysql else ""
-                                                print(f"Erro MySQL na reavaliação {nome}{detalhe}")
-                                                st.error(f"Erro ao salvar reavaliação no MySQL{detalhe}")
-                                                st.session_state.ultimo_erro_mysql = f"Erro MySQL (reavaliação): {nome}{detalhe}"
-                            with ac2:
-                                comentario = st.text_area(
-                                    "Comentários adicionais:",
-                                    value=row.get('comentarios_usuario', ''),
-                                    key=f"comentario_av_{row.name}"
-                                )
-                                if st.button("💾 Salvar Comentário", key=f"save_av_{row.name}"):
-                                    st.info("Comentários não são salvos no MySQL neste fluxo.")
-                        except json.JSONDecodeError:
-                            st.error("Erro ao decodificar avaliação")
-
-            # Métricas e gráficos
-            st.divider()
-            st.subheader("📈 Métricas e Gráficos")
-
-            com_nota = int((avaliacoes_filtradas['nota_vendedor'] > 0).sum())
-            sem_nota = int((avaliacoes_filtradas['nota_vendedor'] <= 0).sum())
-            nota_media_agente = (
-                avaliacoes_filtradas.groupby('agente')['nota_vendedor']
-                .mean()
-                .dropna()
-                .mean()
+            # tabela resumo
+            df_resumo = df_av[['transcricao_id', 'data_ligacao', 'nome_lead', 'telefone_lead',
+                                'evaluation_ia', 'lead_score', 'lead_classification', 'etapa']].copy()
+            df_resumo['data_ligacao'] = df_av['data_ligacao'].dt.strftime('%d/%m/%Y')
+            df_resumo['Nota'] = df_av['evaluation_ia'].apply(
+                lambda x: f"{_cor_nota(x)} {int(x)}" if pd.notna(x) else "—"
             )
-            nota_media_agentes = avaliacoes_filtradas['nota_vendedor'].mean()
-            nota_media_lead = avaliacoes_filtradas['lead_score'].mean()
+            df_resumo = df_resumo.rename(columns={
+                'transcricao_id': 'ID',
+                'data_ligacao': 'Data',
+                'nome_lead': 'Lead',
+                'telefone_lead': 'Telefone',
+                'lead_score': 'Score Lead',
+                'lead_classification': 'Classificação',
+                'etapa': 'Etapa',
+            }).drop(columns=['evaluation_ia'])
 
-            col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-            with col_g1:
-                st.metric("Com Nota", com_nota)
-            with col_g2:
-                st.metric("Sem Nota", sem_nota)
-            with col_g3:
-                st.metric("Nota média agente", f"{nota_media_agente:.1f}" if pd.notna(nota_media_agente) else "0")
-            with col_g4:
-                st.metric("Média lead", f"{nota_media_lead:.1f}" if pd.notna(nota_media_lead) else "0")
+            st.dataframe(df_resumo.set_index('ID'), use_container_width=True, height=300)
 
-            col_g5, col_g6 = st.columns(2)
-            with col_g5:
-                df_class = (
-                    avaliacoes_filtradas['lead_classificacao']
-                    .fillna('N/A')
-                    .value_counts()
-                    .reset_index()
-                )
-                df_class.columns = ['classificacao', 'quantidade']
-                fig_class = px.pie(
-                    df_class,
-                    names='classificacao',
-                    values='quantidade',
-                    title='Classificação do Lead'
-                )
-                st.plotly_chart(fig_class, use_container_width=True)
-
-            with col_g6:
-                df_tipo = (
-                    avaliacoes_filtradas.groupby('tipo')
-                    .agg(nota_media=('nota_vendedor', 'mean'), quantidade=('nota_vendedor', 'size'))
-                    .reset_index()
-                )
-                df_tipo['label'] = df_tipo.apply(
-                    lambda x: f"{int(x['quantidade'])} • {x['nota_media']:.1f}" if pd.notna(x['quantidade']) else "0",
-                    axis=1
-                )
-                fig_tipo = px.bar(
-                    df_tipo,
-                    x='tipo',
-                    y='nota_media',
-                    text='label',
-                    title='Média de Nota por Tipo (Qtde Avaliações)'
-                )
-                st.plotly_chart(fig_tipo, use_container_width=True)
-
-            df_agente = (
-                    avaliacoes_filtradas.groupby('agente')
-                    .agg(nota_media=('nota_vendedor', 'mean'), quantidade=('nota_vendedor', 'size'))
-                    .reset_index()
-                )
-            df_agente['label'] = df_agente.apply(
-                    lambda x: f"{int(x['quantidade'])} - NM {x['nota_media']:.1f}" if pd.notna(x['quantidade']) else "0",
-                    axis=1
-                )
-            fig_agente = px.bar(
-                    df_agente,
-                    y='agente',
-                    x='nota_media',
-                    text='label',
-                    title='Média de Nota por Agente (Qtde Avaliações)',
-                    orientation='h'
-                )
-            st.plotly_chart(fig_agente, use_container_width=True)
-
-            # Resumo de pontos fortes, fracos e erros mais caros
+            # detalhe sob demanda
             st.divider()
-            st.subheader("🧾 Resumo de Pontos e Erros")
+            st.markdown("**Detalhes de avaliação:**")
+            ids_av = df_av['transcricao_id'].dropna().astype(int).tolist()
+            id_av = st.selectbox("Selecione o ID:", ["—"] + ids_av, key="id_av_det")
 
-            def _split_lista(texto: str) -> list:
-                if not texto:
-                    return []
-                return [t.strip() for t in str(texto).split(";") if t and str(t).strip()]
+            if id_av != "—":
+                tid = int(id_av)
+                row_av = df_av[df_av['transcricao_id'] == tid].iloc[0]
+                detalhe = carregar_detalhe_transcricao(tid)
 
-            pontos_fortes = []
-            pontos_fracos = []
-            erros_mais_caros = []
+                st.markdown(
+                    f"**Lead:** {row_av.get('nome_lead', '—')} | "
+                    f"**Nota:** {_cor_nota(row_av['evaluation_ia'])} {int(row_av['evaluation_ia'])} | "
+                    f"**Score Lead:** {int(row_av['lead_score'])} | "
+                    f"**Classificação:** {row_av['lead_classification']}"
+                )
+                st.caption(
+                    f"Agente: {detalhe.get('agente', '—')} | "
+                    f"Duração: {_formatar_duracao(detalhe.get('duracao'))} | "
+                    f"Tipo: {detalhe.get('tipo', '—')}"
+                )
 
-            if 'strengths' in avaliacoes_filtradas.columns:
-                for val in avaliacoes_filtradas['strengths']:
-                    pontos_fortes.extend(_split_lista(val))
-            if 'improvements' in avaliacoes_filtradas.columns:
-                for val in avaliacoes_filtradas['improvements']:
-                    pontos_fracos.extend(_split_lista(val))
-            if 'most_expensive_mistake' in avaliacoes_filtradas.columns:
-                for val in avaliacoes_filtradas['most_expensive_mistake']:
-                    if val and str(val).strip():
-                        erros_mais_caros.append(str(val).strip())
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    with st.expander("📝 Transcrição", expanded=False):
+                        tx = detalhe.get("transcricao", "")
+                        if tx:
+                            with st.container(height=250):
+                                _renderizar_transcricao(tx)
+                        else:
+                            st.info("Transcrição não disponível.")
 
-            top_fortes = Counter(pontos_fortes).most_common(10)
-            top_fracos = Counter(pontos_fracos).most_common(10)
-            top_erros = Counter(erros_mais_caros).most_common(10)
+                with col_t2:
+                    def _split(txt):
+                        return [t.strip() for t in str(txt).split(";") if t.strip()] if txt else []
 
-            col_r1, col_r2, col_r3 = st.columns(3)
-            with col_r1:
-                st.markdown("**Top 10 Pontos Fortes**")
-                if top_fortes:
-                    for texto, qtd in top_fortes:
-                        st.write(f"• {texto} ({qtd})")
-                else:
-                    st.caption("Sem dados")
-            with col_r2:
-                st.markdown("**Top 10 Pontos de Melhoria**")
-                if top_fracos:
-                    for texto, qtd in top_fracos:
-                        st.write(f"• {texto} ({qtd})")
-                else:
-                    st.caption("Sem dados")
-            with col_r3:
-                st.markdown("**Top 10 Erros Mais Caros**")
-                if top_erros:
-                    for texto, qtd in top_erros:
-                        st.write(f"• {texto} ({qtd})")
-                else:
-                    st.caption("Sem dados")
+                    melhorias = _split(row_av.get('improvements'))
+                    fortes = _split(row_av.get('strengths'))
+                    erro_caro = row_av.get('most_expensive_mistake', '')
 
-    
-    with tab3:
-        st.subheader("📤 Exportar Avaliações")
-        
-        col_export1, col_export2 = st.columns(2)
-        
-        with col_export1:
-            if st.button("Baixar Todas Avaliações (CSV)"):
-                if not avaliacoes.empty:
-                    csv = avaliacoes.to_csv(index=False)
-                    st.download_button(
-                        label="⬇️ Download CSV",
-                        data=csv,
-                        file_name=f"avaliacoes_transcricoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
+                    if fortes:
+                        with st.expander("✅ Pontos fortes", expanded=False):
+                            for p in fortes:
+                                st.write(f"• {p}")
+                    if melhorias:
+                        with st.expander("🛠️ Pontos de melhoria", expanded=False):
+                            for p in melhorias:
+                                st.write(f"• {p}")
+                    if erro_caro and str(erro_caro).strip():
+                        st.info(f"💸 **Erro mais caro:** {erro_caro}")
+
+                # Reavaliar
+                if st.button("🔁 Reavaliar esta ligação", key=f"reav_{tid}"):
+                    tx = detalhe.get("transcricao", "")
+                    if not tx:
+                        st.error("Transcrição não encontrada.")
+                    else:
+                        with st.spinner("Reavaliando..."):
+                            ia = TranscricaoOpenAIAnalyzer()
+                            analise = ia.analisar_transcricao(tx)
+                        if 'erro' in analise:
+                            st.error(analise['erro'])
+                        else:
+                            ok, err = atualizar_avaliacao_transcricao(
+                                transcricao_id=tid,
+                                insight_ia=analise.get('avaliacao_completa'),
+                                evaluation_ia=analise.get('nota_vendedor'),
+                                created_at=row_av.get('data_trancricao'),
+                                agent=detalhe.get('agente'),
+                                duration=detalhe.get('duracao'),
+                                phone=detalhe.get('telefone'),
+                                type_=detalhe.get('tipo'),
+                            )
+                            if ok:
+                                carregar_transcricoes_base.clear()
+                                carregar_detalhe_transcricao.clear()
+                                st.success("Reavaliação concluída!")
+                                st.rerun()
+                            else:
+                                msg = f"Erro ao salvar{f': {err}' if err else '.'}"
+                                st.error(msg)
+                                st.session_state.ultimo_erro = msg
+
+            # gráficos (colapsados por padrão)
+            with st.expander("📊 Gráficos", expanded=False):
+                gc1, gc2 = st.columns(2)
+                with gc1:
+                    df_class = df_av['lead_classification'].value_counts().reset_index()
+                    df_class.columns = ['Classificação', 'Qtd']
+                    st.plotly_chart(
+                        px.pie(df_class, names='Classificação', values='Qtd', title='Classificação do Lead'),
+                        use_container_width=True
                     )
-                else:
-                    st.info("Nenhuma avaliação disponível")
-        
-        with col_export2:
-            if st.button("Baixar Pendentes de Sincronização"):
-                st.info("Sincronização não aplicável com MySQL direto.")
+                with gc2:
+                    df_ag = (df_av.groupby('etapa')['evaluation_ia']
+                             .agg(['mean', 'count']).reset_index()
+                             .rename(columns={'mean': 'Média', 'count': 'Qtd', 'etapa': 'Etapa'}))
+                    st.plotly_chart(
+                        px.bar(df_ag, x='Etapa', y='Média', text='Qtd', title='Nota média por Etapa'),
+                        use_container_width=True
+                    )
 
+            # resumo top pontos (colapsado)
+            with st.expander("🧾 Top pontos fortes / melhorias / erros", expanded=False):
+                import re as _re
+                _pat_cat = _re.compile(r'^\[[^\]]+\]\s*')
 
+                def _top(col_name, n=10):
+                    itens = []
+                    for v in df_av.get(col_name, pd.Series(dtype=str)).fillna(''):
+                        itens.extend([t.strip() for t in str(v).split(";") if t.strip()])
+                    # agrupa pelo texto sem colchete, mas preserva o original para exibição
+                    contagem: dict = {}
+                    for item in itens:
+                        texto = _pat_cat.sub('', item).strip()
+                        if texto:
+                            contagem[texto] = contagem.get(texto, 0) + 1
+                    return sorted(contagem.items(), key=lambda x: -x[1])[:n]
+
+                rc1, rc2, rc3 = st.columns(3)
+                with rc1:
+                    st.markdown("**Top Pontos Fortes**")
+                    for txt, n in _top('strengths'):
+                        st.write(f"• {txt} ({n})")
+                with rc2:
+                    st.markdown("**Top Melhorias**")
+                    for txt, n in _top('improvements'):
+                        st.write(f"• {txt} ({n})")
+                with rc3:
+                    st.markdown("**Top Erros Caros**")
+                    erros_l = [_pat_cat.sub('', str(v)).strip() for v in df_av.get('most_expensive_mistake', pd.Series(dtype=str)).fillna('') if str(v).strip()]
+                    erros_l = [e for e in erros_l if e]
+                    for txt, n in Counter(erros_l).most_common(10):
+                        st.write(f"• {txt} ({n})")
+
+    # ════════════════════════════════════════════
+    # TAB 3 — EXPORTAR
+    # ════════════════════════════════════════════
+    with tab3:
+        st.subheader("Exportar")
+        df_exp = df_f[df_f['avaliada']].copy()
+        if df_exp.empty:
+            st.info("Nenhuma avaliação no período para exportar.")
+        else:
+            csv = df_exp.to_csv(index=False)
+            st.download_button(
+                "⬇️ Baixar CSV das avaliações",
+                data=csv,
+                file_name=f"avaliacoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+            st.caption(f"{len(df_exp)} registros")
