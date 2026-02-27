@@ -123,68 +123,101 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
     if not ids_selecionados:
         return
 
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # Instância compartilhada — OpenAI client é thread-safe
     ia = TranscricaoOpenAIAnalyzer()
     total = len(ids_selecionados)
     bar = st.progress(0)
-    status = st.empty()
-    sucesso = erros = 0
+    status_txt = st.empty()
 
-    for i, tid in enumerate(ids_selecionados):
+    # Estado compartilhado entre threads (protegido por lock)
+    lock = threading.Lock()
+    concluidos = [0]
+    sucesso_count = [0]
+    erros_count = [0]
+    mensagens = []  # coletadas nas threads, exibidas no final (thread-safe)
+
+    # Monta lista de tarefas com dados já extraídos do DataFrame
+    tasks = []
+    for tid in ids_selecionados:
         row_list = df_base[df_base['transcricao_id'] == tid]
-        nome = row_list.iloc[0].get('nome_lead', f'ID {tid}') if not row_list.empty else f'ID {tid}'
-        status.text(f"Avaliando {i+1}/{total}: {nome}...")
+        row_data = row_list.iloc[0] if not row_list.empty else {}
+        nome = row_data.get('nome_lead', f'ID {tid}') if not row_list.empty else f'ID {tid}'
+        tx = str(row_data.get('transcricao', '') or '') if not row_list.empty else ''
+        tasks.append((tid, nome, tx, row_data if not row_list.empty else {}))
 
-        detalhe = carregar_detalhe_transcricao(int(tid))
-        tx = detalhe.get("transcricao", "")
+    def _avaliar_uma(task):
+        tid, nome, tx, row_data = task
 
-        if not tx or len(tx.strip()) < 30:
-            st.warning(f"Transcrição insuficiente: {nome}")
-            erros += 1
-            bar.progress((i + 1) / total)
-            continue
+        if not tx or len(tx.strip()) < 500:
+            return (tid, nome, 'insuficiente', None)
 
         try:
             analise = ia.analisar_transcricao(tx)
             if 'erro' in analise:
-                st.error(f"Erro na análise de {nome}: {analise['erro']}")
-                erros += 1
-            else:
-                row_data = row_list.iloc[0] if not row_list.empty else {}
-                ok, err = atualizar_avaliacao_transcricao(
-                    transcricao_id=tid,
-                    insight_ia=analise.get('avaliacao_completa'),
-                    evaluation_ia=analise.get('nota_vendedor'),
-                    created_at=row_data.get('data_trancricao') if not row_list.empty else None,
-                    agent=detalhe.get('agente'),
-                    duration=detalhe.get('duracao'),
-                    phone=detalhe.get('telefone'),
-                    type_=detalhe.get('tipo'),
-                )
-                if ok:
-                    sucesso += 1
-                else:
-                    msg = err or "Erro desconhecido"
-                    st.error(f"Erro ao salvar {nome}: {msg}")
-                    st.session_state.ultimo_erro = msg
-                    erros += 1
-        except Exception as e:
-            st.error(f"Erro inesperado em {nome}: {e}")
-            erros += 1
+                return (tid, nome, 'erro_ia', analise['erro'])
 
-        bar.progress((i + 1) / total)
+            ok, err = atualizar_avaliacao_transcricao(
+                transcricao_id=tid,
+                insight_ia=analise.get('avaliacao_completa'),
+                evaluation_ia=analise.get('nota_vendedor'),
+                created_at=row_data.get('data_trancricao'),
+                agent=row_data.get('agente'),
+                duration=row_data.get('duracao'),
+                phone=row_data.get('telefone_lead'),
+                type_=row_data.get('tipo_ligacao'),
+            )
+            if ok:
+                return (tid, nome, 'ok', None)
+            return (tid, nome, 'erro_db', err or 'Erro desconhecido')
+
+        except Exception as e:
+            return (tid, nome, 'excecao', str(e))
+
+    # 4 workers: bom equilíbrio entre paralelismo e limites de rate da API
+    MAX_WORKERS = min(4, total)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(_avaliar_uma, t): t for t in tasks}
+        for future in as_completed(futures):
+            tid, nome, status_r, detalhe = future.result()
+            with lock:
+                concluidos[0] += 1
+                bar.progress(concluidos[0] / total)
+                status_txt.text(f"Concluídas {concluidos[0]}/{total} ({MAX_WORKERS} em paralelo)...")
+                if status_r == 'ok':
+                    sucesso_count[0] += 1
+                else:
+                    erros_count[0] += 1
+                    if status_r == 'insuficiente':
+                        mensagens.append(('warning', f"Transcrição insuficiente: {nome}"))
+                    elif status_r == 'erro_db':
+                        mensagens.append(('error', f"Erro ao salvar {nome}: {detalhe}"))
+                        st.session_state.ultimo_erro = detalhe
+                    else:
+                        mensagens.append(('error', f"Erro em {nome}: {detalhe}"))
 
     bar.empty()
-    status.empty()
+    status_txt.empty()
     st.session_state.transcricoes_selecionadas = []
 
-    if sucesso:
-        carregar_transcricoes_base.clear()
-        carregar_detalhe_transcricao.clear()
-        st.success(f"✅ {sucesso} avaliação(ões) concluída(s).")
-    if erros:
-        st.warning(f"⚠️ {erros} erro(s).")
+    # Exibe mensagens coletadas (chamadas Streamlit apenas no thread principal)
+    for tipo, msg in mensagens:
+        if tipo == 'warning':
+            st.warning(msg)
+        else:
+            st.error(msg)
 
-    st.rerun()
+    if sucesso_count[0]:
+        st.cache_data.clear()  # Limpa cache de ambas as páginas (transcrições + análise)
+        st.success(f"✅ {sucesso_count[0]} avaliação(ões) concluída(s).")
+        if erros_count[0]:
+            st.warning(f"⚠️ {erros_count[0]} erro(s).")
+        st.rerun()
+    elif erros_count[0]:
+        st.warning(f"⚠️ {erros_count[0]} erro(s). Nenhuma avaliação salva.")
 
 
 # ──────────────────────────────────────────────
@@ -208,9 +241,14 @@ def run_page():
 
     # ── Filtros sidebar ───────────────────────────
     empresas = sorted(df["empresa"].dropna().unique().tolist())
+    default_index = 0
+    if "Degrau" in empresas:
+        default_index = empresas.index("Degrau")
+    
     empresa = st.sidebar.radio(
         "Empresa:",
         empresas,
+        index=default_index,
         key="empresa_sel",
         on_change=_limpar_selecao,
     )
@@ -247,6 +285,19 @@ def run_page():
     c2.metric("Avaliáveis", avaliaveis)
     c3.metric("Avaliadas", avaliadas)
     c4.metric("Pendentes", max(0, pendentes))
+
+    # ── Gráfico rápido: ligações por data ────────────────
+    _df_por_data = df_f.copy()
+    _df_por_data['data_dia'] = _df_por_data['data_ligacao'].dt.date
+    _df_por_data = _df_por_data.groupby('data_dia').size().reset_index(name='Total')
+    if not _df_por_data.empty:
+        _fig_td = px.bar(
+            _df_por_data, x='data_dia', y='Total',
+            labels={'data_dia': 'Data', 'Total': 'Ligações'},
+            color_discrete_sequence=['#636EFA'],
+        )
+        _fig_td.update_layout(height=200, margin=dict(t=10, b=10, l=10, r=10))
+        st.plotly_chart(_fig_td, use_container_width=True)
 
     if st.session_state.ultimo_erro:
         st.error(st.session_state.ultimo_erro)
@@ -325,22 +376,31 @@ def run_page():
                         _executar_avaliacoes(df_t1, st.session_state.transcricoes_selecionadas)
 
             # ── tabela compacta ──
-            df_tabela = fatia[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa', 'avaliavel', 'avaliada']].copy()
+            df_tabela = fatia[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa', 'avaliavel', 'avaliada', 'transcricao']].copy()
             df_tabela['data_ligacao'] = fatia['data_ligacao'].dt.strftime('%d/%m/%Y %H:%M')
             df_tabela['Status'] = fatia['avaliada'].apply(lambda x: '✅' if x else '⏳')
             df_tabela['Avaliável'] = fatia['avaliavel'].apply(lambda x: '🟢' if x else '🔴')
+            df_tabela['transcricao'] = fatia['transcricao'].fillna('').astype(str)
             df_tabela = df_tabela.rename(columns={
                 'transcricao_id': 'ID',
                 'data_ligacao': 'Data',
                 'nome_lead': 'Lead',
                 'agente': 'Agente',
                 'etapa': 'Etapa',
+                'transcricao': 'Transcrição',
             }).drop(columns=['avaliavel', 'avaliada'])
 
             st.dataframe(
                 df_tabela.set_index('ID'),
                 use_container_width=True,
                 height=min(400, 36 * len(df_tabela) + 38),
+                column_config={
+                    'Transcrição': st.column_config.TextColumn(
+                        'Transcrição',
+                        help='Clique na célula para ver a transcrição completa',
+                        width='large',
+                    ),
+                },
             )
 
             # ── detalhe sob demanda ──
@@ -461,23 +521,36 @@ def run_page():
             m3.metric("Lead score médio", f"{lead_media:.1f}" if pd.notna(lead_media) else "—")
 
             # tabela resumo
-            df_resumo = df_av[['transcricao_id', 'data_ligacao', 'nome_lead', 'telefone_lead',
-                                'evaluation_ia', 'lead_score', 'lead_classification', 'etapa']].copy()
+            df_resumo = df_av[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente',
+                                'evaluation_ia', 'lead_score', 'lead_classification', 'etapa', 'transcricao']].copy()
             df_resumo['data_ligacao'] = df_av['data_ligacao'].dt.strftime('%d/%m/%Y')
             df_resumo['Nota'] = df_av['evaluation_ia'].apply(
                 lambda x: f"{_cor_nota(x)} {int(x)}" if pd.notna(x) else "—"
             )
+            df_resumo['transcricao'] = df_av['transcricao'].fillna('').astype(str)
             df_resumo = df_resumo.rename(columns={
                 'transcricao_id': 'ID',
                 'data_ligacao': 'Data',
                 'nome_lead': 'Lead',
-                'telefone_lead': 'Telefone',
+                'agente': 'Agente',
                 'lead_score': 'Score Lead',
                 'lead_classification': 'Classificação',
                 'etapa': 'Etapa',
+                'transcricao': 'Transcrição',
             }).drop(columns=['evaluation_ia'])
 
-            st.dataframe(df_resumo.set_index('ID'), use_container_width=True, height=300)
+            st.dataframe(
+                df_resumo.set_index('ID'),
+                use_container_width=True,
+                height=300,
+                column_config={
+                    'Transcrição': st.column_config.TextColumn(
+                        'Transcrição',
+                        help='Clique na célula para ver a transcrição completa',
+                        width='large',
+                    ),
+                },
+            )
 
             # detalhe sob demanda
             st.divider()

@@ -48,19 +48,19 @@ class TranscricaoAnalyzer:
             try:
                 openai_section = st.secrets.get("openai") if hasattr(st.secrets, "get") else None
                 secrets_lookup = openai_section if openai_section else st.secrets
-                self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-4o')
+                self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-5.1')
                 self.temperature = float(secrets_lookup.get('OPENAI_TEMPERATURE') or secrets_lookup.get('openai_temperature', '0.2'))
                 self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '8000'))
                 self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '25000'))
                 self.max_input_chars_classificacao = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO') or secrets_lookup.get('openai_max_input_chars_classificacao', '4000'))
             except Exception:
-                self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+                self.model = os.getenv('OPENAI_MODEL', 'gpt-5.1')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
                 self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
                 self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
                 self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
         else:
-            self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+            self.model = os.getenv('OPENAI_MODEL', 'gpt-5.1')
             self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
             self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
             self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
@@ -354,22 +354,22 @@ class TranscricaoOpenAIAnalyzer:
             try:
                 openai_section = st.secrets.get("openai") if hasattr(st.secrets, "get") else None
                 secrets_lookup = openai_section if openai_section else st.secrets
-                self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-4o')
-                self.model_classificacao = secrets_lookup.get('OPENAI_MODEL_CLASSIFICACAO') or secrets_lookup.get('openai_model_classificacao', 'gpt-4o-mini')
+                self.model = secrets_lookup.get('OPENAI_MODEL') or secrets_lookup.get('openai_model', 'gpt-5.1')
+                self.model_classificacao = secrets_lookup.get('OPENAI_MODEL_CLASSIFICACAO') or secrets_lookup.get('openai_model_classificacao', 'gpt-5-nano')
                 self.temperature = float(secrets_lookup.get('OPENAI_TEMPERATURE') or secrets_lookup.get('openai_temperature', '0.2'))
                 self.max_tokens = int(secrets_lookup.get('OPENAI_MAX_TOKENS') or secrets_lookup.get('openai_max_tokens', '8000'))
                 self.max_input_chars = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS') or secrets_lookup.get('openai_max_input_chars', '25000'))
                 self.max_input_chars_classificacao = int(secrets_lookup.get('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO') or secrets_lookup.get('openai_max_input_chars_classificacao', '4000'))
             except Exception:
-                self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
-                self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-4o-mini')
+                self.model = os.getenv('OPENAI_MODEL', 'gpt-5.1')
+                self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-5-nano')
                 self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
                 self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
                 self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
                 self.max_input_chars_classificacao = int(os.getenv('OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO', '4000'))
         else:
-            self.model = os.getenv('OPENAI_MODEL', 'gpt-4o')
-            self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-4o-mini')
+            self.model = os.getenv('OPENAI_MODEL', 'gpt-5.1')
+            self.model_classificacao = os.getenv('OPENAI_MODEL_CLASSIFICACAO', 'gpt-5-nano')
             self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.2'))
             self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '8000'))
             self.max_input_chars = int(os.getenv('OPENAI_MAX_INPUT_CHARS', '25000'))
@@ -423,7 +423,7 @@ ORIENTAÇÃO PARA deve_avaliar:
 - false para todas as demais categorias.
 
 TRANSCRIÇÃO (trecho):
-{transcricao[:self.max_input_chars_classificacao]}
+{transcricao[:1500]}
 """
 
     def _classificar_por_heuristica(self, transcricao: str) -> Optional[Dict]:
@@ -545,72 +545,106 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
 
         prompt = self._criar_prompt_classificacao(transcricao)
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_classificacao,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Você é um especialista em triagem de ligações. Retorna sempre JSON válido."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
+        for tentativa in range(2):  # tenta 2 vezes antes de desistir
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_classificacao,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Você é um especialista em triagem de ligações. Retorna sempre JSON válido."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=1000
+                )
+
+                finish_reason = getattr(response.choices[0], 'finish_reason', None)
+                content = (response.choices[0].message.content or "").strip()
+                print(f"[classificacao] tentativa={tentativa} finish_reason={finish_reason} content_len={len(content)}")
+
+                if not content:
+                    print(f"[classificacao] conteúdo vazio — finish_reason={finish_reason}")
+                    if tentativa == 0:
+                        continue  # tenta novamente
+                    # após 2 tentativas vazias: dialogo_incompleto é mais seguro que assumir venda
+                    return {
+                        'tipo': 'dados_insuficientes',
+                        'motivo': f'Classificação não retornou resposta (finish_reason={finish_reason})',
+                        'confianca': 0.3,
+                        'deve_avaliar': False,
+                        'tokens_usados': 0
                     }
-                ],
-                temperature=0.1,
-                max_tokens=300,
-                response_format={"type": "json_object"}
-            )
 
-            content = (response.choices[0].message.content or "").strip()
-            if content.startswith("```"):
-                content = content.strip("`")
-                if content.lower().startswith("json"):
-                    content = content[4:].strip()
+                if content.startswith("```"):
+                    content = content.strip("`")
+                    if content.lower().startswith("json"):
+                        content = content[4:].strip()
 
-            resultado = json.loads(content)
-            resultado['tokens_usados'] = getattr(getattr(response, "usage", None), "total_tokens", None)
-            if 'deve_avaliar' not in resultado:
-                resultado['deve_avaliar'] = resultado.get('tipo') == 'venda'
-            if resultado.get('tipo') == 'venda':
-                resultado['deve_avaliar'] = True
-            if 'confianca' not in resultado:
-                resultado['confianca'] = 0.5
-            if 'motivo' not in resultado:
-                resultado['motivo'] = 'Não informado'
+                resultado = json.loads(content)
+                resultado['tokens_usados'] = getattr(getattr(response, "usage", None), "total_tokens", None)
+                if 'deve_avaliar' not in resultado:
+                    resultado['deve_avaliar'] = resultado.get('tipo') == 'venda'
+                if resultado.get('tipo') == 'venda':
+                    resultado['deve_avaliar'] = True
+                if 'confianca' not in resultado:
+                    resultado['confianca'] = 0.5
+                if 'motivo' not in resultado:
+                    resultado['motivo'] = 'Não informado'
 
-            texto_norm = " ".join(transcricao.lower().split())
-            tem_dialogo = ("vendedor:" in texto_norm) and ("cliente:" in texto_norm)
-            marcadores_venda = [
-                "proposta",
-                "matrícula",
-                "desconto",
-                "parcela",
-                "valor",
-                "orçamento",
-                "boleto",
-                "cartão",
-                "pagar",
-                "curso",
-                "convite de matrícula"
-            ]
-            tem_venda = any(p in texto_norm for p in marcadores_venda)
+                texto_norm = " ".join(transcricao.lower().split())
+                tem_dialogo = ("vendedor:" in texto_norm) and ("cliente:" in texto_norm)
+                marcadores_venda = [
+                    "proposta",
+                    "matrícula",
+                    "desconto",
+                    "parcela",
+                    "valor",
+                    "orçamento",
+                    "boleto",
+                    "cartão",
+                    "pagar",
+                    "curso",
+                    "convite de matrícula"
+                ]
+                tem_venda = any(p in texto_norm for p in marcadores_venda)
 
-            if resultado.get('tipo') == 'ura' and tem_dialogo and len(texto_norm) >= 255:
-                resultado['tipo'] = 'venda' if tem_venda else 'outros'
-                resultado['motivo'] = 'Diálogo após URA detectado'
-                resultado['deve_avaliar'] = True
-            return resultado
+                if resultado.get('tipo') == 'ura' and tem_dialogo and len(texto_norm) >= 255:
+                    resultado['tipo'] = 'venda' if tem_venda else 'outros'
+                    resultado['motivo'] = 'Diálogo após URA detectado'
+                    resultado['deve_avaliar'] = True
+                return resultado
 
-        except Exception as e:
-            return {
-                'tipo': 'outros',
-                'motivo': f'Erro ao classificar: {str(e)}',
-                'confianca': 0,
-                'deve_avaliar': False,
-                'tokens_usados': 0
-            }
+            except json.JSONDecodeError:
+                if tentativa == 0:
+                    continue  # tenta novamente com JSON mal-formado
+                return {
+                    'tipo': 'venda',
+                    'motivo': 'Classificação retornou JSON inválido (assumido venda)',
+                    'confianca': 0.5,
+                    'deve_avaliar': True,
+                    'tokens_usados': 0
+                }
+            except Exception as e:
+                return {
+                    'tipo': 'outros',
+                    'motivo': f'Erro ao classificar: {str(e)}',
+                    'confianca': 0,
+                    'deve_avaliar': False,
+                    'tokens_usados': 0
+                }
+
+        # fallback final (nunca deveria chegar aqui)
+        return {
+            'tipo': 'venda',
+            'motivo': 'Fallback após tentativas de classificação',
+            'confianca': 0.5,
+            'deve_avaliar': True,
+            'tokens_usados': 0
+        }
 
     def analisar_transcricao(self, transcricao: str, contexto_adicional: Optional[Dict] = None) -> Dict:
         if not transcricao or len(transcricao.strip()) < 10:
@@ -627,7 +661,11 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
             confianca = classificacao.get('confianca', 0)
             deve_avaliar = classificacao.get('deve_avaliar', False)
 
-            if not deve_avaliar or tipo != 'venda':
+            # Tipos que definitivamente não devem ser avaliados
+            TIPOS_SKIP = {'ura', 'dados_insuficientes', 'dialogo_incompleto',
+                          'ligacao_interna', 'chamada_errada', 'cancelamento', 'suporte'}
+
+            if tipo in TIPOS_SKIP:
                 retorno_minimo = {
                     'classificacao_ligacao': tipo,
                     'motivo_classificacao': motivo,
@@ -661,8 +699,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                     }
                 ],
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}
+                max_completion_tokens=min(self.max_tokens, 2000)
             )
 
             content = (response.choices[0].message.content or "").strip()
@@ -689,7 +726,9 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                 'lead_score': resultado.get('avaliacao_lead', {}).get('lead_score_0_100', 0),
                 'lead_classificacao': resultado.get('avaliacao_lead', {}).get('classificacao', 'D'),
                 'concurso_area': resultado.get('extracao', {}).get('concurso_area', 'Não identificado'),
-                'produto_recomendado': resultado.get('recomendacao_final', {}).get('produto_principal', {}).get('produto', 'N/A')
+                'produto_recomendado': resultado.get('recomendacao_final', {}).get('produto_principal', {}).get('produto', 'N/A'),
+                'confianca_avaliacao': resultado.get('confianca_avaliacao'),
+                'motivo_baixa_confianca': resultado.get('motivo_baixa_confianca')
             }
 
             return analise

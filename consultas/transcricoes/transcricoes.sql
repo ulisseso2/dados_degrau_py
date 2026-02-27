@@ -4,6 +4,7 @@ SELECT
     ot.date                 AS data_ligacao,
     ot.time                 AS hora_ligacao,
     ot.opportunity_id       AS oportunidade,
+    ot.transcript           AS transcricao,
     CASE WHEN ot.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS empresa,
     c.full_name             AS nome_lead,
     c.cellphone             AS telefone_lead,
@@ -20,11 +21,13 @@ SELECT
     tais.main_product       AS produto_recomendado,
     tais.main_pain_points   AS principais_dores,
     tais.ai_insight         AS insight_ia,
-    ot.agent                AS agente,
-    ot.duration             AS duracao,
-    ot.type                 AS tipo_ligacao,
+    JSON_UNQUOTE(JSON_EXTRACT(tais.ai_insight, '$.classificacao_ligacao'))  AS tipo_classificacao_ia,
+    CAST(JSON_EXTRACT(tais.ai_insight, '$.confianca_classificacao') AS DECIMAL(4,2)) AS confianca_classificacao,
+    COALESCE(ot.agent,    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.agente')))   AS agente,
+    COALESCE(ot.duration, JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.duracao'))) AS duracao,
+    COALESCE(ot.type,     JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.tipo')))    AS tipo_ligacao,
     CASE
-        WHEN ot.transcript IS NULL OR CHAR_LENGTH(ot.transcript) <= 255 THEN 0
+        WHEN ot.transcript IS NULL OR CHAR_LENGTH(ot.transcript) < 500 THEN 0
         ELSE 1
     END AS avaliavel
 

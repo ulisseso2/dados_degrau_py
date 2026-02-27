@@ -19,6 +19,21 @@ def atualizar_avaliacao_transcricao(
     if not transcricao_id:
         return False, "transcricao_id ausente"
 
+    # Sanitiza tipos numpy/pandas: NaN e inf viram None
+    import math
+    def _sanitize(v):
+        if v is None:
+            return None
+        try:
+            if math.isnan(float(v)) or math.isinf(float(v)):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return v
+
+    duration = _sanitize(duration)
+    evaluation_ia = _sanitize(evaluation_ia)
+
     engine = conectar_mysql_writer()
     if engine is None:
         return False, "engine MySQL não inicializado"
