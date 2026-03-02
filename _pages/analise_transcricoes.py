@@ -780,9 +780,9 @@ def run_page():
                 else:
                     st.info("Sem dados de pontos de melhoria com categoria.")
 
-            # Radar SPIN por agente (top 5)
-            st.markdown("#### 🕸️ Radar SPIN por Agente — Top 5 em Volume")
-            top5_ag = df_av['agente'].value_counts().head(5).index.tolist()
+            # Radar SPIN por agente (todos)
+            st.markdown("#### 🕸️ Radar SPIN por Agente")
+            top5_ag = df_av['agente'].value_counts().index.tolist()
             cats_spin = [
                 'rapport', 'investigacao_spin', 'valor_produto',
                 'gatilho_mental', 'objecao', 'fechamento', 'clareza',
