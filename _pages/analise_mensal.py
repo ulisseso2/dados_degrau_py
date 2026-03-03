@@ -9,6 +9,8 @@ from datetime import datetime
 import calendar
 from style.config_collor import CATEGORIA_PRODUTO
 from utils.sql_loader import carregar_dados
+from gclid_db import get_campaign_for_gclid as get_campaign_degrau
+from gclid_db_central import get_campaign_for_gclid as get_campaign_central
 
 def run_page():
     st.title("📊 Relatório de Desempenho Mensal de Vendas")
@@ -17,6 +19,7 @@ def run_page():
     # ✅ Carrega os dados com cache (10 min por padrão, pode ajustar no sql_loader.py)
     dfo = carregar_dados("consultas/orders/orders.sql")
     dfi = carregar_dados("consultas/oportunidades/oportunidades.sql")
+    dft = carregar_dados("consultas/transcricoes/transcricoes.sql")
 
     # Converte as datas para timezone aware
     dfo["data_pagamento"] = pd.to_datetime(dfo["data_pagamento"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
@@ -197,6 +200,57 @@ def run_page():
         how="left"
     )
     df_matriculas_tabela["qtd_oportunidades"] = df_matriculas_tabela["qtd_oportunidades"].fillna(0).astype(int)
+
+    # Buscar campanha vinculada ao GCLID no cache SQLite (banco específico por empresa)
+    def buscar_campanha_gclid(row):
+        gclid = row.get("gclid")
+        if pd.isna(gclid) or gclid == "":
+            return None
+        if empresa_selecionada == "Central":
+            return get_campaign_central(gclid)
+        else:
+            return get_campaign_degrau(gclid)
+
+    df_matriculas_tabela["Campanha_Gclid"] = df_matriculas_tabela.apply(buscar_campanha_gclid, axis=1)
+
+    # Buscar dados de ligação (transcrições) vinculadas ao cliente via oportunidade
+    if not dft.empty and "oportunidade" in dft.columns and "oportunidade" in dfi.columns:
+        # Mapa oportunidade → cliente_id (usando todas as oportunidades da empresa)
+        oport_cliente_map = dfi.loc[
+            dfi["empresa"] == empresa_selecionada,
+            ["oportunidade", "cliente_id"]
+        ].drop_duplicates()
+
+        # Filtra transcrições da empresa e cruza com oportunidades para obter cliente_id
+        dft_empresa = dft[dft["empresa"] == empresa_selecionada].copy()
+        dft_empresa["data_ligacao"] = pd.to_datetime(dft_empresa["data_ligacao"], errors="coerce")
+        dft_com_cliente = dft_empresa.merge(oport_cliente_map, on="oportunidade", how="inner")
+
+        if not dft_com_cliente.empty:
+            # Pega a transcrição mais recente por cliente
+            dft_mais_recente = (
+                dft_com_cliente
+                .sort_values("data_ligacao", ascending=False)
+                .groupby("cliente_id")
+                .first()
+                .reset_index()
+            )
+            ligacao_data = dft_mais_recente[["cliente_id"]].copy()
+            ligacao_data["Ligação"] = "Sim"
+            ligacao_data["Lead_Score"] = pd.to_numeric(
+                dft_mais_recente["lead_score"], errors="coerce"
+            )
+            df_matriculas_tabela = df_matriculas_tabela.merge(
+                ligacao_data[["cliente_id", "Ligação", "Lead_Score"]],
+                on="cliente_id",
+                how="left"
+            )
+        else:
+            df_matriculas_tabela["Ligação"] = None
+            df_matriculas_tabela["Lead_Score"] = None
+    else:
+        df_matriculas_tabela["Ligação"] = None
+        df_matriculas_tabela["Lead_Score"] = None
 
     df_matriculas_tabela["origem_exibicao"] = df_matriculas_tabela["origem_ult_1_15"].fillna("Sem origem")
     origens_disponiveis = sorted(df_matriculas_tabela["origem_exibicao"].dropna().unique().tolist())
@@ -567,6 +621,9 @@ def run_page():
         "origem_ult_1_15",
         "concurso",
         "gclid",
+        "Campanha_Gclid",
+        "Ligação",
+        "Lead_Score",
         "fbclid",
         "utm_source",
         "utm_campaign",
@@ -583,6 +640,9 @@ def run_page():
         "origem_ult_1_15": "Origem (etapa 1 ou 15)",
         "concurso": "Concurso",
         "gclid": "GCLID",
+        "Campanha_Gclid": "Campanha_Gclid",
+        "Ligação": "Ligação",
+        "Lead_Score": "Lead_Score",
         "fbclid": "FBCLID",
         "utm_source": "UTM Source",
         "utm_campaign": "UTM Campaign",
@@ -601,11 +661,36 @@ def run_page():
     df_exportacao = df_exportacao.drop('dia', axis=1)
     cols_export = ['Data'] + [col for col in df_exportacao.columns if col != 'Data']
     df_exportacao = df_exportacao[cols_export]
+
+    # Preparar tabela de matrículas detalhada para exportação
+    df_matriculas_export = df_matriculas_tabela[[
+        "cliente_id", "nome_cliente", "email_cliente", "data_pagamento",
+        "categoria", "total_pedido", "qtd_oportunidades", "origem_ult_1_15",
+        "concurso", "gclid", "Campanha_Gclid", "Ligação", "Lead_Score",
+        "fbclid", "utm_source", "utm_campaign", "utm_medium"
+    ]].copy()
+    df_matriculas_export.rename(columns={
+        "cliente_id": "ID do Cliente", "nome_cliente": "Nome",
+        "email_cliente": "Email", "data_pagamento": "Data da Matrícula",
+        "categoria": "Categoria", "total_pedido": "Valor do Pedido",
+        "qtd_oportunidades": "Qtd. Oportunidades",
+        "origem_ult_1_15": "Origem (etapa 1 ou 15)",
+        "concurso": "Concurso", "gclid": "GCLID",
+        "Campanha_Gclid": "Campanha_Gclid",
+        "Ligação": "Ligação", "Lead_Score": "Lead_Score",
+        "fbclid": "FBCLID", "utm_source": "UTM Source",
+        "utm_campaign": "UTM Campaign", "utm_medium": "UTM Medium"
+    }, inplace=True)
+    df_matriculas_export["Data da Matrícula"] = pd.to_datetime(
+        df_matriculas_export["Data da Matrícula"]
+    ).dt.strftime('%d/%m/%Y')
+    df_matriculas_export = df_matriculas_export.sort_values(by="Valor do Pedido", ascending=False)
     
-    # Botão de download
+    # Botão de download com ambas as abas
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df_exportacao.to_excel(writer, index=False, sheet_name='Desempenho Mensal')
+        df_matriculas_export.to_excel(writer, index=False, sheet_name='Matrículas Detalhado')
     buffer.seek(0)
     
     st.download_button(
@@ -614,3 +699,365 @@ def run_page():
         file_name=f"desempenho_mensal_{empresa_selecionada}_{ano_selecionado}_{mes_selecionado:02d}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    # ==============================================================================
+    # ANÁLISES DE RASTREAMENTO E COMPORTAMENTO DO MATRICULADO
+    # ==============================================================================
+    st.divider()
+    st.header("🔎 Análise de Rastreamento e Comportamento dos Matriculados")
+
+    # --- Métricas de rastreamento ---
+    total_mat = len(df_matriculas_tabela)
+
+    _tem_gclid = df_matriculas_tabela["gclid"].notna() & (df_matriculas_tabela["gclid"] != "")
+    _tem_fbclid = df_matriculas_tabela["fbclid"].notna() & (df_matriculas_tabela["fbclid"] != "")
+    _tem_ligacao = df_matriculas_tabela["Ligação"] == "Sim"
+    _tem_utm = (
+        (df_matriculas_tabela["utm_source"].notna() & (df_matriculas_tabela["utm_source"] != "")) |
+        (df_matriculas_tabela["utm_campaign"].notna() & (df_matriculas_tabela["utm_campaign"] != "")) |
+        (df_matriculas_tabela["utm_medium"].notna() & (df_matriculas_tabela["utm_medium"] != ""))
+    )
+    _tem_campanha = df_matriculas_tabela["Campanha_Gclid"].notna() & (df_matriculas_tabela["Campanha_Gclid"] != "") & (df_matriculas_tabela["Campanha_Gclid"] != "Não encontrado")
+    _tem_lead_score = df_matriculas_tabela["Lead_Score"].notna()
+
+    qtd_gclid = int(_tem_gclid.sum())
+    qtd_fbclid = int(_tem_fbclid.sum())
+    qtd_ligacao = int(_tem_ligacao.sum())
+    qtd_utm = int(_tem_utm.sum())
+    qtd_campanha = int(_tem_campanha.sum())
+    qtd_lead_score = int(_tem_lead_score.sum())
+
+    st.subheader("📌 Cobertura de Rastreamento")
+
+    mc1, mc2, mc3 = st.columns(3)
+    mc4, mc5, mc6 = st.columns(3)
+
+    def _pct(n):
+        return f"{n / total_mat * 100:.1f}%" if total_mat > 0 else "0%"
+
+    mc1.metric("Com GCLID (Google Ads)", f"{qtd_gclid}", delta=_pct(qtd_gclid))
+    mc2.metric("Com FBCLID (Meta Ads)", f"{qtd_fbclid}", delta=_pct(qtd_fbclid))
+    mc3.metric("Com Ligação Registrada", f"{qtd_ligacao}", delta=_pct(qtd_ligacao))
+    mc4.metric("Com UTM (qualquer)", f"{qtd_utm}", delta=_pct(qtd_utm))
+    mc5.metric("Campanha Google Identificada", f"{qtd_campanha}", delta=_pct(qtd_campanha))
+    mc6.metric("Com Lead Score", f"{qtd_lead_score}", delta=_pct(qtd_lead_score))
+
+    # --- Gráfico de cobertura de rastreamento (rosca) ---
+    _sem_rastreio = total_mat - int((_tem_gclid | _tem_fbclid | _tem_utm).sum())
+    df_cobertura = pd.DataFrame({
+        "Tipo": ["GCLID", "FBCLID", "UTM (sem GCLID/FBCLID)", "Sem rastreamento"],
+        "Qtd": [
+            qtd_gclid,
+            int((_tem_fbclid & ~_tem_gclid).sum()),
+            int((_tem_utm & ~_tem_gclid & ~_tem_fbclid).sum()),
+            _sem_rastreio
+        ]
+    })
+    df_cobertura = df_cobertura[df_cobertura["Qtd"] > 0]
+
+    if not df_cobertura.empty:
+        fig_cob = px.pie(
+            df_cobertura, names="Tipo", values="Qtd",
+            title="Distribuição por Tipo de Rastreamento",
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        fig_cob.update_traces(textinfo="value+percent")
+        st.plotly_chart(fig_cob, use_container_width=True)
+
+    st.divider()
+
+    # --- Campanhas Google Ads identificadas (barras horizontais) ---
+    st.subheader("📊 Campanhas Google Ads Identificadas (via GCLID)")
+
+    df_camp = df_matriculas_tabela[_tem_campanha].copy()
+    if not df_camp.empty:
+        camp_counts = (
+            df_camp.groupby("Campanha_Gclid")
+            .agg(Matrículas=("cliente_id", "count"), Receita=("total_pedido", "sum"))
+            .reset_index()
+            .sort_values("Matrículas", ascending=True)
+        )
+
+        fig_camp = px.bar(
+            camp_counts, x="Matrículas", y="Campanha_Gclid",
+            orientation="h",
+            text="Matrículas",
+            title="Matrículas por Campanha Google Ads",
+            color="Receita",
+            color_continuous_scale="Blues",
+            labels={"Campanha_Gclid": "Campanha", "Matrículas": "Qtd. Matrículas"}
+        )
+        fig_camp.update_layout(height=max(300, len(camp_counts) * 35), margin=dict(l=10))
+        fig_camp.update_traces(textposition="outside")
+        st.plotly_chart(fig_camp, use_container_width=True)
+
+        # Tabela resumo por campanha
+        camp_resumo = camp_counts.sort_values("Matrículas", ascending=False).copy()
+        camp_resumo["Ticket Médio"] = camp_resumo["Receita"] / camp_resumo["Matrículas"]
+        camp_resumo["Receita"] = camp_resumo["Receita"].apply(formatar_reais)
+        camp_resumo["Ticket Médio"] = camp_resumo["Ticket Médio"].apply(formatar_reais)
+        camp_resumo.rename(columns={"Campanha_Gclid": "Campanha"}, inplace=True)
+        st.dataframe(camp_resumo, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma campanha Google Ads identificada no período.")
+
+    st.divider()
+
+    # --- Análise: Ligação vs Ticket Médio ---
+    st.subheader("📞 Impacto da Ligação na Conversão")
+
+    col_lig1, col_lig2 = st.columns(2)
+
+    with col_lig1:
+        df_com_lig = df_matriculas_tabela[_tem_ligacao]
+        df_sem_lig = df_matriculas_tabela[~_tem_ligacao]
+        ticket_com = df_com_lig["total_pedido"].mean() if len(df_com_lig) > 0 else 0
+        ticket_sem = df_sem_lig["total_pedido"].mean() if len(df_sem_lig) > 0 else 0
+
+        df_lig_comp = pd.DataFrame({
+            "Situação": ["Com Ligação", "Sem Ligação"],
+            "Ticket Médio": [ticket_com, ticket_sem],
+            "Qtd. Matrículas": [len(df_com_lig), len(df_sem_lig)],
+            "Receita Total": [df_com_lig["total_pedido"].sum(), df_sem_lig["total_pedido"].sum()]
+        })
+
+        fig_lig = px.bar(
+            df_lig_comp, x="Situação", y="Ticket Médio",
+            text=df_lig_comp["Ticket Médio"].apply(formatar_reais),
+            color="Situação",
+            color_discrete_map={"Com Ligação": "#00CC96", "Sem Ligação": "#EF553B"},
+            title="Ticket Médio: Com vs Sem Ligação"
+        )
+        fig_lig.update_layout(showlegend=False)
+        st.plotly_chart(fig_lig, use_container_width=True)
+
+    with col_lig2:
+        fig_lig_receita = px.bar(
+            df_lig_comp, x="Situação", y="Receita Total",
+            text=df_lig_comp["Receita Total"].apply(formatar_reais),
+            color="Situação",
+            color_discrete_map={"Com Ligação": "#00CC96", "Sem Ligação": "#EF553B"},
+            title="Receita Total: Com vs Sem Ligação"
+        )
+        fig_lig_receita.update_layout(showlegend=False)
+        st.plotly_chart(fig_lig_receita, use_container_width=True)
+
+    st.divider()
+
+    # --- Distribuição de Lead Score dos matriculados ---
+    st.subheader("🎯 Distribuição de Lead Score dos Matriculados")
+
+    df_com_score = df_matriculas_tabela[_tem_lead_score].copy()
+    if not df_com_score.empty:
+        col_ls1, col_ls2 = st.columns(2)
+
+        with col_ls1:
+            media_score = df_com_score["Lead_Score"].mean()
+            mediana_score = df_com_score["Lead_Score"].median()
+
+            fig_hist = px.histogram(
+                df_com_score, x="Lead_Score", nbins=20,
+                title="Histograma de Lead Score",
+                labels={"Lead_Score": "Lead Score"},
+                color_discrete_sequence=["#636EFA"]
+            )
+            fig_hist.add_vline(
+                x=media_score, line_dash="dash", line_color="red",
+                annotation_text=f"Média: {media_score:.1f}"
+            )
+            fig_hist.update_layout(height=350)
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        with col_ls2:
+            # Classificação do lead score em faixas
+            def classificar_lead(score):
+                if pd.isna(score):
+                    return "Sem score"
+                if score >= 75:
+                    return "A (≥75)"
+                if score >= 50:
+                    return "B (50-74)"
+                if score >= 25:
+                    return "C (25-49)"
+                return "D (<25)"
+
+            df_com_score["Faixa_Score"] = df_com_score["Lead_Score"].apply(classificar_lead)
+            faixa_counts = df_com_score["Faixa_Score"].value_counts().reset_index()
+            faixa_counts.columns = ["Faixa", "Qtd"]
+            ordem_faixas = ["A (≥75)", "B (50-74)", "C (25-49)", "D (<25)"]
+            faixa_counts["Faixa"] = pd.Categorical(faixa_counts["Faixa"], categories=ordem_faixas, ordered=True)
+            faixa_counts = faixa_counts.sort_values("Faixa")
+
+            fig_faixa = px.bar(
+                faixa_counts, x="Faixa", y="Qtd",
+                text="Qtd",
+                title="Matrículas por Faixa de Lead Score",
+                color="Faixa",
+                color_discrete_map={
+                    "A (≥75)": "#00CC96", "B (50-74)": "#636EFA",
+                    "C (25-49)": "#FFA15A", "D (<25)": "#EF553B"
+                }
+            )
+            fig_faixa.update_layout(showlegend=False, height=350)
+            st.plotly_chart(fig_faixa, use_container_width=True)
+
+        # Ticket médio por faixa de lead score
+        score_ticket = df_com_score.groupby("Faixa_Score").agg(
+            Matrículas=("cliente_id", "count"),
+            Receita=("total_pedido", "sum")
+        ).reset_index()
+        score_ticket["Ticket Médio"] = score_ticket["Receita"] / score_ticket["Matrículas"]
+        score_ticket["Faixa_Score"] = pd.Categorical(score_ticket["Faixa_Score"], categories=ordem_faixas, ordered=True)
+        score_ticket = score_ticket.sort_values("Faixa_Score")
+        score_ticket["Receita"] = score_ticket["Receita"].apply(formatar_reais)
+        score_ticket["Ticket Médio"] = score_ticket["Ticket Médio"].apply(formatar_reais)
+        score_ticket.rename(columns={"Faixa_Score": "Faixa de Lead Score"}, inplace=True)
+        st.dataframe(score_ticket, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum lead score disponível para os matriculados no período.")
+
+    st.divider()
+
+    # --- Origem vs Receita e Ticket Médio ---
+    st.subheader("🏷️ Performance por Origem de Aquisição")
+
+    df_origem_perf = df_matriculas_tabela.groupby("origem_exibicao").agg(
+        Matrículas=("cliente_id", "count"),
+        Receita=("total_pedido", "sum"),
+        Com_GCLID=("gclid", lambda x: int((x.notna() & (x != "")).sum())),
+        Com_Ligação=("Ligação", lambda x: int((x == "Sim").sum()))
+    ).reset_index().sort_values("Receita", ascending=False)
+    df_origem_perf["Ticket Médio"] = df_origem_perf["Receita"] / df_origem_perf["Matrículas"]
+    df_origem_perf["% Ligação"] = (df_origem_perf["Com_Ligação"] / df_origem_perf["Matrículas"] * 100).round(1)
+
+    col_or1, col_or2 = st.columns(2)
+
+    with col_or1:
+        fig_or_receita = px.bar(
+            df_origem_perf.sort_values("Receita", ascending=True),
+            x="Receita", y="origem_exibicao",
+            orientation="h", text=df_origem_perf.sort_values("Receita", ascending=True)["Receita"].apply(formatar_reais),
+            title="Receita por Origem",
+            labels={"origem_exibicao": "Origem", "Receita": "Receita Total"},
+            color_discrete_sequence=["#636EFA"]
+        )
+        fig_or_receita.update_layout(height=max(300, len(df_origem_perf) * 30))
+        st.plotly_chart(fig_or_receita, use_container_width=True)
+
+    with col_or2:
+        fig_or_ticket = px.bar(
+            df_origem_perf.sort_values("Ticket Médio", ascending=True),
+            x="Ticket Médio", y="origem_exibicao",
+            orientation="h", text=df_origem_perf.sort_values("Ticket Médio", ascending=True)["Ticket Médio"].apply(formatar_reais),
+            title="Ticket Médio por Origem",
+            labels={"origem_exibicao": "Origem", "Ticket Médio": "Ticket Médio"},
+            color_discrete_sequence=["#00CC96"]
+        )
+        fig_or_ticket.update_layout(height=max(300, len(df_origem_perf) * 30))
+        st.plotly_chart(fig_or_ticket, use_container_width=True)
+
+    # Tabela consolidada por origem
+    df_origem_exib = df_origem_perf.copy()
+    df_origem_exib["Receita"] = df_origem_exib["Receita"].apply(formatar_reais)
+    df_origem_exib["Ticket Médio"] = df_origem_exib["Ticket Médio"].apply(formatar_reais)
+    df_origem_exib.rename(columns={
+        "origem_exibicao": "Origem",
+        "Com_GCLID": "Com GCLID",
+        "Com_Ligação": "Com Ligação",
+        "% Ligação": "% com Ligação"
+    }, inplace=True)
+    st.dataframe(df_origem_exib, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # --- UTM Source / Medium / Campaign ---
+    st.subheader("🔗 Análise de UTMs dos Matriculados")
+
+    df_utm_source = df_matriculas_tabela[
+        df_matriculas_tabela["utm_source"].notna() & (df_matriculas_tabela["utm_source"] != "")
+    ].copy()
+
+    if not df_utm_source.empty:
+        col_utm1, col_utm2 = st.columns(2)
+
+        with col_utm1:
+            src_counts = df_utm_source["utm_source"].value_counts().reset_index()
+            src_counts.columns = ["UTM Source", "Matrículas"]
+            fig_src = px.bar(
+                src_counts.sort_values("Matrículas", ascending=True).tail(15),
+                x="Matrículas", y="UTM Source",
+                orientation="h", text="Matrículas",
+                title="Top 15 UTM Source",
+                color_discrete_sequence=["#AB63FA"]
+            )
+            fig_src.update_layout(height=400)
+            st.plotly_chart(fig_src, use_container_width=True)
+
+        with col_utm2:
+            med_counts = df_utm_source["utm_medium"].value_counts().dropna().reset_index()
+            med_counts.columns = ["UTM Medium", "Matrículas"]
+            if not med_counts.empty:
+                fig_med = px.pie(
+                    med_counts, names="UTM Medium", values="Matrículas",
+                    title="Distribuição por UTM Medium",
+                    hole=0.35,
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_med.update_traces(textinfo="value+percent")
+                st.plotly_chart(fig_med, use_container_width=True)
+
+        # Top campanhas UTM
+        df_utm_camp = df_utm_source[
+            df_utm_source["utm_campaign"].notna() & (df_utm_source["utm_campaign"] != "")
+        ]
+        if not df_utm_camp.empty:
+            camp_utm_counts = (
+                df_utm_camp.groupby("utm_campaign")
+                .agg(Matrículas=("cliente_id", "count"), Receita=("total_pedido", "sum"))
+                .reset_index()
+                .sort_values("Matrículas", ascending=False)
+                .head(15)
+            )
+            camp_utm_counts["Ticket Médio"] = camp_utm_counts["Receita"] / camp_utm_counts["Matrículas"]
+
+            fig_utm_camp = px.bar(
+                camp_utm_counts.sort_values("Matrículas", ascending=True),
+                x="Matrículas", y="utm_campaign",
+                orientation="h", text="Matrículas",
+                title="Top 15 UTM Campaign",
+                color="Receita",
+                color_continuous_scale="Purples",
+                labels={"utm_campaign": "Campanha UTM"}
+            )
+            fig_utm_camp.update_layout(height=max(300, len(camp_utm_counts) * 30))
+            st.plotly_chart(fig_utm_camp, use_container_width=True)
+    else:
+        st.info("Nenhum parâmetro UTM encontrado nos matriculados do período.")
+
+    st.divider()
+
+    # --- Resumo executivo ---
+    st.subheader("📋 Resumo Executivo do Período")
+
+    _pct_rastreado = ((qtd_gclid + int((_tem_fbclid & ~_tem_gclid).sum()) + int((_tem_utm & ~_tem_gclid & ~_tem_fbclid).sum())) / total_mat * 100) if total_mat > 0 else 0
+    _pct_ligacao = (qtd_ligacao / total_mat * 100) if total_mat > 0 else 0
+
+    insights = []
+    insights.append(f"**{total_mat}** matrículas no período, totalizando **{formatar_reais(df_matriculas_tabela['total_pedido'].sum())}** em receita.")
+    insights.append(f"**{_pct_rastreado:.1f}%** das matrículas possuem algum rastreamento digital (GCLID, FBCLID ou UTM).")
+    insights.append(f"**{_pct_ligacao:.1f}%** dos matriculados receberam pelo menos uma ligação comercial registrada.")
+
+    if ticket_com > 0 and ticket_sem > 0:
+        diff_ticket = ((ticket_com - ticket_sem) / ticket_sem * 100)
+        if diff_ticket > 0:
+            insights.append(f"Matriculados que receberam ligação têm ticket médio **{diff_ticket:.1f}% maior** ({formatar_reais(ticket_com)} vs {formatar_reais(ticket_sem)}).")
+        else:
+            insights.append(f"Matriculados sem ligação têm ticket médio **{abs(diff_ticket):.1f}% maior** ({formatar_reais(ticket_sem)} vs {formatar_reais(ticket_com)}).")
+
+    if qtd_campanha > 0:
+        top_camp = df_camp.groupby("Campanha_Gclid")["total_pedido"].sum().idxmax()
+        insights.append(f"A campanha Google Ads com maior receita é **{top_camp}**.")
+
+    for insight in insights:
+        st.markdown(f"- {insight}")
