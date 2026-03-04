@@ -1,12 +1,17 @@
-# _pages/octadesk.py - Versão Estável (sem filtro de data na API)
+# _pages/octadesk.py - Com cache SQLite para chats fechados
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import streamlit as st
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-import os
+import time
 from datetime import datetime
 import plotly.express as px
+import octadesk_db
 
 load_dotenv()
 TIMEZONE = 'America/Sao_Paulo'
@@ -51,67 +56,161 @@ def _normalize_list_response(data):
                 return data[key]
     return []
 
-@st.cache_data(ttl=1800)
-def get_octadesk_chats(api_token, base_url, start_date, end_date, max_pages=5, limit=100):
+def _fetch_chats_from_api(api_token, base_url, max_pages=5, limit=100, stop_before_date=None):
+    """Busca chats da API do Octadesk com paginação inteligente.
+    
+    A API retorna chats do mais recente ao mais antigo.
+    Se stop_before_date for informado, para de paginar quando todos os
+    chats de uma página forem anteriores a essa data (não precisa ir além).
+    """
     url = f"{base_url}/chat"
     headers = {"accept": "application/json", "X-API-KEY": api_token}
     all_results = []
     page = 1
+    reached_target = False
 
     while page <= max_pages:
-        params = {
-            "page": page,
-            "limit": limit
-        }
-
+        params = {"page": page, "limit": limit}
         try:
             response = requests.get(url, params=params, headers=headers)
             response.raise_for_status()
             data = response.json()
             items = _normalize_list_response(data)
-
             if not items:
                 break
-
             all_results.extend(items)
+
+            # Paginação inteligente: se todos os itens da página são anteriores
+            # à data alvo, não precisa buscar mais páginas
+            if stop_before_date and items:
+                oldest_on_page = min(
+                    (i.get('createdAt', '')[:10] for i in items if i.get('createdAt')),
+                    default=''
+                )
+                if oldest_on_page and oldest_on_page < str(stop_before_date):
+                    reached_target = True
+                    break
 
             if len(items) < limit:
                 break
-
             page += 1
-
         except requests.exceptions.HTTPError as http_err:
-            st.error(f"Erro na API do Octadesk na página {page}: {http_err.response.status_code} - {http_err.response.text}")
-            return pd.DataFrame()
+            st.error(f"Erro na API do Octadesk (página {page}): {http_err.response.status_code} - {http_err.response.text}")
+            break
         except Exception as e:
-            st.error(f"Ocorreu um erro ao buscar dados do Octadesk: {e}")
+            st.error(f"Erro ao buscar dados do Octadesk: {e}")
+            break
+
+    if page > max_pages and not reached_target:
+        st.warning(
+            f"⚠️ Limite de {max_pages} páginas atingido sem cobrir todo o período. "
+            f"Use **Sincronizar** na sidebar para popular o cache local com dados históricos."
+        )
+
+    return all_results
+
+
+def get_octadesk_chats(api_token, base_url, start_date, end_date, max_pages=5, limit=100, force_api=False):
+    """Busca chats combinando cache SQLite (fechados) + API (recentes/abertos).
+    
+    Estratégia:
+    - Datas recentes (últimos 2 dias): busca API + complementa com cache
+    - Datas passadas: prioriza cache SQLite, busca API apenas se cache vazio
+    """
+    from datetime import date
+
+    try:
+        today = date.today()
+
+        # Validação: data futura
+        if start_date > today:
+            st.warning(
+                f"⚠️ A data selecionada ({start_date.strftime('%d/%m/%Y')}) é **no futuro**. "
+                f"Hoje é {today.strftime('%d/%m/%Y')}. Selecione uma data até hoje."
+            )
             return pd.DataFrame()
 
-    if page > max_pages:
-        st.warning(f"Limite de {max_pages} páginas atingido. Pode haver mais dados não carregados.")
+        days_ago_end = (today - end_date).days
+        is_recent = days_ago_end <= 2  # Últimos 2 dias: sempre buscar API
 
-    if all_results:
-        df = pd.json_normalize(all_results)
+        # 1. Buscar chats do cache SQLite para o período
+        cached_chats = []
+        if not force_api:
+            cached_chats = octadesk_db.get_cached_chats(start_date=start_date, end_date=end_date)
 
+        # 2. Decidir se precisa buscar da API
+        need_api = force_api or is_recent or len(cached_chats) == 0
+        api_chats = []
+
+        if need_api:
+            api_chats = _fetch_chats_from_api(
+                api_token, base_url, max_pages, limit,
+                stop_before_date=start_date
+            )
+            # Salvar TODOS os chats da API no cache automaticamente
+            if api_chats:
+                octadesk_db.save_chats(api_chats)
+
+            # Se não é recente, recarregar o cache (agora com novos dados)
+            if not is_recent and not force_api:
+                cached_chats = octadesk_db.get_cached_chats(start_date=start_date, end_date=end_date)
+        elif not is_recent and cached_chats:
+            st.info(f"📦 Exibindo **{len(cached_chats)}** chats do cache local para este período.")
+
+        # 3. Combinar API + cache (API tem prioridade para deduplicação)
+        seen_ids = set()
+        combined = []
+        for chat in api_chats:
+            chat_id = chat.get('id')
+            if chat_id and chat_id not in seen_ids:
+                seen_ids.add(chat_id)
+                combined.append(chat)
+        for chat in cached_chats:
+            chat_id = chat.get('id')
+            if chat_id and chat_id not in seen_ids:
+                seen_ids.add(chat_id)
+                combined.append(chat)
+
+        if not combined:
+            cache_stats = octadesk_db.get_cache_stats()
+            cache_range = ""
+            if cache_stats.get('oldest_chat') and cache_stats.get('newest_chat'):
+                try:
+                    o = pd.to_datetime(cache_stats['oldest_chat']).strftime('%d/%m/%Y')
+                    n = pd.to_datetime(cache_stats['newest_chat']).strftime('%d/%m/%Y')
+                    cache_range = f" O cache cobre de **{o}** a **{n}**."
+                except Exception:
+                    pass
+            st.warning(
+                f"Nenhum chat encontrado para **{start_date.strftime('%d/%m/%Y')}** "
+                f"a **{end_date.strftime('%d/%m/%Y')}**.{cache_range} "
+                f"Clique em **📥 Sincronizar** na sidebar para importar mais histórico."
+            )
+            return pd.DataFrame()
+
+        # 4. Normalizar para DataFrame e filtrar por data (fuso correto)
+        df = pd.json_normalize(combined)
         if 'createdAt' in df.columns:
             df['createdAt'] = pd.to_datetime(df['createdAt'], utc=True, errors='coerce')
             df['createdAt'] = df['createdAt'].dt.tz_convert(TIMEZONE)
-
-            # Filtro local por data
             df = df[(df['createdAt'].dt.date >= start_date) & (df['createdAt'].dt.date <= end_date)]
 
         return df
 
-    return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Erro ao buscar chats: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return pd.DataFrame()
 
-@st.cache_data(ttl=1800)
-def get_octadesk_chat_messages(api_token, base_url, chat_id):
+
+def _fetch_messages_from_api(api_token, base_url, chat_id):
+    """Busca mensagens de um chat diretamente da API (sem cache)."""
     headers = {"accept": "application/json", "X-API-KEY": api_token}
     endpoints = [
         f"{base_url}/chat/{chat_id}/messages",
         f"{base_url}/chat/{chat_id}/message"
     ]
-
     for url in endpoints:
         try:
             response = requests.get(url, headers=headers)
@@ -127,11 +226,112 @@ def get_octadesk_chat_messages(api_token, base_url, chat_id):
             )
             return []
         except Exception as e:
-            st.error(f"Ocorreu um erro ao buscar mensagens do chat {chat_id}: {e}")
+            st.error(f"Erro ao buscar mensagens do chat {chat_id}: {e}")
             return []
-
-    st.warning("Endpoint de mensagens não encontrado. Verifique a Base URL e permissões da API.")
     return []
+
+
+def get_octadesk_chat_messages(api_token, base_url, chat_id, chat_status=None):
+    """Busca mensagens de um chat. Usa cache SQLite para TODOS os chats."""
+    # 1. Verificar cache SQLite primeiro (qualquer status)
+    cached = octadesk_db.get_cached_messages(chat_id)
+    if cached:
+        return cached
+
+    # 2. Buscar da API
+    messages = _fetch_messages_from_api(api_token, base_url, chat_id)
+
+    # 3. Salvar no cache para próximas consultas (qualquer status)
+    if messages:
+        octadesk_db.save_messages(chat_id, messages)
+
+    return messages
+
+
+def sync_octadesk_history(api_token, base_url, max_pages=120, limit=100):
+    """Sincroniza TODOS os chats e mensagens do Octadesk para o cache SQLite.
+    
+    Fase 1: Busca todas as páginas de chats da API e salva no cache.
+    Fase 2: Para cada chat sem mensagens em cache, busca as mensagens.
+    """
+    url = f"{base_url}/chat"
+    headers = {"accept": "application/json", "X-API-KEY": api_token}
+
+    # ── FASE 1: Buscar todos os chats ──────────────────────────────
+    st.info("📥 **Fase 1/2**: Buscando chats da API...")
+    progress_bar = st.progress(0, text="Buscando chats...")
+    total_chats_saved = 0
+    page = 1
+
+    while page <= max_pages:
+        progress_bar.progress(
+            page / max_pages,
+            text=f"Fase 1/2 — Página {page}/{max_pages} — {total_chats_saved} chats salvos"
+        )
+
+        params = {"page": page, "limit": limit}
+        try:
+            response = requests.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            items = _normalize_list_response(data)
+
+            if not items:
+                break
+
+            # Salvar TODOS os chats (não apenas fechados)
+            saved = octadesk_db.save_chats(items)
+            total_chats_saved += saved
+
+            if len(items) < limit:
+                break
+
+            page += 1
+            time.sleep(0.5)  # Rate limiting entre páginas
+
+        except Exception as e:
+            st.error(f"Erro na sincronização (página {page}): {e}")
+            break
+
+    progress_bar.progress(1.0, text=f"✅ Fase 1/2 concluída: {total_chats_saved} chats salvos")
+
+    # ── FASE 2: Buscar mensagens dos chats sem cache ───────────────
+    st.info("📨 **Fase 2/2**: Buscando mensagens dos chats...")
+    chats_missing = octadesk_db.get_chats_without_messages()
+    total_missing = len(chats_missing)
+    total_messages_saved = 0
+
+    if total_missing > 0:
+        progress_msgs = st.progress(0, text=f"Buscando mensagens... 0/{total_missing}")
+        for idx, chat_id in enumerate(chats_missing):
+            progress_msgs.progress(
+                (idx + 1) / total_missing,
+                text=f"Fase 2/2 — Chat {idx+1}/{total_missing} — {total_messages_saved} msgs salvas"
+            )
+            try:
+                msgs = _fetch_messages_from_api(api_token, base_url, chat_id)
+                if msgs:
+                    octadesk_db.save_messages(chat_id, msgs)
+                    total_messages_saved += len(msgs)
+                time.sleep(0.2)  # Rate limiting
+            except Exception:
+                continue
+        progress_msgs.progress(1.0, text=f"✅ Fase 2/2 concluída: {total_messages_saved} mensagens salvas")
+    else:
+        st.success("✅ Todos os chats já possuem mensagens em cache!")
+
+    octadesk_db.log_sync(
+        sync_type='manual_completo',
+        pages_fetched=page,
+        chats_saved=total_chats_saved,
+        messages_saved=total_messages_saved
+    )
+
+    st.success(
+        f"✅ Sincronização concluída: **{total_chats_saved}** chats e "
+        f"**{total_messages_saved}** mensagens salvas no cache."
+    )
+    return total_chats_saved, total_messages_saved
 
 def get_octadesk_messages(api_token, base_url, chats_df, max_chats=20):
     if chats_df is None or chats_df.empty or 'id' not in chats_df.columns:
@@ -144,7 +344,8 @@ def get_octadesk_messages(api_token, base_url, chats_df, max_chats=20):
         chat_id = row.get('id')
         if not chat_id:
             continue
-        chat_messages = get_octadesk_chat_messages(api_token, base_url, chat_id)
+        chat_status = str(row.get('status', '')).lower() if 'status' in chats_to_fetch.columns else None
+        chat_messages = get_octadesk_chat_messages(api_token, base_url, chat_id, chat_status=chat_status)
         for msg in chat_messages:
             msg["chatId"] = chat_id
             messages.append(msg)
@@ -377,17 +578,77 @@ def run_page():
     )
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         data_inicio_padrao, data_fim = date_range
+    elif isinstance(date_range, (list, tuple)) and len(date_range) == 1:
+        st.sidebar.info("📅 Selecione a data final do período...")
+        st.stop()
     else:
         data_inicio_padrao = date_range
         data_fim = date_range
 
-    st.sidebar.subheader("Paginação")
-    max_pages = st.sidebar.number_input("Máx. páginas", min_value=1, max_value=200, value=20, step=1)
-    limit = st.sidebar.number_input("Itens por página", min_value=10, max_value=200, value=100, step=10)
+    # Auto-cálculo de paginação baseado no período selecionado
+    # (API retorna ~300-400 chats/dia → ~3-4 páginas/dia de 100 itens)
+    days_back = max(1, (hoje - data_inicio_padrao).days + 1)
+    max_pages = max(10, min(200, days_back * 4))
+    limit = 100
+
+    # --- CACHE SQLITE ---
+    st.sidebar.divider()
+    st.sidebar.subheader("📦 Cache Local (SQLite)")
+    cache_stats = octadesk_db.get_cache_stats()
+    st.sidebar.caption(
+        f"💾 **{cache_stats['total_chats']}** chats em cache | "
+        f"**{cache_stats['total_messages']}** mensagens"
+    )
+    chats_sem_msgs = cache_stats.get('chats_without_messages', 0)
+    if chats_sem_msgs > 0:
+        st.sidebar.caption(f"⚠️ **{chats_sem_msgs}** chats ainda sem mensagens")
+    if cache_stats['oldest_chat'] and cache_stats['newest_chat']:
+        try:
+            oldest = pd.to_datetime(cache_stats['oldest_chat']).strftime('%d/%m/%Y')
+            newest = pd.to_datetime(cache_stats['newest_chat']).strftime('%d/%m/%Y')
+            st.sidebar.caption(f"📅 Período coberto: {oldest} a {newest}")
+        except Exception:
+            pass
+    if cache_stats['last_sync']:
+        try:
+            last_sync_dt = pd.to_datetime(cache_stats['last_sync']).strftime('%d/%m/%Y %H:%M')
+            st.sidebar.caption(f"🔄 Última sync: {last_sync_dt}")
+        except Exception:
+            pass
+
+    force_api = st.sidebar.checkbox(
+        "🔄 Forçar busca pela API",
+        value=False,
+        help="Ignora o cache local e busca tudo direto da API"
+    )
+    col_sync1, col_sync2 = st.sidebar.columns(2)
+    with col_sync1:
+        btn_sync = st.button("📥 Sincronizar Tudo", use_container_width=True,
+                              help="Busca TODOS os chats e mensagens da API e salva no cache")
+    with col_sync2:
+        btn_clear = st.button("🗑️ Limpar Cache", use_container_width=True)
+
+    if btn_sync:
+        sync_octadesk_history(api_token, base_url, max_pages=120, limit=100)
+    if btn_clear:
+        octadesk_db.clear_cache()
+        st.toast("Cache limpo com sucesso!")
+        st.rerun()
+
     st.divider()
 
+    # --- Diagnóstico do Cache (expandir para debug) ---
+    with st.expander("🔍 Diagnóstico do Cache", expanded=False):
+        diag_stats = octadesk_db.get_cache_stats()
+        st.write(f"**DB Path:** `{octadesk_db.DB_FILE}`")
+        st.write(f"**Chats em cache:** {diag_stats['total_chats']} (fechados: {diag_stats['closed_chats']})")
+        st.write(f"**Mensagens em cache:** {diag_stats['total_messages']}")
+        st.write(f"**Período:** {diag_stats['oldest_chat'] or 'N/A'} → {diag_stats['newest_chat'] or 'N/A'}")
+        st.write(f"**Período selecionado:** {data_inicio_padrao} a {data_fim}")
+        st.write(f"**Forçar API:** {force_api} | **Máx páginas:** {max_pages}")
+
     # --- Tabela de Validação ---
-    df_chats = get_octadesk_chats(api_token, base_url, data_inicio_padrao, data_fim, max_pages=max_pages, limit=limit)
+    df_chats = get_octadesk_chats(api_token, base_url, data_inicio_padrao, data_fim, max_pages=max_pages, limit=limit, force_api=force_api)
 
     if df_chats is not None and not df_chats.empty:
         # --- Filtros ---
@@ -458,7 +719,8 @@ def run_page():
             if origin_sel:
                 df_chats_filtered = df_chats_filtered[df_chats_filtered[origin_col].isin(origin_sel)]
 
-        st.success(f"Sucesso! {len(df_chats)} chats recentes encontrados e analisados.")
+        cache_info = f" (💾 {cache_stats['total_chats']} em cache)" if cache_stats['total_chats'] > 0 else ""
+        st.success(f"✅ {len(df_chats)} chats encontrados e analisados{cache_info}.")
         
         # --- Seção de KPIs de Status ---
         st.header("Status dos Atendimentos Recentes")
@@ -525,6 +787,28 @@ def run_page():
 
         df_detalhes = df_detalhes.head(st.session_state['octadesk_table_limit'])
 
+        # Extrair telefone do cliente a partir de contact.phoneContacts
+        if 'contact.phoneContacts' in df_detalhes.columns:
+            def _extract_phone(phone_contacts):
+                if not isinstance(phone_contacts, list) or not phone_contacts:
+                    return ""
+                phones = []
+                for pc in phone_contacts:
+                    if isinstance(pc, dict) and pc.get('number'):
+                        country = pc.get('countryCode', '')
+                        number = str(pc['number'])
+                        if country:
+                            phones.append(f"+{country}{number}")
+                        else:
+                            phones.append(number)
+                return " / ".join(phones) if phones else ""
+
+            df_detalhes.insert(
+                df_detalhes.columns.get_loc('contact.phoneContacts'),
+                'Telefone Cliente',
+                df_detalhes['contact.phoneContacts'].apply(_extract_phone)
+            )
+
         df_messages = get_octadesk_messages(api_token, base_url, df_detalhes, max_chats=len(df_detalhes))
         df_transcricoes = build_chat_transcripts(df_messages, df_detalhes)
 
@@ -540,6 +824,8 @@ def run_page():
             'botName',
             'assignedToGroupDate',
             'contact.id',
+            'contact.phoneContacts',
+            'contact.customFields',
             'contact.organization.name',
             'group.id',
             'survey.response',
@@ -560,4 +846,8 @@ def run_page():
             st.session_state['octadesk_table_limit'] += 50
         
     else:
-        st.info("Nenhum chat encontrado ou ocorreu um erro na busca.")
+        st.info(
+            f"Nenhum chat encontrado para **{data_inicio_padrao.strftime('%d/%m/%Y')}** "
+            f"a **{data_fim.strftime('%d/%m/%Y')}**. "
+            f"Verifique a data selecionada ou clique em **📥 Sincronizar** para importar dados."
+        )

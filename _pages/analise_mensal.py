@@ -608,9 +608,47 @@ def run_page():
                     delta=formatar_reais(row["Valor Total"])
                 )
     
+    # --- Filtros de rastreamento (checkboxes AND) ---
+    st.markdown("**🔎 Filtrar por rastreamento:**")
+    chk_cols = st.columns(4)
+    with chk_cols[0]:
+        filtro_gclid = st.checkbox("Com GCLID", value=False, key="chk_gclid")
+    with chk_cols[1]:
+        filtro_fbclid = st.checkbox("Com FBCLID", value=False, key="chk_fbclid")
+    with chk_cols[2]:
+        filtro_utm = st.checkbox("Com UTM Source", value=False, key="chk_utm")
+    with chk_cols[3]:
+        filtro_ligacao = st.checkbox("Com Ligação", value=False, key="chk_ligacao_filtro")
+
+    df_matriculas_filtrado = df_matriculas_tabela.copy()
+
+    if filtro_gclid:
+        df_matriculas_filtrado = df_matriculas_filtrado[
+            df_matriculas_filtrado["gclid"].notna() & (df_matriculas_filtrado["gclid"] != "")
+        ]
+    if filtro_fbclid:
+        df_matriculas_filtrado = df_matriculas_filtrado[
+            df_matriculas_filtrado["fbclid"].notna() & (df_matriculas_filtrado["fbclid"] != "")
+        ]
+    if filtro_utm:
+        df_matriculas_filtrado = df_matriculas_filtrado[
+            df_matriculas_filtrado["utm_source"].notna() & (df_matriculas_filtrado["utm_source"] != "")
+        ]
+    if filtro_ligacao:
+        df_matriculas_filtrado = df_matriculas_filtrado[
+            df_matriculas_filtrado["Ligação"] == "Sim"
+        ]
+
+    filtros_ativos = sum([filtro_gclid, filtro_fbclid, filtro_utm, filtro_ligacao])
+    if filtros_ativos > 0:
+        st.caption(
+            f"🔽 Exibindo **{len(df_matriculas_filtrado)}** de {len(df_matriculas_tabela)} matrículas "
+            f"({filtros_ativos} filtro{'s' if filtros_ativos > 1 else ''} ativo{'s' if filtros_ativos > 1 else ''})"
+        )
+
     st.markdown("---")
     
-    tabela_matriculas = df_matriculas_tabela[[
+    tabela_matriculas = df_matriculas_filtrado[[
         "cliente_id",
         "nome_cliente",
         "email_cliente",
