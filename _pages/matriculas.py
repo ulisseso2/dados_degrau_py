@@ -247,6 +247,289 @@ def run_page():
     else:
         st.info("Nenhum dado de vendas por unidade e categoria encontrado.")
 
+    # --- Tabela de Vendas por Equipe (Unidade vs Central de Vendas) ---
+    # Mapeamento: unidade → owner_ids pertencentes à equipe da unidade
+    EQUIPES_UNIDADE = {
+        "Campo Grande": [166, 52],
+        "Madureira": [163, 161, 162],
+        "Niterói": [164, 157, 156],
+        "Centro": [158, 159, 160],
+    }
+
+    unidades_fisicas = list(EQUIPES_UNIDADE.keys())
+    df_equipes = df_filtrado[df_filtrado["unidade"].isin(unidades_fisicas)].copy()
+
+    if not df_equipes.empty and "owner_id" in df_equipes.columns:
+        df_equipes["owner_id"] = pd.to_numeric(df_equipes["owner_id"], errors="coerce")
+
+        # Função auxiliar: retorna (valor_soma, quantidade)
+        def soma_e_qtd(df_subset, filtro_categoria):
+            df_cat = df_subset[df_subset["categoria"].str.contains(filtro_categoria, na=False)]
+            return df_cat["total_pedido"].sum(), df_cat.shape[0]
+
+        resultados_val = []
+        resultados_qtd = []
+        for unidade in unidades_fisicas:
+            df_uni = df_equipes[df_equipes["unidade"] == unidade]
+            ids_equipe = EQUIPES_UNIDADE[unidade]
+
+            # Separa vendas por equipe da unidade vs central de vendas
+            df_eq_uni = df_uni[df_uni["owner_id"].isin(ids_equipe)]
+            df_central = df_uni[~df_uni["owner_id"].isin(ids_equipe)]
+
+            row_v, row_q = {"Unidade": unidade}, {"Unidade": unidade}
+
+            # Equipe Unidade: Presencial, Passaporte, Smart
+            row_v["Eq. Unidade - Presencial"], row_q["Eq. Unidade - Presencial"] = soma_e_qtd(df_eq_uni, "Curso Presencial")
+            row_v["Eq. Unidade - Passaporte"], row_q["Eq. Unidade - Passaporte"] = soma_e_qtd(df_eq_uni, "Passaporte")
+            row_v["Eq. Unidade - Smart"], row_q["Eq. Unidade - Smart"] = soma_e_qtd(df_eq_uni, "Smart")
+            row_v["Total Eq. Unidade"] = row_v["Eq. Unidade - Presencial"] + row_v["Eq. Unidade - Passaporte"] + row_v["Eq. Unidade - Smart"]
+            row_q["Total Eq. Unidade"] = row_q["Eq. Unidade - Presencial"] + row_q["Eq. Unidade - Passaporte"] + row_q["Eq. Unidade - Smart"]
+
+            # Central de Vendas: Presencial, Passaporte
+            row_v["Central Vendas - Presencial"], row_q["Central Vendas - Presencial"] = soma_e_qtd(df_central, "Curso Presencial")
+            row_v["Central Vendas - Passaporte"], row_q["Central Vendas - Passaporte"] = soma_e_qtd(df_central, "Passaporte")
+            row_v["Total Central Vendas"] = row_v["Central Vendas - Presencial"] + row_v["Central Vendas - Passaporte"]
+            row_q["Total Central Vendas"] = row_q["Central Vendas - Presencial"] + row_q["Central Vendas - Passaporte"]
+
+            row_v["Total Geral"] = row_v["Total Eq. Unidade"] + row_v["Total Central Vendas"]
+            row_q["Total Geral"] = row_q["Total Eq. Unidade"] + row_q["Total Central Vendas"]
+
+            resultados_val.append(row_v)
+            resultados_qtd.append(row_q)
+
+        df_val = pd.DataFrame(resultados_val)
+        df_qtd = pd.DataFrame(resultados_qtd)
+
+        # Adiciona linha de total
+        colunas_valor = [col for col in df_val.columns if col != "Unidade"]
+        total_val = {"Unidade": "TOTAL"}
+        total_qtd = {"Unidade": "TOTAL"}
+        for col in colunas_valor:
+            total_val[col] = df_val[col].sum()
+            total_qtd[col] = df_qtd[col].sum()
+        df_val = pd.concat([df_val, pd.DataFrame([total_val])], ignore_index=True)
+        df_qtd = pd.concat([df_qtd, pd.DataFrame([total_qtd])], ignore_index=True)
+
+        # Formata: R$ X.XXX,XX (N)
+        tabela_equipes = df_val[["Unidade"]].copy()
+        for col in colunas_valor:
+            tabela_equipes[col] = df_val[col].apply(formatar_reais) + " (" + df_qtd[col].astype(int).astype(str) + ")"
+
+        st.subheader("Vendas por Equipe (Unidade vs Central de Vendas)")
+
+        # Renderiza como HTML para suportar negrito e cores no dark mode
+        colunas_totais_eq = ["Total Eq. Unidade", "Total Central Vendas", "Total Geral"]
+
+        def gerar_html_equipes(df, colunas_totais, col_index="Unidade"):
+            html = '<table style="width:100%; border-collapse:collapse; font-size:14px;">'
+            # Cabeçalho
+            html += '<tr>'
+            for col in df.columns:
+                style = 'padding:8px; border:1px solid #555; background-color:#2c3e50; color:#fff; text-align:center;'
+                if col in colunas_totais:
+                    style += ' font-weight:900;'
+                html += f'<th style="{style}">{col}</th>'
+            html += '</tr>'
+            # Linhas
+            for _, row in df.iterrows():
+                is_total = row[col_index] == "TOTAL"
+                html += '<tr>'
+                for col in df.columns:
+                    is_total_col = col in colunas_totais
+                    if is_total:
+                        style = 'padding:8px; border:1px solid #555; background-color:#80B2F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    elif is_total_col:
+                        style = 'padding:8px; border:1px solid #555; background-color:#BBD1F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    else:
+                        style = 'padding:8px; border:1px solid #555; text-align:center;'
+                    html += f'<td style="{style}">{row[col]}</td>'
+                html += '</tr>'
+            html += '</table>'
+            return html
+
+        st.markdown(gerar_html_equipes(tabela_equipes, colunas_totais_eq, "Unidade"), unsafe_allow_html=True)
+
+        # --- Tabela de Vendas Online e Live por Equipe ---
+        # Todos os owner_ids das equipes de unidade (flat list)
+        todos_ids_unidade = [uid for ids in EQUIPES_UNIDADE.values() for uid in ids]
+
+        categorias_extras = {
+            "Curso Online": "Curso Online",
+            "Curso Live": "Curso Live",
+        }
+
+        # Usa df_filtrado completo (não apenas unidades físicas) pois Online/Live podem estar em qualquer unidade
+        df_online_live = df_filtrado.copy()
+        if "owner_id" in df_online_live.columns:
+            df_online_live["owner_id"] = pd.to_numeric(df_online_live["owner_id"], errors="coerce")
+
+        resultados_ol_val = []
+        resultados_ol_qtd = []
+        for cat_label, cat_filtro in categorias_extras.items():
+            df_cat = df_online_live[df_online_live["categoria"].str.contains(cat_filtro, na=False)]
+            row_v = {"Categoria": cat_label}
+            row_q = {"Categoria": cat_label}
+
+            # Colunas por unidade (vendas dos owners da equipe)
+            for unidade, ids_equipe in EQUIPES_UNIDADE.items():
+                df_eq = df_cat[df_cat["owner_id"].isin(ids_equipe)]
+                row_v[unidade] = df_eq["total_pedido"].sum()
+                row_q[unidade] = df_eq.shape[0]
+
+            # Central de Vendas (demais owners com owner_id preenchido - exclui vendas do site sem owner)
+            df_central_ol = df_cat[
+                (~df_cat["owner_id"].isin(todos_ids_unidade)) & 
+                (df_cat["owner_id"].notna())
+            ]
+            row_v["Central de Vendas"] = df_central_ol["total_pedido"].sum()
+            row_q["Central de Vendas"] = df_central_ol.shape[0]
+
+            # Total da linha
+            cols_num = list(EQUIPES_UNIDADE.keys()) + ["Central de Vendas"]
+            row_v["Total"] = sum(row_v[c] for c in cols_num)
+            row_q["Total"] = sum(row_q[c] for c in cols_num)
+
+            resultados_ol_val.append(row_v)
+            resultados_ol_qtd.append(row_q)
+
+        df_ol_val = pd.DataFrame(resultados_ol_val)
+        df_ol_qtd = pd.DataFrame(resultados_ol_qtd)
+
+        # Linha de total
+        colunas_ol = [col for col in df_ol_val.columns if col != "Categoria"]
+        total_ol_val = {"Categoria": "TOTAL"}
+        total_ol_qtd = {"Categoria": "TOTAL"}
+        for col in colunas_ol:
+            total_ol_val[col] = df_ol_val[col].sum()
+            total_ol_qtd[col] = df_ol_qtd[col].sum()
+        df_ol_val = pd.concat([df_ol_val, pd.DataFrame([total_ol_val])], ignore_index=True)
+        df_ol_qtd = pd.concat([df_ol_qtd, pd.DataFrame([total_ol_qtd])], ignore_index=True)
+
+        # Formata: R$ X.XXX,XX (N)
+        tabela_ol = df_ol_val[["Categoria"]].copy()
+        for col in colunas_ol:
+            tabela_ol[col] = df_ol_val[col].apply(formatar_reais) + " (" + df_ol_qtd[col].astype(int).astype(str) + ")"
+
+        st.subheader("Vendas Online e Live por Equipe")
+
+        # Renderiza como HTML para suportar negrito e cores no dark mode
+        colunas_totais_ol = ["Total"]
+
+        def gerar_html_ol(df, colunas_totais, col_index="Categoria"):
+            html = '<table style="width:100%; border-collapse:collapse; font-size:14px;">'
+            # Cabeçalho
+            html += '<tr>'
+            for col in df.columns:
+                style = 'padding:8px; border:1px solid #555; background-color:#2c3e50; color:#fff; text-align:center;'
+                if col in colunas_totais:
+                    style += ' font-weight:900;'
+                html += f'<th style="{style}">{col}</th>'
+            html += '</tr>'
+            # Linhas
+            for _, row in df.iterrows():
+                is_total = row[col_index] == "TOTAL"
+                html += '<tr>'
+                for col in df.columns:
+                    is_total_col = col in colunas_totais
+                    if is_total:
+                        style = 'padding:8px; border:1px solid #555; background-color:#80B2F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    elif is_total_col:
+                        style = 'padding:8px; border:1px solid #555; background-color:#BBD1F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    else:
+                        style = 'padding:8px; border:1px solid #555; text-align:center;'
+                    html += f'<td style="{style}">{row[col]}</td>'
+                html += '</tr>'
+            html += '</table>'
+            return html
+
+        st.markdown(gerar_html_ol(tabela_ol, colunas_totais_ol, "Categoria"), unsafe_allow_html=True)
+
+        # --- Tabela Resumo: Categorias por Equipe ---
+        categorias_produto = ["Curso Presencial", "Passaporte", "Smart", "Curso Live", "Curso Online"]
+        equipes_nomes = list(EQUIPES_UNIDADE.keys()) + ["Central de Vendas"]
+
+        df_resumo = df_filtrado.copy()
+        if "owner_id" in df_resumo.columns:
+            df_resumo["owner_id"] = pd.to_numeric(df_resumo["owner_id"], errors="coerce")
+
+        resumo_val = []
+        resumo_qtd = []
+
+        for equipe in equipes_nomes:
+            if equipe == "Central de Vendas":
+                df_eq = df_resumo[
+                    (~df_resumo["owner_id"].isin(todos_ids_unidade)) &
+                    (df_resumo["owner_id"].notna())
+                ]
+            else:
+                df_eq = df_resumo[df_resumo["owner_id"].isin(EQUIPES_UNIDADE[equipe])]
+
+            row_v = {"Equipe": equipe}
+            row_q = {"Equipe": equipe}
+
+            for cat in categorias_produto:
+                df_cat = df_eq[df_eq["categoria"].str.contains(cat, na=False)]
+                row_v[cat] = df_cat["total_pedido"].sum()
+                row_q[cat] = df_cat.shape[0]
+
+            row_v["Total"] = sum(row_v[c] for c in categorias_produto)
+            row_q["Total"] = sum(row_q[c] for c in categorias_produto)
+
+            resumo_val.append(row_v)
+            resumo_qtd.append(row_q)
+
+        df_res_val = pd.DataFrame(resumo_val)
+        df_res_qtd = pd.DataFrame(resumo_qtd)
+
+        # Linha TOTAL
+        colunas_res = [col for col in df_res_val.columns if col != "Equipe"]
+        total_res_val = {"Equipe": "TOTAL"}
+        total_res_qtd = {"Equipe": "TOTAL"}
+        for col in colunas_res:
+            total_res_val[col] = df_res_val[col].sum()
+            total_res_qtd[col] = df_res_qtd[col].sum()
+        df_res_val = pd.concat([df_res_val, pd.DataFrame([total_res_val])], ignore_index=True)
+        df_res_qtd = pd.concat([df_res_qtd, pd.DataFrame([total_res_qtd])], ignore_index=True)
+
+        # Formata: R$ X.XXX,XX (N)
+        tabela_resumo = df_res_val[["Equipe"]].copy()
+        for col in colunas_res:
+            tabela_resumo[col] = df_res_val[col].apply(formatar_reais) + " (" + df_res_qtd[col].astype(int).astype(str) + ")"
+
+        st.subheader("Vendas por Categoria e Equipe")
+
+        colunas_totais_res = ["Total"]
+
+        def gerar_html_resumo(df, colunas_totais, col_index="Equipe"):
+            html = '<table style="width:100%; border-collapse:collapse; font-size:14px;">'
+            html += '<tr>'
+            for col in df.columns:
+                style = 'padding:8px; border:1px solid #555; background-color:#2c3e50; color:#fff; text-align:center;'
+                if col in colunas_totais:
+                    style += ' font-weight:900;'
+                html += f'<th style="{style}">{col}</th>'
+            html += '</tr>'
+            for _, row in df.iterrows():
+                is_total = row[col_index] == "TOTAL"
+                html += '<tr>'
+                for col in df.columns:
+                    is_total_col = col in colunas_totais
+                    if is_total:
+                        style = 'padding:8px; border:1px solid #555; background-color:#80B2F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    elif is_total_col:
+                        style = 'padding:8px; border:1px solid #555; background-color:#BBD1F8; color:#1a1a1a; font-weight:900; text-align:center;'
+                    else:
+                        style = 'padding:8px; border:1px solid #555; text-align:center;'
+                    html += f'<td style="{style}">{row[col]}</td>'
+                html += '</tr>'
+            html += '</table>'
+            return html
+
+        st.markdown(gerar_html_resumo(tabela_resumo, colunas_totais_res, "Equipe"), unsafe_allow_html=True)
+
+    else:
+        st.info("Nenhum dado encontrado para as unidades físicas ou coluna owner_id não disponível.")
 
     # Tabela por unidade
     # tabela = (

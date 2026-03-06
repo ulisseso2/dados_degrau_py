@@ -33,6 +33,7 @@ SELECT
     ca.city AS cidade_cliente,
     IFNULL(v.full_name, 'Indefinido') AS vendedor,
     IFNULL(ow.full_name, v.full_name) as dono,
+    IFNULL(o.owner_id, o.user_id) AS owner_id,
     pm.name AS metodo_pagamento,
     GROUP_CONCAT(DISTINCT t.name SEPARATOR ', ') AS turma,
     GROUP_CONCAT(DISTINCT t.id SEPARATOR ', ') AS turma_id,
