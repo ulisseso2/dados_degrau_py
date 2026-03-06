@@ -257,10 +257,17 @@ def run_page():
     }
 
     unidades_fisicas = list(EQUIPES_UNIDADE.keys())
+    # df_equipes: apenas vendas na unidade física (para Central de Vendas)
     df_equipes = df_filtrado[df_filtrado["unidade"].isin(unidades_fisicas)].copy()
+    # df_todos: todas vendas sem filtro de unidade (para Equipe Unidade por owner_id)
+    df_todos = df_filtrado.copy()
+
+    if "owner_id" in df_todos.columns:
+        df_todos["owner_id"] = pd.to_numeric(df_todos["owner_id"], errors="coerce")
+    if "owner_id" in df_equipes.columns:
+        df_equipes["owner_id"] = pd.to_numeric(df_equipes["owner_id"], errors="coerce")
 
     if not df_equipes.empty and "owner_id" in df_equipes.columns:
-        df_equipes["owner_id"] = pd.to_numeric(df_equipes["owner_id"], errors="coerce")
 
         # Função auxiliar: retorna (valor_soma, quantidade)
         def soma_e_qtd(df_subset, filtro_categoria):
@@ -273,9 +280,10 @@ def run_page():
             df_uni = df_equipes[df_equipes["unidade"] == unidade]
             ids_equipe = EQUIPES_UNIDADE[unidade]
 
-            # Separa vendas por equipe da unidade vs central de vendas
-            df_eq_uni = df_uni[df_uni["owner_id"].isin(ids_equipe)]
-            df_central = df_uni[~df_uni["owner_id"].isin(ids_equipe)]
+            # Equipe Unidade: TODAS vendas dos owners da equipe (qualquer unidade, incl. Smart/Live/Online)
+            df_eq_uni = df_todos[df_todos["owner_id"].isin(ids_equipe)]
+            # Central de Vendas: vendas na unidade física por outros owners
+            df_central = df_uni[(~df_uni["owner_id"].isin(ids_equipe)) & (df_uni["owner_id"].notna())]
 
             row_v, row_q = {"Unidade": unidade}, {"Unidade": unidade}
 
