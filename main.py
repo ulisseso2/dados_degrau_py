@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande, 
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, chat_oportunidades #fbclid_dashboard, #diagnostico_facebook
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, chat_oportunidades, relatorios_ia #fbclid_dashboard, #diagnostico_facebook
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'chat_oportunidades' #'fbclid_dashboard', #'diagnostico_facebook'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'chat_oportunidades', 'relatorios_ia' #'fbclid_dashboard', #'diagnostico_facebook'
     ]
     
     for module_name in modules:
@@ -42,46 +42,47 @@ except ImportError as e:
                 def run_page(self):
                     st.error(f"Módulo {module_name} não disponível")
             globals()[module_name] = DummyModule()
-st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 
 # 1. MAPEAMENTO E AUTENTICAÇÃO
 
 PAGES = {
-    "Oportunidades": oportunidades,
-    "Modelo MSG": modelo_msg,
-    "Tendências": tendencias,
-    "Relatório de Desempenho Mensal": analise_mensal,
-    "Análise EAD": analise_ead,
-    "Financeiro": financeiro,
-    "Financeiro SP": financeiro_sp,
-    "Cancelamentos": cancelamentos,
-    "Matriculas": matriculas,
-    "Vendedores": vendedores,
-    "Análise Combinada MKT":gads_face_combinado,
-    "Análise GA Degrau": analise_ga,
-    "Análise GA Central": analise_ga_central,
-    "Análise Facebook": analise_facebook,
-    "Análise Disciplinas": analise_disciplinas,
-    "Previsão Custo Pedagógico": custo_aula,
-    "Oportunidades SP": oportunidades_sp,
-    "Matriculas SP": matriculas_sp,
-    "Vendedores SP": vendedores_sp,
-    "Tendências SP": tendencias_sp,
-    "NFe SP": nfe_sp,
-    "Cancelamentos SP": cancelamentos_sp,
-    "Matriculas Madureira": madureira,
-    "Cancelamentos Madureira": madureira_cancelamento,
-    "Matriculas Campo Grande": campogrande,
-    "Cancelamentos Campo Grande": campogrande_cancelamento,
-    "Matriculas Niterói": niteroi,
-    "Cancelamentos Niterói": niteroi_cancelamento,
-    "Matriculas Centro": centro,
-    "Cancelamentos Centro": centro_cancelamento,
-    "Central Backup": backup_central_consys,
-    "Mensagens Octadesk": octadesk,
-    "Chat × Oportunidades": chat_oportunidades,
-    "Transcrições": transcricoes,
-    "Análise de Ligações": analise_transcricoes,
+    "👤 Oportunidades": oportunidades,
+    "👤 Oportunidades SP": oportunidades_sp,
+    "📈 Tendências": tendencias,
+    "📈 Tendências SP": tendencias_sp,
+    "🎓 Matriculas": matriculas,
+    "🎓 Matriculas SP": matriculas_sp,
+    "❌ Cancelamentos": cancelamentos,
+    "❌ Cancelamentos SP": cancelamentos_sp,
+    "📄 Rel. Desempenho Mensal": analise_mensal,
+    "💰 Financeiro": financeiro,
+    "💰 Financeiro SP": financeiro_sp,
+    "👥 Vendedores": vendedores,
+    "💻 Relatórios IA": relatorios_ia,
+    "📊 Análise Combinada MKT":gads_face_combinado,
+    "📊 Análise GA Degrau": analise_ga,
+    "📊 Análise GA Central": analise_ga_central,
+    "📊 Análise Facebook": analise_facebook,
+    "✅ Análise Disciplinas": analise_disciplinas,
+    "💵 Custo Pedagógico": custo_aula,
+    "🎓 Análise EAD": analise_ead,
+    "👥 Vendedores SP": vendedores_sp,
+    "📄 NFe SP": nfe_sp,
+    "❌ Cancelamentos SP": cancelamentos_sp,
+    "🎓 Matriculas Madureira": madureira,
+    "❌ Cancel. Madureira": madureira_cancelamento,
+    "🎓 Matriculas Campo Grande": campogrande,
+    "❌ Cancel. Campo Grande": campogrande_cancelamento,
+    "🎓 Matriculas Niterói": niteroi,
+    "❌ Cancel. Niterói": niteroi_cancelamento,
+    "🎓 Matriculas Centro": centro,
+    "❌ Cancel. Centro": centro_cancelamento,
+    "💾 Central Backup": backup_central_consys,
+    "💬Mensagens Octadesk": octadesk,
+    "💬 Chat × Oportunidades": chat_oportunidades,
+    "💬 Modelo MSG": modelo_msg,
+    "📞 Transcrições": transcricoes,
+    "📞 Análise de Ligações": analise_transcricoes,
     #"FBCLID Dashboard": fbclid_dashboard,
     #"Diagnóstico Facebook": diagnostico_facebook
 }

@@ -23,7 +23,7 @@ def run_page():
         st.stop()
 
     # Pré-filtros
-    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous=False, nonexistent='shift_forward')
 
     # Filtro: empresa
     empresas = df["empresa"].dropna().unique().tolist()
@@ -609,12 +609,25 @@ def run_page():
     st.subheader("Tabela Detalhada de Oportunidades")
 
     if not df_filtrado.empty:
-        tabela_oportunidades_lista = df_filtrado[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'utm_source', 'utm_medium', 'utm_campaign', 'name', 'email', 'telefone', 'gclid', 'fbclid', 'tiktok', 'email_marketing']].copy()
+        # Filtro de concurso para a tabela detalhada
+        concursos_disponiveis = sorted(df_filtrado['concurso'].dropna().unique().tolist())
+        concursos_filtro_tabela = st.multiselect(
+            "🎯 Filtrar por Concurso:",
+            options=concursos_disponiveis,
+            default=[],
+            placeholder="Todos os concursos",
+            key="filtro_concurso_tabela_detalhada"
+        )
+
+        df_tabela = df_filtrado.copy()
+        if concursos_filtro_tabela:
+            df_tabela = df_tabela[df_tabela['concurso'].isin(concursos_filtro_tabela)]
+
+        tabela_oportunidades_lista = df_tabela[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'utm_source', 'utm_medium', 'utm_campaign', 'name', 'email', 'telefone', 'gclid', 'fbclid', 'tiktok', 'email_marketing']].copy()
         
         # Remover informações de fuso horário das colunas de data e hora
-        if not df_filtrado.empty:
-            for col in tabela_oportunidades_lista.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
-                tabela_oportunidades_lista[col] = tabela_oportunidades_lista[col].dt.tz_localize(None)
+        for col in tabela_oportunidades_lista.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
+            tabela_oportunidades_lista[col] = tabela_oportunidades_lista[col].dt.tz_localize(None)
 
         st.dataframe(tabela_oportunidades_lista, use_container_width=True)
     else:

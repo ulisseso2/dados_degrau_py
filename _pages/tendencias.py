@@ -8,12 +8,6 @@ import plotly.express as px
 import numpy as np
 
 def run_page():
-    st.set_page_config(
-        page_title="Análise de Tendências",
-        page_icon="📈",
-        layout="wide"
-    )
-    
     TIMEZONE = 'America/Sao_Paulo'
 
     st.title("📈 Análise de Tendências e Performance")
@@ -26,16 +20,16 @@ def run_page():
 
     # Pré-processamento dos dados de oportunidades
     df = df_oportunidades.copy()
-    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous=False, nonexistent='shift_forward')
     df["data"] = df["criacao"].dt.date
-    # Converter para UTC antes de criar period para evitar warning de timezone
-    df["mes_ano"] = df["criacao"].dt.tz_convert('UTC').dt.to_period('M')
+    # Remover timezone antes de converter para period para evitar warning
+    df["mes_ano"] = df["criacao"].dt.tz_localize(None).dt.to_period('M')
     df["semana"] = df["criacao"].dt.isocalendar().week
     df["dia_semana"] = df["criacao"].dt.day_name()
     df["hora"] = df["criacao"].dt.hour
     
     # Pré-processamento dos dados de matrículas para conversões
-    df_matriculas["data_pagamento"] = pd.to_datetime(df_matriculas["data_pagamento"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df_matriculas["data_pagamento"] = pd.to_datetime(df_matriculas["data_pagamento"]).dt.tz_localize(TIMEZONE, ambiguous=False, nonexistent='shift_forward')
     df_matriculas["data"] = df_matriculas["data_pagamento"].dt.date
     
     # ===============================================================================
