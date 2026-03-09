@@ -31,6 +31,12 @@ python-docx==0.8.11
 # OpenAI para análise de transcrições
 openai==1.58.1
 
+# Anthropic (Claude) para relatórios IA
+anthropic>=0.74.0
+
+# Geração de PDF
+fpdf2>=2.8.0
+
 # Dependências principais (resolvidas pelo pip)
 aiohttp
 altair
