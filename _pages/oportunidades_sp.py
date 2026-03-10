@@ -336,8 +336,13 @@ def run_page():
         fill_value=0
     )
 
-    # 3. Aplicar a ordem correta (apenas colunas presentes)
-    etapas_presentes = [etapa for etapa in ordem_etapas if etapa in tabela_concurso.columns]
+    # 3. Aplicar a ordem correta (apenas colunas presentes, sem duplicatas)
+    etapas_vistas = set()
+    etapas_presentes = []
+    for etapa in ordem_etapas:
+        if etapa in tabela_concurso.columns and etapa not in etapas_vistas:
+            etapas_presentes.append(etapa)
+            etapas_vistas.add(etapa)
     tabela_concurso = tabela_concurso[etapas_presentes]
 
     # 4. Renomear colunas
@@ -369,8 +374,13 @@ def run_page():
         fill_value=0
     )
 
-    # 3. Aplicar a ordem correta (apenas colunas presentes)
-    etapas_presentes = [etapa for etapa in ordem_etapas_dono if etapa in tabela_concurso_dono.columns]
+    # 3. Aplicar a ordem correta (apenas colunas presentes, sem duplicatas)
+    etapas_vistas = set()
+    etapas_presentes = []
+    for etapa in ordem_etapas_dono:
+        if etapa in tabela_concurso_dono.columns and etapa not in etapas_vistas:
+            etapas_presentes.append(etapa)
+            etapas_vistas.add(etapa)
     tabela_concurso_dono = tabela_concurso_dono[etapas_presentes]
 
     # 4. Renomear colunas

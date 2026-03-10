@@ -24,28 +24,64 @@ load_dotenv()
 # Carrega credenciais específicas do Facebook, se existirem
 load_dotenv('.facebook_credentials.env', override=True)
 
-def get_facebook_api_account():
+# action_types que contam como conversão
+CONVERSION_ACTIONS = {
+    'purchase', 'lead', 'omni_purchase',
+    'offsite_conversion.fb_pixel_purchase',
+    'offsite_conversion.fb_pixel_lead',
+    'submit_application_total',
+    'onsite_conversion.lead_grouped',
+}
+
+def get_facebook_api_account(empresa="Degrau"):
     """
-    Wrapper para a função init_facebook_api do módulo facebook_api_utils
-    que retorna apenas a conta para manter compatibilidade com o código existente.
+    Inicializa a API do Facebook para a empresa selecionada.
+    Retorna o objeto AdAccount ou None.
     """
-    _, _, _, _, account = init_facebook_api()
-    return account
+    secrets_key = "facebook_api" if empresa == "Degrau" else "facebook_api_central"
+    env_suffix = "" if empresa == "Degrau" else "_CENTRAL"
+
+    try:
+        creds = st.secrets[secrets_key]
+        app_id = creds["app_id"]
+        app_secret = creds["app_secret"]
+        access_token = creds["access_token"]
+        ad_account_id = creds["ad_account_id"]
+    except (st.errors.StreamlitAPIException, KeyError):
+        app_id = os.getenv(f"FB_APP_ID{env_suffix}")
+        app_secret = os.getenv(f"FB_APP_SECRET{env_suffix}")
+        access_token = os.getenv(f"FB_ACCESS_TOKEN{env_suffix}")
+        ad_account_id = os.getenv(f"FB_AD_ACCOUNT_ID{env_suffix}")
+
+    if not all([app_id, app_secret, access_token, ad_account_id]):
+        return None
+    try:
+        FacebookAdsApi.init(app_id=app_id, app_secret=app_secret, access_token=access_token)
+        return AdAccount(ad_account_id)
+    except Exception:
+        return None
 
 
 def get_facebook_campaign_insights(account, start_date, end_date):
     """
-    Busca insights de performance para todas as campanhas em um período.
+    Busca insights de performance para todas as campanhas em um período,
+    incluindo conversões, CPA, alcance e frequência.
     """
     try:
-        # Define os campos e parâmetros para a chamada da API
         fields = [
             AdsInsights.Field.campaign_name,
+            AdsInsights.Field.objective,
             AdsInsights.Field.spend,
             AdsInsights.Field.impressions,
             AdsInsights.Field.clicks,
-            AdsInsights.Field.ctr, # Taxa de Cliques (Click-Through Rate)
-            AdsInsights.Field.cpc, # Custo por Clique
+            AdsInsights.Field.ctr,
+            AdsInsights.Field.cpc,
+            AdsInsights.Field.cpm,
+            AdsInsights.Field.reach,
+            AdsInsights.Field.frequency,
+            AdsInsights.Field.actions,
+            AdsInsights.Field.cost_per_action_type,
+            AdsInsights.Field.conversions,
         ]
         params = {
             'level': 'campaign',
@@ -55,29 +91,45 @@ def get_facebook_campaign_insights(account, start_date, end_date):
             },
         }
 
-        # Faz a chamada à API
         insights = account.get_insights(fields=fields, params=params)
-        
-        # Processa a resposta em uma lista de dicionários
         rows = []
         for insight in insights:
+            conversoes = 0
+
+            # 1) Tenta campo 'conversions' (submit_application_total)
+            if 'conversions' in insight:
+                for conv in insight['conversions']:
+                    if conv['action_type'] == 'submit_application_total':
+                        conversoes += int(conv.get('value', 0))
+
+            # 2) Fallback: busca em 'actions'
+            if conversoes == 0 and AdsInsights.Field.actions in insight:
+                for action in insight[AdsInsights.Field.actions]:
+                    if action['action_type'] in CONVERSION_ACTIONS:
+                        conversoes += int(action.get('value', 0))
+
+            custo = float(insight[AdsInsights.Field.spend])
+            cpa = custo / conversoes if conversoes > 0 else 0
+
             rows.append({
                 'Campanha': insight[AdsInsights.Field.campaign_name],
-                'Custo': float(insight[AdsInsights.Field.spend]),
-                'Impressões': int(insight[AdsInsights.Field.impressions]),
-                'Cliques': int(insight[AdsInsights.Field.clicks]),
-                'CTR (%)': float(insight[AdsInsights.Field.ctr]),
-                'CPC': float(insight[AdsInsights.Field.cpc]),
+                'Objetivo': insight.get(AdsInsights.Field.objective, 'N/A'),
+                'Custo': custo,
+                'Impressões': int(insight.get(AdsInsights.Field.impressions, 0)),
+                'Cliques': int(insight.get(AdsInsights.Field.clicks, 0)),
+                'CTR (%)': float(insight.get(AdsInsights.Field.ctr, 0)),
+                'CPC': float(insight.get(AdsInsights.Field.cpc, 0)),
+                'CPM': float(insight.get(AdsInsights.Field.cpm, 0)),
+                'Alcance': int(insight.get(AdsInsights.Field.reach, 0)),
+                'Frequência': float(insight.get(AdsInsights.Field.frequency, 0)),
+                'Conversões': conversoes,
+                'CPA': cpa,
             })
-            
+
         df = pd.DataFrame(rows)
-        
         if not df.empty:
-            # 1. Usa regex para extrair o conteúdo dentro de {}
             df['Curso Venda'] = df['Campanha'].str.extract(r'\{(.*?)\}')
-            # 2. Limpa o nome do Curso Venda e preenche vazios
             df['Curso Venda'] = df['Curso Venda'].str.strip()
-            # Corrigido para evitar FutureWarning - usando atribuição direta em vez de inplace=True
             df['Curso Venda'] = df['Curso Venda'].fillna('Não Especificado')
 
         return df
@@ -132,76 +184,82 @@ def formatar_reais(valor):
 
 def run_page():
     st.title("📢 Análise de Campanhas - Meta (Facebook Ads)")
-    
-    account = get_facebook_api_account()
 
-    if account:
-        # --- FILTRO DE DATA NA BARRA LATERAL ---
-        st.sidebar.header("Filtro de Período (Facebook)")
-        hoje = datetime.now().date()
-        data_inicio_padrao = hoje - pd.Timedelta(days=27)
-        
-        periodo_selecionado = st.sidebar.date_input(
-            "Selecione o Período de Análise:",
-            [data_inicio_padrao, hoje],
-            key="fb_date_range"
+    # --- FILTROS NA BARRA LATERAL ---
+    st.sidebar.header("Filtros (Facebook)")
+
+    empresa = st.sidebar.selectbox(
+        "Empresa:",
+        ["Degrau", "Central de Concursos"],
+        key="fb_empresa"
+    )
+    empresa_key = "Degrau" if empresa == "Degrau" else "Central"
+
+    hoje = datetime.now().date()
+    data_inicio_padrao = hoje - pd.Timedelta(days=27)
+
+    periodo_selecionado = st.sidebar.date_input(
+        "Período de Análise:",
+        [data_inicio_padrao, hoje],
+        key="fb_date_range"
+    )
+
+    if len(periodo_selecionado) != 2:
+        st.warning("Por favor, selecione um período de datas válido.")
+        st.stop()
+
+    start_date, end_date = periodo_selecionado
+
+    account = get_facebook_api_account(empresa_key)
+
+    if not account:
+        st.warning(f"A conexão com a API do Facebook ({empresa}) não pôde ser estabelecida.")
+        st.stop()
+
+    st.info(f"📅 **{empresa}** — {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}")
+    st.divider()
+
+    # --- ANÁLISE DE PERFORMANCE DE CAMPANHAS ---
+    st.header("Desempenho Geral das Campanhas")
+    df_insights = get_facebook_campaign_insights(account, start_date, end_date)
+
+    if not df_insights.empty:
+        total_custo = df_insights['Custo'].sum()
+        total_cliques = df_insights['Cliques'].sum()
+        total_conv = int(df_insights['Conversões'].sum())
+        total_alcance = int(df_insights['Alcance'].sum())
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Custo Total", formatar_reais(total_custo))
+        col2.metric("Cliques", f"{total_cliques:,}".replace(",", "."))
+        col3.metric("Conversões", f"{total_conv:,}".replace(",", "."))
+        col4.metric("Alcance", f"{total_alcance:,}".replace(",", "."))
+
+        if total_conv > 0:
+            st.metric("CPA Médio", formatar_reais(total_custo / total_conv))
+
+        ordem_das_colunas = [
+            'Curso Venda', 'Campanha', 'Objetivo',
+            'Custo', 'Impressões', 'Cliques', 'CTR (%)',
+            'CPC', 'CPM', 'Alcance', 'Frequência',
+            'Conversões', 'CPA',
+        ]
+
+        st.dataframe(
+            df_insights[ordem_das_colunas].sort_values("Custo", ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Custo": st.column_config.NumberColumn("Custo (R$)", format="R$ %.2f"),
+                "CPC": st.column_config.NumberColumn("CPC (R$)", format="R$ %.2f"),
+                "CPM": st.column_config.NumberColumn("CPM (R$)", format="R$ %.2f"),
+                "CPA": st.column_config.NumberColumn("CPA (R$)", format="R$ %.2f"),
+                "CTR (%)": st.column_config.NumberColumn("CTR", format="%.2f%%"),
+                "Frequência": st.column_config.NumberColumn("Freq.", format="%.1f"),
+            }
         )
-
-        if len(periodo_selecionado) != 2:
-            st.warning("Por favor, selecione um período de datas válido.")
-            st.stop()
-
-        start_date, end_date = periodo_selecionado
-        st.info(f"Exibindo dados de **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}**")
-        st.divider()
-
-        # --- ANÁLISE DE PERFORMANCE DE CAMPANHAS ---
-        st.header("Desempenho Geral das Campanhas")
-        
-        # Chama a nova função para buscar os dados
-        df_insights = get_facebook_campaign_insights(account, start_date, end_date)
-
-        if not df_insights.empty:
-            # Exibe os totais em cards
-            total_custo = df_insights['Custo'].sum()
-            total_cliques = df_insights['Cliques'].sum()
-            
-            col1, col2 = st.columns(2)
-            col1.metric("Custo Total no Período", formatar_reais(total_custo))
-            col2.metric("Total de Cliques", f"{total_cliques:,}".replace(",", "."))
-
-            ordem_das_colunas = [
-                'Curso Venda',
-                'Campanha',
-                'Custo',
-                'Impressões',
-                'Cliques',
-                'CPC',
-                'CTR (%)'
-            ]
-
-            df_para_exibir = df_insights[ordem_das_colunas]
-
-            # Exibe a tabela detalhada
-            st.dataframe(
-                df_para_exibir.sort_values("Custo", ascending=False),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "curso_venda": st.column_config.TextColumn("Curso Venda"),
-                    "Campanha": st.column_config.TextColumn("Campanha"),
-                    "Custo": st.column_config.NumberColumn("Custo (R$)", format="R$ %.2f"),
-                    "CPC": st.column_config.NumberColumn("Custo por Clique (R$)", format="R$ %.2f"),
-                    "CTR (%)": st.column_config.ProgressColumn(
-                        "Taxa de Cliques (CTR)", format="%.2f%%", min_value=0, max_value=df_insights['CTR (%)'].max()
-                    ),
-                }
-            )
-        else:
-            st.info("Não foram encontrados dados de campanhas para o período selecionado.")
-            
     else:
-        st.warning("A conexão com a API do Facebook não pôde ser estabelecida.")
+        st.info("Não foram encontrados dados de campanhas para o período selecionado.")
 
     st.divider()
 
@@ -260,10 +318,12 @@ def run_page():
     st.header("🕵️ Auditoria de Conversões com FBCLID (Fonte: CRM)")
     st.info("Esta tabela mostra as oportunidades do seu CRM que possuem um FBCLID registrado.")
 
+    fbclid_empresa = empresa_key.lower()
+
     # Inicializa cache
     if 'fbclid_cache' not in st.session_state:
         try:
-            st.session_state.fbclid_cache = load_fbclid_cache(empresa="degrau")
+            st.session_state.fbclid_cache = load_fbclid_cache(empresa=fbclid_empresa)
             
             # Adicione esta verificação
             if st.session_state.fbclid_cache is None:
@@ -285,7 +345,7 @@ def run_page():
         df_conversoes_filtrado = df_conversoes_db[
             (df_conversoes_db['criacao'] >= start_date_aware) &
             (df_conversoes_db['criacao'] < end_date_aware) &
-            (df_conversoes_db['empresa'] == "Degrau") &
+            (df_conversoes_db['empresa'] == empresa_key) &
             (df_conversoes_db['fbclid'].notnull()) & 
             (df_conversoes_db['fbclid'] != '')
         ].copy()
@@ -312,8 +372,8 @@ def run_page():
             
             # Adiciona coluna de campanha do Facebook
             df_display['Campanha (Facebook)'] = df_display['FBCLID'].apply(
-                lambda x: get_campaign_for_fbclid(x, empresa="degrau")['campaign_name'] 
-                if get_campaign_for_fbclid(x, empresa="degrau") is not None 
+                lambda x: get_campaign_for_fbclid(x, empresa=fbclid_empresa)['campaign_name'] 
+                if get_campaign_for_fbclid(x, empresa=fbclid_empresa) is not None 
                 else 'Não consultado'
             )
             
@@ -340,8 +400,8 @@ def run_page():
             
             with col1:
                 if st.button("📡 Consultar Campanhas no Facebook", type="primary"):
-                    _, _, _, _, account = init_facebook_api()
-                    if account:
+                    account_fbclid = get_facebook_api_account(empresa_key)
+                    if account_fbclid:
                         fbclid_list = [
                             row['fbclid']
                             for _, row in df_conversoes_filtrado.iterrows()
@@ -350,7 +410,7 @@ def run_page():
                         
                         with st.spinner(f"Consultando {len(fbclid_list)} FBclids..."):
                             result = get_campaigns_for_fbclids(
-                                account, fbclid_list, empresa="degrau"
+                                account_fbclid, fbclid_list, empresa=fbclid_empresa
                             )
                             
                             if result is not None:
@@ -392,7 +452,7 @@ def run_page():
                                     cursor.execute("""
                                     INSERT OR IGNORE INTO fbclid_cache (fbclid, formatted_fbclid, empresa)
                                     VALUES (?, ?, ?)
-                                    """, (fbclid, formatted_fbclid, "degrau"))
+                                    """, (fbclid, formatted_fbclid, fbclid_empresa))
                                 
                                 conn.commit()
                                 conn.close()

@@ -68,7 +68,6 @@ PAGES = {
     "🎓 Análise EAD": analise_ead,
     "👥 Vendedores SP": vendedores_sp,
     "📄 NFe SP": nfe_sp,
-    "❌ Cancelamentos SP": cancelamentos_sp,
     "🎓 Matriculas Madureira": madureira,
     "❌ Cancel. Madureira": madureira_cancelamento,
     "🎓 Matriculas Campo Grande": campogrande,
@@ -78,7 +77,7 @@ PAGES = {
     "🎓 Matriculas Centro": centro,
     "❌ Cancel. Centro": centro_cancelamento,
     "💾 Central Backup": backup_central_consys,
-    "💬Mensagens Octadesk": octadesk,
+    "💬 Mensagens Octadesk": octadesk,
     "💬 Chat × Oportunidades": chat_oportunidades,
     "💬 Modelo MSG": modelo_msg,
     "📞 Transcrições": transcricoes,
@@ -182,6 +181,12 @@ else:
         selected_page = st.sidebar.radio("Menu", pages_to_show)
         
         # --- Roteador que renderiza a página selecionada ---
-        PAGES[selected_page].run_page()
+        if selected_page in PAGES:
+            try:
+                PAGES[selected_page].run_page()
+            except Exception as e:
+                st.error(f"Erro ao carregar a página '{selected_page}': {e}")
+        else:
+            st.error(f"Página '{selected_page}' não encontrada. Verifique a configuração de permissões.")
     else:
         st.warning("Você não tem acesso a nenhuma página. Por favor, contate o administrador.")

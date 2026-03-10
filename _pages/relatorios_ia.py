@@ -17,6 +17,7 @@ import yaml
 import re
 import io
 from fpdf import FPDF
+from sqlalchemy import text as sql_text
 
 load_dotenv()
 load_dotenv('.facebook_credentials.env', override=True)
@@ -289,19 +290,20 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
         st.error(f"Erro Google Ads: {e}")
         return pd.DataFrame()
 
-def init_facebook_api():
+def init_facebook_api(secrets_key="facebook_api", env_suffix=""):
+    """Inicializa a API do Facebook. Use env_suffix='_CENTRAL' para Central."""
     app_id, app_secret, access_token, ad_account_id = None, None, None, None
     try:
-        creds = st.secrets["facebook_api"]
+        creds = st.secrets[secrets_key]
         app_id = creds["app_id"]
         app_secret = creds["app_secret"]
         access_token = creds["access_token"]
         ad_account_id = creds["ad_account_id"]
     except (st.errors.StreamlitAPIException, KeyError):
-        app_id = os.getenv("FB_APP_ID")
-        app_secret = os.getenv("FB_APP_SECRET")
-        access_token = os.getenv("FB_ACCESS_TOKEN")
-        ad_account_id = os.getenv("FB_AD_ACCOUNT_ID")
+        app_id = os.getenv(f"FB_APP_ID{env_suffix}")
+        app_secret = os.getenv(f"FB_APP_SECRET{env_suffix}")
+        access_token = os.getenv(f"FB_ACCESS_TOKEN{env_suffix}")
+        ad_account_id = os.getenv(f"FB_AD_ACCOUNT_ID{env_suffix}")
     if not all([app_id, app_secret, access_token, ad_account_id]):
         return None
     try:
@@ -309,6 +311,10 @@ def init_facebook_api():
         return AdAccount(ad_account_id)
     except Exception:
         return None
+
+def init_facebook_api_central():
+    """Inicializa a API do Facebook para a conta Central de Concursos."""
+    return init_facebook_api(secrets_key="facebook_api_central", env_suffix="_CENTRAL")
 
 def get_facebook_data(account, start_date, end_date):
     """Busca dados do Meta Ads incluindo objetivo da campanha para classificação."""
@@ -326,6 +332,7 @@ def get_facebook_data(account, start_date, end_date):
             AdsInsights.Field.frequency,
             AdsInsights.Field.actions,
             AdsInsights.Field.cost_per_action_type,
+            AdsInsights.Field.conversions,
         ]
         params = {
             'level': 'campaign',
@@ -333,16 +340,37 @@ def get_facebook_data(account, start_date, end_date):
         }
         insights = account.get_insights(fields=fields, params=params)
         rows = []
+        # action_types que contam como conversão (padrão + custom)
+        CONVERSION_ACTIONS = {
+            'purchase', 'lead', 'omni_purchase',
+            'offsite_conversion.fb_pixel_purchase',
+            'offsite_conversion.fb_pixel_lead',
+            'submit_application_total',
+            'onsite_conversion.lead_grouped',
+        }
         for insight in insights:
             conversoes = 0
             cpa = 0
-            if AdsInsights.Field.actions in insight:
+
+            # 1) Tenta campo 'conversions' (mais preciso)
+            if 'conversions' in insight:
+                for conv in insight['conversions']:
+                    if conv['action_type'] == 'submit_application_total':
+                        conversoes += int(conv.get('value', 0))
+
+            # 2) Fallback: busca em 'actions' se conversions não retornou nada
+            if conversoes == 0 and AdsInsights.Field.actions in insight:
                 for action in insight[AdsInsights.Field.actions]:
-                    if action['action_type'] in ['purchase', 'lead', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase']:
+                    if action['action_type'] in CONVERSION_ACTIONS:
                         conversoes += int(action.get('value', 0))
-            if AdsInsights.Field.cost_per_action_type in insight:
+
+            # Calcula CPA
+            if conversoes > 0:
+                custo = float(insight[AdsInsights.Field.spend])
+                cpa = custo / conversoes if conversoes > 0 else 0
+            elif AdsInsights.Field.cost_per_action_type in insight:
                 for cost_action in insight[AdsInsights.Field.cost_per_action_type]:
-                    if cost_action['action_type'] in ['purchase', 'lead', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase']:
+                    if cost_action['action_type'] in CONVERSION_ACTIONS:
                         cpa = float(cost_action.get('value', 0))
                         break
 
@@ -375,7 +403,7 @@ def get_facebook_data(account, start_date, end_date):
 # FORMATAÇÃO DOS DADOS POR OBJETIVO (v2.0)
 # =====================================================
 
-def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias):
+def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias, df_facebook_central=None):
     """Formata os dados agrupados por OBJETIVO para o Claude analisar corretamente."""
     hoje = datetime.now().date()
     inicio = hoje - timedelta(days=janela_dias)
@@ -401,8 +429,12 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
         dfs.append(df_gc)
     if not df_facebook.empty:
         df_fb = df_facebook.copy()
-        df_fb['Origem'] = 'Meta Ads'
+        df_fb['Origem'] = 'Meta Ads (Degrau)'
         dfs.append(df_fb)
+    if df_facebook_central is not None and not df_facebook_central.empty:
+        df_fbc = df_facebook_central.copy()
+        df_fbc['Origem'] = 'Meta Ads (Central)'
+        dfs.append(df_fbc)
 
     if not dfs:
         return "Nenhum dado coletado."
@@ -901,8 +933,8 @@ def _get_anthropic_client():
 
     api_key = None
     try:
-        api_key = st.secrets.get("ANTHROPIC_API_KEY")
-    except (st.errors.StreamlitAPIException, KeyError):
+        api_key = st.secrets["ANTHROPIC_API_KEY"]
+    except (st.errors.StreamlitAPIException, KeyError, FileNotFoundError):
         pass
     if not api_key:
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -934,11 +966,48 @@ def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="
     return message.content[0].text
 
 # =====================================================
-# HISTÓRICO DE RELATÓRIOS
+# HISTÓRICO DE RELATÓRIOS (MySQL)
+# Tabela: seducar.ai_reports
+# Colunas: id, uuid, reference_date, type, generated_at, raw_data, ai_analysis
 # =====================================================
 
+def _get_writer_engine():
+    """Obtém engine de escrita via conexao/mysql_connector."""
+    try:
+        from conexao.mysql_connector import conectar_mysql_writer
+        return conectar_mysql_writer()
+    except ImportError:
+        return None
+
+
 def salvar_relatorio(analise, dados_consolidados, data_ref, tipo="completo_ads"):
-    """Salva o relatório gerado em data/historico/."""
+    """Salva o relatório no banco de dados MySQL."""
+    import uuid as uuid_mod
+
+    engine = _get_writer_engine()
+    if engine:
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    sql_text("""
+                        INSERT INTO ai_reports (uuid, reference_date, type, generated_at, raw_data, ai_analysis)
+                        VALUES (:uuid, :reference_date, :type, :generated_at, :raw_data, :ai_analysis)
+                    """),
+                    {
+                        "uuid": str(uuid_mod.uuid4()),
+                        "reference_date": data_ref,
+                        "type": tipo,
+                        "generated_at": datetime.now(),
+                        "raw_data": dados_consolidados,
+                        "ai_analysis": analise,
+                    }
+                )
+                conn.commit()
+            return "db"
+        except Exception as e:
+            st.warning(f"Erro ao salvar no banco: {e}. Salvando localmente.")
+
+    # Fallback: salva em arquivo local
     os.makedirs(HISTORICO_DIR, exist_ok=True)
     relatorio = {
         "data": data_ref,
@@ -952,12 +1021,44 @@ def salvar_relatorio(analise, dados_consolidados, data_ref, tipo="completo_ads")
         json.dump(relatorio, f, ensure_ascii=False, indent=2)
     return filepath
 
+
 def carregar_relatorios_historico(filtro_tipo=None):
-    """Carrega lista de relatórios do histórico."""
-    if not os.path.exists(HISTORICO_DIR):
-        return []
-    arquivos = sorted(glob.glob(os.path.join(HISTORICO_DIR, "relatorio_*.json")), reverse=True)
+    """Carrega relatórios do banco MySQL (com fallback para arquivos locais)."""
     relatorios = []
+
+    # Tenta carregar do banco
+    engine = _get_writer_engine()
+    if engine:
+        try:
+            query = "SELECT id, uuid, reference_date, type, generated_at, raw_data, ai_analysis FROM ai_reports"
+            params = {}
+            if filtro_tipo:
+                query += " WHERE type = :tipo"
+                params["tipo"] = filtro_tipo
+            query += " ORDER BY generated_at DESC LIMIT 50"
+
+            with engine.connect() as conn:
+                result = conn.execute(sql_text(query), params)
+                for row in result:
+                    gerado_em = row.generated_at.isoformat() if row.generated_at else ""
+                    relatorios.append({
+                        "id": row.id,
+                        "uuid": row.uuid,
+                        "data": row.reference_date,
+                        "tipo": row.type,
+                        "gerado_em": gerado_em,
+                        "analise": row.ai_analysis or "",
+                        "dados_brutos": row.raw_data or "",
+                    })
+            if relatorios:
+                return relatorios
+        except Exception as e:
+            st.warning(f"Erro ao carregar do banco: {e}. Tentando arquivos locais.")
+
+    # Fallback: arquivos locais
+    if not os.path.exists(HISTORICO_DIR):
+        return relatorios
+    arquivos = sorted(glob.glob(os.path.join(HISTORICO_DIR, "relatorio_*.json")), reverse=True)
     for arq in arquivos:
         try:
             with open(arq, "r", encoding="utf-8") as f:
@@ -966,7 +1067,8 @@ def carregar_relatorios_historico(filtro_tipo=None):
                 if filtro_tipo and tipo != filtro_tipo:
                     continue
                 relatorios.append({
-                    "arquivo": arq,
+                    "id": None,
+                    "uuid": None,
                     "data": data.get("data", ""),
                     "tipo": tipo,
                     "gerado_em": data.get("gerado_em", ""),
@@ -998,8 +1100,8 @@ def run_page():
 
     contas = st.sidebar.multiselect(
         "Contas para incluir:",
-        ["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads"],
-        default=["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads"],
+        ["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads (Degrau)", "Meta Ads (Central)"],
+        default=["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads (Degrau)", "Meta Ads (Central)"],
         key="ria_contas"
     )
 
@@ -1064,7 +1166,7 @@ def run_page():
             st.info("Nenhum relatório gerado ainda.")
         else:
             st.write(f"**{len(relatorios)} relatório(s)**")
-            for rel in relatorios:
+            for idx, rel in enumerate(relatorios):
                 gerado_em = ""
                 if rel["gerado_em"]:
                     try:
@@ -1085,7 +1187,7 @@ def run_page():
                         file_name=f"relatorio_{rel['tipo']}_{rel['data']}.pdf",
                         mime="application/pdf",
                         use_container_width=True,
-                        key=f"btn_pdf_hist_{rel['tipo']}_{rel['data']}",
+                        key=f"btn_pdf_hist_{idx}_{rel['tipo']}_{rel['data']}",
                     )
                     with st.expander("📋 Dados brutos"):
                         st.code(rel["dados_brutos"], language="text")
@@ -1100,6 +1202,7 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     df_google_degrau = pd.DataFrame()
     df_google_central = pd.DataFrame()
     df_facebook = pd.DataFrame()
+    df_facebook_central = pd.DataFrame()
 
     # Coleta Google Ads Degrau
     if "Google Ads (Degrau)" in contas:
@@ -1127,16 +1230,25 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
             else:
                 st.warning("⚠️ Não foi possível conectar ao Google Ads (Central)")
 
-    # Coleta Meta Ads
-    if "Meta Ads" in contas:
-        with st.spinner("🔄 Buscando Meta Ads..."):
+    # Coleta Meta Ads (Degrau)
+    if "Meta Ads (Degrau)" in contas:
+        with st.spinner("🔄 Buscando Meta Ads (Degrau)..."):
             fb_account = init_facebook_api()
             if fb_account:
                 df_facebook = get_facebook_data(fb_account, start_str, end_str)
             else:
-                st.warning("⚠️ Não foi possível conectar ao Meta Ads")
+                st.warning("⚠️ Não foi possível conectar ao Meta Ads (Degrau)")
 
-    if df_google_degrau.empty and df_google_central.empty and df_facebook.empty:
+    # Coleta Meta Ads (Central)
+    if "Meta Ads (Central)" in contas:
+        with st.spinner("🔄 Buscando Meta Ads (Central)..."):
+            fb_account_central = init_facebook_api_central()
+            if fb_account_central:
+                df_facebook_central = get_facebook_data(fb_account_central, start_str, end_str)
+            else:
+                st.warning("⚠️ Não foi possível conectar ao Meta Ads (Central)")
+
+    if df_google_degrau.empty and df_google_central.empty and df_facebook.empty and df_facebook_central.empty:
         st.error("❌ Nenhum dado coletado. Verifique as credenciais e o período.")
         return
 
@@ -1146,17 +1258,21 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     custo_gd = df_google_degrau['Custo'].sum() if not df_google_degrau.empty else 0
     custo_gc = df_google_central['Custo'].sum() if not df_google_central.empty else 0
     custo_fb = df_facebook['Custo'].sum() if not df_facebook.empty else 0
+    custo_fbc = df_facebook_central['Custo'].sum() if not df_facebook_central.empty else 0
     col1.metric("Google Degrau", formatar_reais(custo_gd))
     col2.metric("Google Central", formatar_reais(custo_gc))
-    col3.metric("Meta Ads", formatar_reais(custo_fb))
-    col4.metric("Total Investido", formatar_reais(custo_gd + custo_gc + custo_fb))
+    col3.metric("Meta Degrau", formatar_reais(custo_fb))
+    col4.metric("Meta Central", formatar_reais(custo_fbc))
+
+    st.metric("💰 Total Investido", formatar_reais(custo_gd + custo_gc + custo_fb + custo_fbc))
 
     # Mostra distribuição por objetivo
-    _mostrar_distribuicao_objetivos(df_google_degrau, df_google_central, df_facebook)
+    _mostrar_distribuicao_objetivos(df_google_degrau, df_google_central, df_facebook, df_facebook_central)
 
     # Formata e envia
     dados_consolidados = formatar_dados_para_claude(
-        df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias
+        df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias,
+        df_facebook_central=df_facebook_central
     )
 
     with st.spinner("🤖 Analisando com Claude..."):
@@ -1168,7 +1284,10 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     st.markdown(analise)
 
     filepath = salvar_relatorio(analise, dados_consolidados, data_ref, tipo)
-    st.success(f"✅ Relatório salvo!")
+    if filepath == "db":
+        st.success("✅ Relatório salvo no banco de dados!")
+    else:
+        st.success(f"✅ Relatório salvo localmente!")
 
     # Botão de exportar para PDF
     pdf_bytes = gerar_pdf_relatorio(analise, dados_consolidados, data_ref, tipo)
@@ -1186,7 +1305,7 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
         st.code(dados_consolidados, language="text")
 
 
-def _mostrar_distribuicao_objetivos(df_gd, df_gc, df_fb):
+def _mostrar_distribuicao_objetivos(df_gd, df_gc, df_fb, df_fbc=None):
     """Mostra um resumo visual da distribuição por objetivo de campanha."""
     dfs = []
     if not df_gd.empty:
@@ -1195,6 +1314,8 @@ def _mostrar_distribuicao_objetivos(df_gd, df_gc, df_fb):
         dfs.append(df_gc)
     if not df_fb.empty:
         dfs.append(df_fb)
+    if df_fbc is not None and not df_fbc.empty:
+        dfs.append(df_fbc)
 
     if not dfs:
         return

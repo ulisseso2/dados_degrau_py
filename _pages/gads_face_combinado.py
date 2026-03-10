@@ -23,16 +23,17 @@ def formatar_reais(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # Inicializa o cliente do Google Ads
-def init_google_ads_client():
+def init_google_ads_client(empresa="Degrau"):
     """
     Inicializa o cliente do Google Ads de forma híbrida,
-    lendo de st.secrets ou do arquivo google-ads.yaml
+    lendo de st.secrets ou do arquivo google-ads.yaml.
+    Suporta Degrau e Central.
     """
+    secrets_key = "google_ads" if empresa == "Degrau" else "google_ads_central"
+    yaml_file = "google-ads.yaml" if empresa == "Degrau" else "google-ads_central.yaml"
+
     try:
-        # Tenta carregar do Streamlit Secrets (produção)
-        google_ads_config = st.secrets["google_ads"]
-        
-        # Cria a configuração no formato esperado pela API
+        google_ads_config = st.secrets[secrets_key]
         config_dict = {
             "developer_token": google_ads_config["developer_token"],
             "client_id": google_ads_config["client_id"],
@@ -41,18 +42,11 @@ def init_google_ads_client():
             "login_customer_id": str(google_ads_config["login_customer_id"]),
             "use_proto_plus": google_ads_config.get("use_proto_plus", True)
         }
-        
-        # Cria um arquivo temporário em memória
         config_str = yaml.dump(config_dict)
-        
         return GoogleAdsClient.load_from_string(config_str)
-        
     except (st.errors.StreamlitAPIException, KeyError):
-        # Se falhar, tenta carregar do arquivo local
-        yaml_file = "google-ads.yaml"
         if os.path.exists(yaml_file):
             return GoogleAdsClient.load_from_storage(yaml_file)
-    
     return None
 
 # Função para buscar dados do Google Ads
@@ -123,59 +117,61 @@ def get_google_ads_campaign_data(client, customer_id, start_date, end_date):
         st.error(f"Erro inesperado ao buscar dados do Google Ads: {e}")
         return pd.DataFrame()
 
+# action_types que contam como conversão
+CONVERSION_ACTIONS = {
+    'purchase', 'lead', 'omni_purchase',
+    'offsite_conversion.fb_pixel_purchase',
+    'offsite_conversion.fb_pixel_lead',
+    'submit_application_total',
+    'onsite_conversion.lead_grouped',
+}
+
 # Função para inicializar a API do Facebook
-def init_facebook_api():
+def init_facebook_api(empresa="Degrau"):
     """
     Inicializa a API do Facebook de forma híbrida, lendo de st.secrets ou .env.
-    Retorna o objeto da conta de anúncios se for bem-sucedido, senão None.
+    Suporta Degrau e Central.
     """
-    app_id, app_secret, access_token, ad_account_id = None, None, None, None
-    
+    secrets_key = "facebook_api" if empresa == "Degrau" else "facebook_api_central"
+    env_suffix = "" if empresa == "Degrau" else "_CENTRAL"
+
     try:
-        # Tenta carregar do Streamlit Secrets (para produção)
-        creds = st.secrets["facebook_api"]
+        creds = st.secrets[secrets_key]
         app_id = creds["app_id"]
         app_secret = creds["app_secret"]
         access_token = creds["access_token"]
         ad_account_id = creds["ad_account_id"]
-        
     except (st.errors.StreamlitAPIException, KeyError):
-        # Se falhar (ambiente local), carrega do arquivo .env
-        app_id = os.getenv("FB_APP_ID")
-        app_secret = os.getenv("FB_APP_SECRET")
-        access_token = os.getenv("FB_ACCESS_TOKEN")
-        ad_account_id = os.getenv("FB_AD_ACCOUNT_ID")
+        app_id = os.getenv(f"FB_APP_ID{env_suffix}")
+        app_secret = os.getenv(f"FB_APP_SECRET{env_suffix}")
+        access_token = os.getenv(f"FB_ACCESS_TOKEN{env_suffix}")
+        ad_account_id = os.getenv(f"FB_AD_ACCOUNT_ID{env_suffix}")
 
-    # Verifica se as credenciais foram carregadas
     if not all([app_id, app_secret, access_token, ad_account_id]):
-        st.error("As credenciais da API do Facebook não foram encontradas. Verifique seus Secrets ou o arquivo .env.")
         return None
-
     try:
         FacebookAdsApi.init(app_id=app_id, app_secret=app_secret, access_token=access_token)
-        account = AdAccount(ad_account_id)
-        return account
-    except Exception as e:
-        st.error(f"Falha ao inicializar a API do Facebook: {e}")
+        return AdAccount(ad_account_id)
+    except Exception:
         return None
 
 # Função para buscar insights de campanhas do Facebook
 def get_facebook_campaign_insights(account, start_date, end_date):
     """
     Busca insights de performance para todas as campanhas em um período,
-    incluindo CTR, CPC, CPA e conversões.
+    incluindo CTR, CPC, CPA e conversões (com submit_application_total).
     """
     try:
-        # Define os campos e parâmetros para a chamada da API
         fields = [
             AdsInsights.Field.campaign_name,
             AdsInsights.Field.spend,
             AdsInsights.Field.impressions,
             AdsInsights.Field.clicks,
-            AdsInsights.Field.ctr,  # Taxa de Cliques (Click-Through Rate)
-            AdsInsights.Field.cpc,  # Custo por Clique
-            AdsInsights.Field.actions,  # Conversões
-            AdsInsights.Field.cost_per_action_type,  # CPA
+            AdsInsights.Field.ctr,
+            AdsInsights.Field.cpc,
+            AdsInsights.Field.actions,
+            AdsInsights.Field.cost_per_action_type,
+            AdsInsights.Field.conversions,
         ]
         params = {
             'level': 'campaign',
@@ -185,51 +181,47 @@ def get_facebook_campaign_insights(account, start_date, end_date):
             },
         }
 
-        # Faz a chamada à API
         insights = account.get_insights(fields=fields, params=params)
-        
-        # Processa a resposta em uma lista de dicionários
         rows = []
         for insight in insights:
-            # Extrai conversões (purchase, lead, etc)
             conversoes = 0
-            cpa = 0
-            
-            if AdsInsights.Field.actions in insight:
+
+            # 1) Tenta campo 'conversions' (submit_application_total)
+            if 'conversions' in insight:
+                for conv in insight['conversions']:
+                    if conv['action_type'] == 'submit_application_total':
+                        conversoes += int(conv.get('value', 0))
+
+            # 2) Fallback: busca em 'actions'
+            if conversoes == 0 and AdsInsights.Field.actions in insight:
                 for action in insight[AdsInsights.Field.actions]:
-                    if action['action_type'] in ['purchase', 'lead', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase']:
+                    if action['action_type'] in CONVERSION_ACTIONS:
                         conversoes += int(action.get('value', 0))
-            
-            if AdsInsights.Field.cost_per_action_type in insight:
-                for cost_action in insight[AdsInsights.Field.cost_per_action_type]:
-                    if cost_action['action_type'] in ['purchase', 'lead', 'omni_purchase', 'offsite_conversion.fb_pixel_purchase']:
-                        cpa = float(cost_action.get('value', 0))
-                        break
-            
-            # Obtém valores com fallback para 0 caso não existam
+
+            custo = float(insight[AdsInsights.Field.spend])
+            cpa = custo / conversoes if conversoes > 0 else 0
+
             ctr_value = float(insight.get(AdsInsights.Field.ctr, 0))
             cpc_value = float(insight.get(AdsInsights.Field.cpc, 0))
-            
+
             rows.append({
                 'Campanha': insight[AdsInsights.Field.campaign_name],
-                'Custo': float(insight[AdsInsights.Field.spend]),
+                'Custo': custo,
                 'Impressões': int(insight.get(AdsInsights.Field.impressions, 0)),
                 'Cliques': int(insight.get(AdsInsights.Field.clicks, 0)),
                 'CTR (%)': ctr_value,
                 'CPC': cpc_value,
                 'Conversões': conversoes,
-                'CPA': cpa
+                'CPA': cpa,
             })
-            
-        df = pd.DataFrame(rows)
 
+        df = pd.DataFrame(rows)
         if not df.empty:
-            # Extrai o curso/produto do nome da campanha
             df['Curso Venda'] = df['Campanha'].str.extract(r'\{(.*?)\}')[0]
             df['Curso Venda'] = df['Curso Venda'].fillna('Não Especificado')
-        
+
         return df
-    
+
     except Exception as e:
         st.error(f"Erro ao buscar insights de campanhas do Facebook: {e}")
         return pd.DataFrame()
@@ -238,11 +230,18 @@ def run_page():
     st.title("📊 Análise Combinada: Google Ads + Meta Ads")
     st.markdown("**Dados diretos das APIs do Google Ads e Meta (Facebook) para máxima precisão**")
 
-    # --- FILTRO DE DATA NA SIDEBAR ---
-    st.sidebar.header("Filtro de Período")
+    # --- FILTROS NA SIDEBAR ---
+    st.sidebar.header("Filtros")
+
+    empresa = st.sidebar.selectbox(
+        "Empresa:",
+        ["Degrau", "Central de Concursos", "Ambas"],
+        key="combined_empresa"
+    )
+
     hoje = datetime.now().date()
     data_inicio_padrao = hoje - pd.Timedelta(days=27)
-    
+
     periodo_selecionado = st.sidebar.date_input(
         "Selecione o Período de Análise:",
         [data_inicio_padrao, hoje],
@@ -254,32 +253,44 @@ def run_page():
         st.stop()
     
     start_date, end_date = periodo_selecionado
-    st.info(f"📅 Período: **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}**")
+    st.info(f"📅 **{empresa}** — Período: **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}**")
 
     # --- INICIALIZAÇÃO DOS CLIENTES ---
-    google_client = init_google_ads_client()
-    facebook_account = init_facebook_api()
-
-    if not google_client:
-        st.error("❌ Falha ao conectar com o Google Ads. Verifique as credenciais.")
-        st.stop()
-    
-    if not facebook_account:
-        st.error("❌ Falha ao conectar com o Meta Ads. Verifique as credenciais.")
-        st.stop()
-
-    # Customer ID do Google Ads
-    try:
-        customer_id = st.secrets["google_ads"]["customer_id"]
-    except:
-        customer_id = "4934481887"  # Valor do seu arquivo yaml
+    empresas_para_buscar = []
+    if empresa == "Ambas":
+        empresas_para_buscar = ["Degrau", "Central"]
+    elif empresa == "Central de Concursos":
+        empresas_para_buscar = ["Central"]
+    else:
+        empresas_para_buscar = ["Degrau"]
 
     # --- BUSCA DE DADOS ---
-    with st.spinner("🔄 Buscando dados do Google Ads..."):
-        df_google = get_google_ads_campaign_data(google_client, customer_id, start_date, end_date)
-    
-    with st.spinner("🔄 Buscando dados do Meta Ads..."):
-        df_facebook = get_facebook_campaign_insights(facebook_account, start_date, end_date)
+    df_google = pd.DataFrame()
+    df_facebook = pd.DataFrame()
+
+    for emp in empresas_para_buscar:
+        customer_ids = {"Degrau": "4934481887", "Central": "1646681121"}
+        customer_id_key = "google_ads" if emp == "Degrau" else "google_ads_central"
+
+        google_client = init_google_ads_client(emp)
+        if google_client:
+            try:
+                cid = st.secrets[customer_id_key]["customer_id"]
+            except Exception:
+                cid = customer_ids[emp]
+            with st.spinner(f"🔄 Buscando dados do Google Ads ({emp})..."):
+                df_g = get_google_ads_campaign_data(google_client, cid, start_date, end_date)
+                if not df_g.empty:
+                    df_g['Empresa'] = emp
+                    df_google = pd.concat([df_google, df_g], ignore_index=True)
+
+        fb_account = init_facebook_api(emp)
+        if fb_account:
+            with st.spinner(f"🔄 Buscando dados do Meta Ads ({emp})..."):
+                df_f = get_facebook_campaign_insights(fb_account, start_date, end_date)
+                if not df_f.empty:
+                    df_f['Empresa'] = emp
+                    df_facebook = pd.concat([df_facebook, df_f], ignore_index=True)
 
     if df_google.empty and df_facebook.empty:
         st.warning("⚠️ Nenhum dado encontrado para o período selecionado.")
