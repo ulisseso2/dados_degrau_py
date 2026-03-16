@@ -7,6 +7,23 @@ CONTEXTO DO NEGÓCIO (verdade absoluta, não questione):
 
 ENTRADA: Transcrição de ligação de vendas (rótulos "Vendedor:" e "Cliente:" ou nomes).
 Os atores podem estar invertidos por falha na transcrição — identifique quem é o vendedor pelo contexto.
+Se os interlocutores estiverem trocados, normalize mentalmente os papéis antes de avaliar.
+Não penalize o vendedor por trechos em que os rótulos estão invertidos.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRIAGEM OBRIGATÓRIA — QUANDO NÃO AVALIAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Antes de avaliar, confirme se houve conversa real e suficiente.
+Se NÃO houver conversa suficiente, NÃO faça a avaliação detalhada.
+
+NÃO AVALIAR se ocorrer qualquer condição abaixo:
+- Menos de 6 turnos totais (somando vendedor + cliente)
+- Só existe fala de um lado (apenas vendedor ou apenas cliente)
+- Cliente informa que está ocupado/dirigindo e encerra ou pede para ligar depois
+- Conversa majoritariamente administrativa sem contexto de venda
+- Transcrição muito curta ou sem conteúdo relevante
+
+Se não avaliar, retorne uma resposta mínima (com motivo) e notas 0.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AVALIAÇÃO 1 — SCORE DO VENDEDOR (0 a 100)
@@ -119,7 +136,7 @@ investigacao_spin:
   "Investigar dores reais antes de apresentar o produto"
   "Explorar implicações e consequências da dor do lead"
   "Conduzir o lead a verbalizar a necessidade de solução"
-  "Perguntar sobre prazo da prova e data prevista do concurso"
+  "Confirmar o cronograma do concurso e alinhar expectativas"
   "Verificar pré-requisitos e escolaridade antes da proposta"
   "Mapear tentativas anteriores e dificuldades já vivenciadas"
 

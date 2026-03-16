@@ -677,8 +677,8 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                     }, ensure_ascii=False),
                     'tokens_usados': classificacao.get('tokens_usados'),
                     'nota_vendedor': 0,
-                    'lead_score': 0,
-                    'lead_classificacao': 'D',
+                    'lead_score': None,
+                    'lead_classificacao': 'NA',
                     'concurso_area': 'Não identificado',
                     'produto_recomendado': 'N/A'
                 }
@@ -737,3 +737,275 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
             return {'erro': f'Erro ao decodificar JSON: {str(e)}', 'classificacao_ligacao': 'erro'}
         except Exception as e:
             return {'erro': f'Erro na análise: {type(e).__name__}: {str(e)}', 'classificacao_ligacao': 'erro'}
+
+    # ──────────────────────────────────────────────
+    # REAVALIAÇÃO OTIMIZADA (economia de tokens)
+    # ──────────────────────────────────────────────
+
+    def _heuristica_reavaliacao(self, transcricao: str) -> Optional[Dict]:
+        """Heurísticas expandidas para reavaliação — sem limite de 255 chars."""
+        texto = " ".join(transcricao.lower().split())
+
+        if len(texto) < 15:
+            return {'tipo': 'dados_insuficientes', 'motivo': 'Transcrição muito curta',
+                    'confianca': 0.95, 'deve_avaliar': False}
+
+        turnos_vendedor = texto.count("vendedor:")
+        turnos_cliente = texto.count("cliente:")
+        total_turnos = turnos_vendedor + turnos_cliente
+
+        if turnos_vendedor == 0 or turnos_cliente == 0:
+            return {'tipo': 'dados_insuficientes', 'motivo': 'Apenas um lado da conversa identificado',
+                    'confianca': 0.8, 'deve_avaliar': False}
+
+        if total_turnos < 6:
+            return {'tipo': 'dialogo_incompleto', 'motivo': 'Conversa muito curta para avaliação',
+                    'confianca': 0.85, 'deve_avaliar': False}
+
+        padroes_interno = [
+            "ramal", "sala de reunião", "sala de reuniao", "coordenação", "coordenacao",
+            "secretaria", "responsável", "responsavel"
+        ]
+        padroes_produto = [
+            "curso", "matrícula", "matricula", "turma", "aula",
+            "presencial", "live", "ead", "mensalidade", "pagamento"
+        ]
+        if any(p in texto for p in padroes_interno) and not any(p in texto for p in padroes_produto):
+            return {'tipo': 'ligacao_interna', 'motivo': 'Conversa interna entre colaboradores/ramais',
+                    'confianca': 0.85, 'deve_avaliar': False}
+
+        padroes_cancelamento = [
+            "cancelamento", "cancelar", "reembolso", "estorno",
+            "quero cancelar", "solicitar cancelamento"
+        ]
+        if any(p in texto for p in padroes_cancelamento):
+            return {'tipo': 'cancelamento', 'motivo': 'Solicitação de cancelamento/reembolso',
+                    'confianca': 0.9, 'deve_avaliar': False}
+
+        padroes_ura = [
+            "caixa postal", "correio de voz", "grave seu recado",
+            "deixe a sua mensagem", "deixe sua mensagem", "não receber recados",
+            "não está disponível", "após o sinal", "grave a sua mensagem"
+        ]
+        tem_dialogo = ("vendedor:" in texto) and ("cliente:" in texto)
+        if not tem_dialogo and any(p in texto for p in padroes_ura):
+            return {'tipo': 'ura', 'motivo': 'Mensagem automática/caixa postal detectada',
+                    'confianca': 0.9, 'deve_avaliar': False}
+
+        padroes_ocupado = [
+            "estou ocupado", "ocupado agora", "não posso falar", "não posso falar agora",
+            "estou dirigindo", "dirigindo", "no trânsito", "no transito",
+            "ligue depois", "me liga depois", "retorno depois", "pode ligar depois"
+        ]
+        if any(p in texto for p in padroes_ocupado) and total_turnos < 12:
+            return {'tipo': 'dialogo_incompleto', 'motivo': 'Cliente ocupado/dirigindo; conversa interrompida',
+                    'confianca': 0.85, 'deve_avaliar': False}
+
+        return None
+
+    def _detectar_troca_interlocutores(self, transcricao: str) -> Dict:
+        """Detecta possível troca de rótulos vendedor/cliente."""
+        texto = transcricao.lower()
+        if "vendedor:" not in texto or "cliente:" not in texto:
+            return {"interlocutores_invertidos": False, "confianca_interlocutores": 0.0,
+                    "motivo_interlocutores": "Rótulos ausentes ou incompletos"}
+
+        vendor_keywords = [
+            "curso", "matrícula", "matricula", "mensalidade", "parcelamento",
+            "turma", "aulas", "horário", "horario", "unidade", "presencial",
+            "live", "ead", "desconto", "promoção", "promocao", "pagamento",
+            "boleto", "pix", "cartão", "cartao"
+        ]
+
+        def _contar(prefixo):
+            linhas = [l for l in texto.splitlines() if l.strip().startswith(prefixo)]
+            return sum(" ".join(linhas).count(k) for k in vendor_keywords) if linhas else 0
+
+        sv, sc = _contar("vendedor:"), _contar("cliente:")
+        if sc >= sv + 3:
+            return {"interlocutores_invertidos": True, "confianca_interlocutores": 0.7,
+                    "motivo_interlocutores": "Cliente tem mais termos típicos do vendedor"}
+        return {"interlocutores_invertidos": False,
+                "confianca_interlocutores": 0.6 if sv > 0 else 0.3,
+                "motivo_interlocutores": "Distribuição de termos compatível com os rótulos"}
+
+    def _criar_prompt_reavaliacao(self, transcricao: str, avaliacao_existente: str) -> str:
+        """Prompt condensado para reavaliação — ~50% menos tokens que avaliação completa."""
+        return f"""Você é avaliador sênior QA de ligações de vendas de curso preparatório para concursos (+3 décadas, +100 mil aprovações).
+Prioridade: Presencial e Live (ticket ~R$2.000). EAD é secundário (ticket ~R$300).
+
+REGRAS DA REAVALIAÇÃO:
+1. INTERLOCUTORES: Rótulos "Vendedor:"/"Cliente:" podem estar invertidos.
+   Identifique o vendedor pelo contexto (quem apresenta produto/benefícios/preço).
+   NÃO penalize o vendedor por trechos com rótulos trocados.
+2. WHATSAPP: Se houver menção a WhatsApp/zap/wpp, inclua em "observacoes": ["Vendedor sugeriu continuar no WhatsApp"]
+3. SCORING — pesos obrigatórios:
+   Vendedor (0-100): rapport(0-10), SPIN(0-30), valor_produto(0-20), gatilhos(0-10), objeções(0-10), fechamento(0-15), clareza(0-5)
+   Lead (0-100): fit(0-30), intenção(0-30), orientação_valor(0-20), abertura(0-10), restrições_invertido(0-10)
+   Lead class: A(80-100), B(60-79), C(40-59), D(0-39)
+4. Use EVIDÊNCIAS da transcrição (citações até 15 palavras). Não invente.
+5. Confiança: base 0.90. Descontos: <10 turnos(-0.20), ruído(-0.15), atores ambíguos(-0.15), concurso NI(-0.10), unilateral(-0.10), produto NM(-0.10). Min 0.30, Max 0.90.
+6. Pontos fortes (3), melhorias (3), erro mais caro: use textos concisos e padronizados.
+
+AVALIAÇÃO ANTERIOR (referência — ajuste conforme necessário):
+{avaliacao_existente[:2500]}
+
+TRANSCRIÇÃO DA LIGAÇÃO:
+{transcricao[:self.max_input_chars]}
+
+Retorne APENAS JSON válido:
+{{
+  "avaliacao_vendedor": {{
+    "nota_final_0_100": 0,
+    "notas_por_categoria": {{
+      "rapport_0_10": 0, "spin_0_30": 0, "valor_produto_0_20": 0,
+      "gatilhos_0_10": 0, "objecoes_0_10": 0, "fechamento_0_15": 0, "clareza_0_5": 0
+    }},
+    "pontos_fortes": [{{"categoria": "...", "ponto": "...", "evidencia": "..."}}],
+    "melhorias": [{{"categoria": "...", "melhoria": "...", "evidencia": "..."}}],
+    "erro_mais_caro": {{"categoria": "...", "descricao": "...", "evidencia": "..."}}
+  }},
+  "avaliacao_lead": {{
+    "lead_score_0_100": 0,
+    "classificacao": "A|B|C|D",
+    "dimensoes": {{
+      "fit_0_30": 0, "intencao_0_30": 0, "orientacao_valor_0_20": 0,
+      "abertura_0_10": 0, "restricoes_invertido_0_10": 0
+    }}
+  }},
+  "extracao": {{
+    "concurso_area": "...",
+    "dores_principais": ["..."],
+    "restricoes": ["..."]
+  }},
+  "recomendacao_final": {{
+    "produto_principal": {{"produto": "Presencial|Live|EAD|Passaporte|Smart|Não identificado"}}
+  }},
+  "confianca_avaliacao": 0.0,
+  "motivo_baixa_confianca": "preencher se < 0.70"
+}}"""
+
+    def reavaliar_transcricao(self, transcricao: str, insight_ia_existente: str = None) -> Dict:
+        """
+        Reavalia transcrição com economia de tokens:
+        - Layer 1: Heurísticas expandidas (0 tokens)
+        - Layer 2: Classificação IA (modelo leve, ~300 tokens)
+        - Layer 3: Prompt condensado de reavaliação (~50% menos tokens)
+        """
+        if not transcricao or len(transcricao.strip()) < 10:
+            return {
+                'erro': 'Transcrição muito curta ou vazia',
+                'classificacao_ligacao': 'erro',
+                'qualidade_atendimento': 'n/a'
+            }
+
+        def _observacoes_whatsapp():
+            if any(p in transcricao.lower() for p in ["whatsapp", "zap", "wpp", "whats"]):
+                return ["Vendedor sugeriu continuar no WhatsApp"]
+            return []
+
+        def _retorno_na(tipo, motivo, confianca, tokens=0):
+            observacoes = _observacoes_whatsapp()
+            return {
+                'avaliacao_completa': json.dumps({
+                    'classificacao_ligacao': tipo,
+                    'motivo_classificacao': motivo,
+                    'confianca_classificacao': confianca,
+                    'observacoes': observacoes,
+                    'reavaliacao': True
+                }, ensure_ascii=False),
+                'tokens_usados': tokens,
+                'nota_vendedor': 0,
+                'lead_score': None,
+                'lead_classificacao': 'NA',
+                'concurso_area': 'Não identificado',
+                'produto_recomendado': 'N/A',
+                'reavaliacao': True,
+                'reavaliacao_motivo': motivo
+            }
+
+        # ── Layer 1: Heurísticas expandidas (0 tokens) ──
+        heuristica = self._heuristica_reavaliacao(transcricao)
+        if heuristica and not heuristica.get('deve_avaliar', False):
+            return _retorno_na(heuristica['tipo'], heuristica['motivo'],
+                               heuristica.get('confianca', 0), tokens=0)
+
+        # ── Layer 2: Classificação IA (modelo leve) ──
+        classificacao = self.classificar_ligacao(transcricao)
+        tipo = classificacao.get('tipo', 'outros')
+        motivo = classificacao.get('motivo', 'Não informado')
+        confianca = classificacao.get('confianca', 0)
+
+        TIPOS_SKIP = {'ura', 'dados_insuficientes', 'dialogo_incompleto',
+                      'ligacao_interna', 'chamada_errada', 'cancelamento', 'suporte'}
+
+        if tipo in TIPOS_SKIP:
+            return _retorno_na(tipo, motivo, confianca,
+                               tokens=classificacao.get('tokens_usados', 0))
+
+        # ── Layer 3: Prompt condensado de reavaliação ──
+        try:
+            info_interloc = self._detectar_troca_interlocutores(transcricao)
+            prompt = self._criar_prompt_reavaliacao(transcricao, insight_ia_existente or '{}')
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system",
+                     "content": "Você é um especialista em análise de vendas educacionais. Retorna sempre JSON válido."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+                max_completion_tokens=min(self.max_tokens, 2000)
+            )
+
+            content = (response.choices[0].message.content or "").strip()
+            if content.startswith("```"):
+                content = content.strip("`")
+                if content.lower().startswith("json"):
+                    content = content[4:].strip()
+
+            resultado = json.loads(content)
+            resultado['classificacao_ligacao'] = tipo
+            resultado['motivo_classificacao'] = motivo
+            resultado['confianca_classificacao'] = confianca
+            resultado['interlocutores_invertidos'] = info_interloc.get('interlocutores_invertidos')
+            resultado['confianca_interlocutores'] = info_interloc.get('confianca_interlocutores')
+            resultado['motivo_interlocutores'] = info_interloc.get('motivo_interlocutores')
+            resultado['reavaliacao'] = True
+
+            observacoes = _observacoes_whatsapp()
+            if observacoes:
+                obs_existente = resultado.get('observacoes', [])
+                if not isinstance(obs_existente, list):
+                    obs_existente = []
+                for o in observacoes:
+                    if o not in obs_existente:
+                        obs_existente.append(o)
+                resultado['observacoes'] = obs_existente
+
+            tokens_avaliacao = getattr(getattr(response, "usage", None), "total_tokens", None)
+            tokens_classificacao = classificacao.get('tokens_usados')
+            tokens_usados = None
+            if tokens_avaliacao is not None or tokens_classificacao is not None:
+                tokens_usados = (tokens_avaliacao or 0) + (tokens_classificacao or 0)
+
+            return {
+                'avaliacao_completa': json.dumps(resultado, ensure_ascii=False),
+                'tokens_usados': tokens_usados,
+                'nota_vendedor': resultado.get('avaliacao_vendedor', {}).get('nota_final_0_100', 0),
+                'lead_score': resultado.get('avaliacao_lead', {}).get('lead_score_0_100', 0),
+                'lead_classificacao': resultado.get('avaliacao_lead', {}).get('classificacao', 'D'),
+                'concurso_area': resultado.get('extracao', {}).get('concurso_area', 'Não identificado'),
+                'produto_recomendado': resultado.get('recomendacao_final', {}).get('produto_principal', {}).get('produto', 'N/A'),
+                'confianca_avaliacao': resultado.get('confianca_avaliacao'),
+                'reavaliacao': True,
+                'reavaliacao_motivo': 'Reavaliação completa com prompt otimizado'
+            }
+
+        except json.JSONDecodeError as e:
+            return {'erro': f'Erro ao decodificar JSON na reavaliação: {str(e)}',
+                    'classificacao_ligacao': 'erro'}
+        except Exception as e:
+            return {'erro': f'Erro na reavaliação: {type(e).__name__}: {str(e)}',
+                    'classificacao_ligacao': 'erro'}

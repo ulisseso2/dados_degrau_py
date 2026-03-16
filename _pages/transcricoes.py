@@ -7,6 +7,7 @@ import streamlit as st
 import plotly.express as px
 from collections import Counter
 from datetime import datetime
+import json
 from utils.sql_loader import carregar_dados
 from utils.transcricao_analyzer import TranscricaoOpenAIAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
@@ -27,6 +28,30 @@ def carregar_transcricoes_base():
         .fillna('').astype(str).str.strip().ne('')
     )
     df['avaliavel'] = df.get('avaliavel', pd.Series(0, index=df.index)).astype(bool)
+
+    def _parse_insight(v):
+        if v is None:
+            return {}
+        txt = str(v).strip()
+        if not txt:
+            return {}
+        try:
+            return json.loads(txt)
+        except (TypeError, ValueError):
+            return {}
+
+    insight = df.get('insight_ia', pd.Series(dtype=str)).apply(_parse_insight)
+    df['motivo_nao_avaliacao'] = insight.apply(
+        lambda x: x.get('motivo_classificacao', '')
+        if isinstance(x, dict) and x.get('classificacao_ligacao') and x.get('classificacao_ligacao') != 'venda'
+        else ''
+    )
+    df['observacao_whatsapp'] = insight.apply(
+        lambda x: "; ".join(x.get('observacoes', []))
+        if isinstance(x, dict) and isinstance(x.get('observacoes'), list)
+        else ''
+    )
+
     return df
 
 
@@ -221,6 +246,124 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
 
 
 # ──────────────────────────────────────────────
+# REAVALIAÇÃO EM LOTE (economia de tokens)
+# ──────────────────────────────────────────────
+def _executar_reavaliacao(df_avaliadas: pd.DataFrame):
+    """
+    Reavalia transcrições já avaliadas usando prompt otimizado.
+    Economia de tokens:
+    - Heurísticas expandidas eliminam chamadas NA sem usar API
+    - Classificação usa modelo leve (~300 tokens)
+    - Prompt de reavaliação ~50% menor que avaliação completa
+    """
+    if df_avaliadas.empty:
+        return
+
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    ia = TranscricaoOpenAIAnalyzer()
+    total = len(df_avaliadas)
+    bar = st.progress(0)
+    status_txt = st.empty()
+
+    lock = threading.Lock()
+    concluidos = [0]
+    sucesso_count = [0]
+    na_count = [0]
+    erros_count = [0]
+    tokens_total = [0]
+    mensagens = []
+
+    tasks = []
+    for _, row in df_avaliadas.iterrows():
+        tid = row.get('transcricao_id')
+        nome = row.get('nome_lead', f'ID {tid}')
+        tx = str(row.get('transcricao', '') or '')
+        insight_existente = str(row.get('insight_ia', '') or '')
+        tasks.append((tid, nome, tx, insight_existente, row))
+
+    def _reavaliar_uma(task):
+        tid, nome, tx, insight_existente, row_data = task
+
+        if not tx or len(tx.strip()) < 50:
+            return (tid, nome, 'insuficiente', None, 0)
+
+        try:
+            analise = ia.reavaliar_transcricao(tx, insight_existente)
+
+            if 'erro' in analise:
+                return (tid, nome, 'erro_ia', analise['erro'], 0)
+
+            tokens = analise.get('tokens_usados') or 0
+            status_r = 'na' if analise.get('lead_classificacao') == 'NA' else 'reavaliada'
+
+            ok, err = atualizar_avaliacao_transcricao(
+                transcricao_id=tid,
+                insight_ia=analise.get('avaliacao_completa'),
+                evaluation_ia=analise.get('nota_vendedor'),
+                created_at=row_data.get('data_trancricao'),
+                agent=row_data.get('agente'),
+                duration=row_data.get('duracao'),
+                phone=row_data.get('telefone_lead'),
+                type_=row_data.get('tipo_ligacao'),
+            )
+            if ok:
+                return (tid, nome, status_r, analise.get('reavaliacao_motivo'), tokens)
+            return (tid, nome, 'erro_db', err or 'Erro desconhecido', 0)
+
+        except Exception as e:
+            return (tid, nome, 'excecao', str(e), 0)
+
+    MAX_WORKERS = min(4, total)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(_reavaliar_uma, t): t for t in tasks}
+        for future in as_completed(futures):
+            tid, nome, status_r, detalhe, tokens = future.result()
+            with lock:
+                concluidos[0] += 1
+                tokens_total[0] += tokens
+                bar.progress(concluidos[0] / total)
+                status_txt.text(
+                    f"Reavaliadas {concluidos[0]}/{total} "
+                    f"(NA: {na_count[0]} | tokens: ~{tokens_total[0]:,})"
+                )
+                if status_r in ('reavaliada', 'na'):
+                    sucesso_count[0] += 1
+                    if status_r == 'na':
+                        na_count[0] += 1
+                elif status_r == 'insuficiente':
+                    erros_count[0] += 1
+                    mensagens.append(('warning', f"Transcrição insuficiente: {nome}"))
+                else:
+                    erros_count[0] += 1
+                    mensagens.append(('error', f"Erro em {nome}: {detalhe}"))
+
+    bar.empty()
+    status_txt.empty()
+
+    for tipo, msg in mensagens:
+        if tipo == 'warning':
+            st.warning(msg)
+        else:
+            st.error(msg)
+
+    if sucesso_count[0]:
+        st.cache_data.clear()
+        st.success(
+            f"✅ Reavaliação concluída: **{sucesso_count[0]}** processada(s)\n\n"
+            f"- 🔄 Reavaliadas via IA: **{sucesso_count[0] - na_count[0]}**\n"
+            f"- 🚫 Reclassificadas como NA: **{na_count[0]}** (0 tokens)\n"
+            f"- 🪙 Tokens estimados: **~{tokens_total[0]:,}**\n"
+            f"- ❌ Erros: **{erros_count[0]}**"
+        )
+        st.rerun()
+    elif erros_count[0]:
+        st.warning(f"⚠️ {erros_count[0]} erro(s). Nenhuma reavaliação salva.")
+
+
+# ──────────────────────────────────────────────
 # PÁGINA PRINCIPAL
 # ──────────────────────────────────────────────
 def run_page():
@@ -285,6 +428,32 @@ def run_page():
     c2.metric("Avaliáveis", avaliaveis)
     c3.metric("Avaliadas", avaliadas)
     c4.metric("Pendentes", max(0, pendentes))
+
+    # ── Reavaliação do período ────────────────────
+    if avaliadas > 0:
+        with st.expander(f"🔄 Reavaliar período ({avaliadas} avaliada(s))", expanded=False):
+            st.caption(
+                "Reavalia as transcrições já avaliadas no período usando "
+                "heurísticas expandidas e prompt otimizado para economia de tokens."
+            )
+            st.markdown(
+                "**Como funciona:**\n"
+                "- Ligações curtas/incompletas/internas → reclassificadas como **NA** (0 tokens)\n"
+                "- Ligações não-venda via classificação IA → **NA** (~300 tokens)\n"
+                "- Ligações de venda → reavaliação com prompt condensado (~50% menos tokens)"
+            )
+            confirmar = st.checkbox(
+                f"Confirmo a reavaliação de {avaliadas} transcrição(ões)",
+                key="confirmar_reav"
+            )
+            if confirmar:
+                if st.button(
+                    f"🔄 Reavaliar {avaliadas} avaliação(ões)",
+                    type="primary",
+                    key="btn_reavaliar_periodo"
+                ):
+                    df_avaliadas_periodo = df_f[df_f['avaliada']].copy()
+                    _executar_reavaliacao(df_avaliadas_periodo)
 
     # ── Gráfico rápido: ligações por data ────────────────
     _df_por_data = df_f.copy()
@@ -376,7 +545,10 @@ def run_page():
                         _executar_avaliacoes(df_t1, st.session_state.transcricoes_selecionadas)
 
             # ── tabela compacta ──
-            df_tabela = fatia[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa', 'avaliavel', 'avaliada', 'transcricao']].copy()
+            df_tabela = fatia[[
+                'transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa',
+                'avaliavel', 'avaliada', 'motivo_nao_avaliacao', 'observacao_whatsapp', 'transcricao'
+            ]].copy()
             df_tabela['data_ligacao'] = fatia['data_ligacao'].dt.strftime('%d/%m/%Y %H:%M')
             df_tabela['Status'] = fatia['avaliada'].apply(lambda x: '✅' if x else '⏳')
             df_tabela['Avaliável'] = fatia['avaliavel'].apply(lambda x: '🟢' if x else '🔴')
@@ -387,6 +559,8 @@ def run_page():
                 'nome_lead': 'Lead',
                 'agente': 'Agente',
                 'etapa': 'Etapa',
+                'motivo_nao_avaliacao': 'Motivo da não avaliação',
+                'observacao_whatsapp': 'Obs. WhatsApp',
                 'transcricao': 'Transcrição',
             }).drop(columns=['avaliavel', 'avaliada'])
 
@@ -395,6 +569,16 @@ def run_page():
                 use_container_width=True,
                 height=min(400, 36 * len(df_tabela) + 38),
                 column_config={
+                    'Motivo da não avaliação': st.column_config.TextColumn(
+                        'Motivo da não avaliação',
+                        help='Motivo quando a ligação foi marcada como NA (não avaliável).',
+                        width='medium',
+                    ),
+                    'Obs. WhatsApp': st.column_config.TextColumn(
+                        'Obs. WhatsApp',
+                        help='Registro automático quando a conversa migra para WhatsApp.',
+                        width='medium',
+                    ),
                     'Transcrição': st.column_config.TextColumn(
                         'Transcrição',
                         help='Clique na célula para ver a transcrição completa',
@@ -517,7 +701,8 @@ def run_page():
             m1.metric("Total", len(df_av))
             nota_media = df_av['evaluation_ia'].mean()
             m2.metric("Nota média vendedor", f"{nota_media:.1f}" if pd.notna(nota_media) else "—")
-            lead_media = df_av['lead_score'].mean()
+            _lead_validos = df_av.loc[df_av['lead_score'] > 0, 'lead_score']
+            lead_media = _lead_validos.mean() if not _lead_validos.empty else float('nan')
             m3.metric("Lead score médio", f"{lead_media:.1f}" if pd.notna(lead_media) else "—")
 
             # tabela resumo

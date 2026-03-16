@@ -55,13 +55,14 @@ CATEGORIAS POSSÍVEIS (use exatamente um destes valores):
 - "dados_insuficientes": sem contexto suficiente para avaliar
 - "ligacao_interna": conversa entre colaboradores/ramais internos
 - "chamada_errada": pessoa errada/número errado/sem interesse por engano
-    - "cancelamento": solicitação de cancelamento, troca ou reembolso
+- "cancelamento": solicitação de cancelamento, troca ou reembolso
 - "venda": ligação de vendas com conteúdo suficiente
 - "outros": qualquer outro caso
 
 REGRAS:
 - Se não houver interação humana além de URA, classifique como "ura".
-- Se houver poucos turnos e não há contexto, use "dialogo_incompleto".
+- Se houver poucos turnos (ex: menos de 6), use "dialogo_incompleto".
+- Se o cliente disser que está ocupado/dirigindo e encerrar, use "dialogo_incompleto".
 - Se o diálogo existe, mas sem dados mínimos para avaliar, use "dados_insuficientes".
 - Se parecer conversa interna, use "ligacao_interna".
 - Se o lead disser que foi engano, use "chamada_errada".
@@ -88,6 +89,66 @@ TRANSCRIÇÃO (trecho):
                 'tipo': 'dados_insuficientes',
                 'motivo': 'Transcrição muito curta',
                 'confianca': 0.95,
+                'deve_avaliar': False,
+                'tokens_usados': 0
+            }
+
+        turnos_vendedor = texto.count("vendedor:")
+        turnos_cliente = texto.count("cliente:")
+        total_turnos = turnos_vendedor + turnos_cliente
+
+        if turnos_vendedor == 0 or turnos_cliente == 0:
+            return {
+                'tipo': 'dados_insuficientes',
+                'motivo': 'Apenas um lado da conversa identificado',
+                'confianca': 0.8,
+                'deve_avaliar': False,
+                'tokens_usados': 0
+            }
+
+        if total_turnos < 6:
+            return {
+                'tipo': 'dialogo_incompleto',
+                'motivo': 'Conversa muito curta para avaliação',
+                'confianca': 0.85,
+                'deve_avaliar': False,
+                'tokens_usados': 0
+            }
+
+        padroes_interno = [
+            "ramal",
+            "sala",
+            "sala de reunião",
+            "sala de reuniao",
+            "coordenação",
+            "coordenacao",
+            "responsável",
+            "responsavel",
+            "secretaria",
+            "unidade",
+            "carlinhos",
+            "isa",
+            "luna"
+        ]
+
+        padroes_produto = [
+            "curso",
+            "matrícula",
+            "matricula",
+            "turma",
+            "aula",
+            "presencial",
+            "live",
+            "ead",
+            "mensalidade",
+            "pagamento"
+        ]
+
+        if any(p in texto for p in padroes_interno) and not any(p in texto for p in padroes_produto):
+            return {
+                'tipo': 'ligacao_interna',
+                'motivo': 'Conversa interna entre colaboradores/ramais',
+                'confianca': 0.85,
                 'deve_avaliar': False,
                 'tokens_usados': 0
             }
@@ -139,6 +200,32 @@ TRANSCRIÇÃO (trecho):
                 'tokens_usados': 0
             }
 
+        padroes_ocupado = [
+            "estou ocupado",
+            "ocupado agora",
+            "não posso falar",
+            "não posso falar agora",
+            "estou dirigindo",
+            "dirigindo",
+            "no trânsito",
+            "no transito",
+            "ligue depois",
+            "me liga depois",
+            "mais tarde",
+            "retorno depois",
+            "retorno mais tarde",
+            "pode ligar depois"
+        ]
+
+        if any(p in texto for p in padroes_ocupado) and total_turnos < 12:
+            return {
+                'tipo': 'dialogo_incompleto',
+                'motivo': 'Cliente ocupado/dirigindo; conversa interrompida',
+                'confianca': 0.85,
+                'deve_avaliar': False,
+                'tokens_usados': 0
+            }
+
         return None
 
     def _criar_prompt_otimizado(self, transcricao: str, contexto_adicional: Optional[Dict] = None) -> str:
@@ -157,6 +244,64 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
 {contexto_json}
 """
         return prompt_base
+
+    def _detectar_troca_interlocutores(self, transcricao: str) -> Dict:
+        """Detecta possível troca de interlocutores (vendedor/cliente) por heurística."""
+        texto = transcricao.lower()
+
+        if "vendedor:" not in texto or "cliente:" not in texto:
+            return {
+                "interlocutores_invertidos": False,
+                "confianca_interlocutores": 0.0,
+                "motivo_interlocutores": "Rótulos vendedor/cliente ausentes ou incompletos"
+            }
+
+        vendor_keywords = [
+            "curso",
+            "matrícula",
+            "matricula",
+            "mensalidade",
+            "parcelamento",
+            "turma",
+            "aulas",
+            "horário",
+            "horario",
+            "unidade",
+            "presencial",
+            "live",
+            "ead",
+            "desconto",
+            "promoção",
+            "promocao",
+            "pagamento",
+            "boleto",
+            "pix",
+            "cartão",
+            "cartao"
+        ]
+
+        def _contar_keywords(prefixo: str) -> int:
+            linhas = [l for l in texto.splitlines() if l.strip().startswith(prefixo)]
+            if not linhas:
+                return 0
+            joined = " ".join(linhas)
+            return sum(joined.count(k) for k in vendor_keywords)
+
+        score_vendedor = _contar_keywords("vendedor:")
+        score_cliente = _contar_keywords("cliente:")
+
+        if score_cliente >= score_vendedor + 3:
+            return {
+                "interlocutores_invertidos": True,
+                "confianca_interlocutores": 0.7,
+                "motivo_interlocutores": "Cliente tem mais termos típicos do vendedor"
+            }
+
+        return {
+            "interlocutores_invertidos": False,
+            "confianca_interlocutores": 0.6 if score_vendedor > 0 else 0.3,
+            "motivo_interlocutores": "Distribuição de termos compatível com os rótulos"
+        }
 
     def analisar_transcricao(self, transcricao: str, contexto_adicional: Optional[Dict] = None) -> Dict:
         """
@@ -191,6 +336,8 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
             }
 
         try:
+            info_interlocutores = self._detectar_troca_interlocutores(transcricao)
+
             classificacao = self.classificar_ligacao(transcricao)
             tipo = classificacao.get('tipo', 'outros')
             motivo = classificacao.get('motivo', 'Não informado')
@@ -204,6 +351,10 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                 if tipo == 'outros' and isinstance(motivo, str) and motivo.lower().startswith('erro ao classificar'):
                     deve_avaliar = True
                 else:
+                    observacoes = []
+                    if any(p in transcricao.lower() for p in ["whatsapp", "zap", "wpp", "whats"]):
+                        observacoes.append("Vendedor sugeriu continuar no WhatsApp")
+
                     retorno_minimo = {
                         'classificacao_ligacao': tipo,
                         'motivo_classificacao': motivo,
@@ -211,18 +362,21 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                         'avaliacao_completa': json.dumps({
                             'classificacao_ligacao': tipo,
                             'motivo_classificacao': motivo,
-                            'confianca_classificacao': confianca
+                            'confianca_classificacao': confianca,
+                            'observacoes': observacoes
                         }, ensure_ascii=False),
                         'tokens_usados': classificacao.get('tokens_usados'),
                         'nota_vendedor': 0,
-                        'lead_score': 0,
-                        'lead_classificacao': 'D',
+                        'lead_score': None,
+                        'lead_classificacao': 'NA',
                         'concurso_area': 'Não identificado',
                         'produto_recomendado': 'N/A'
                     }
                     return retorno_minimo
 
-            prompt = self._criar_prompt_otimizado(transcricao, contexto_adicional)
+            contexto_completo = contexto_adicional.copy() if isinstance(contexto_adicional, dict) else {}
+            contexto_completo.update(info_interlocutores)
+            prompt = self._criar_prompt_otimizado(transcricao, contexto_completo)
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -250,9 +404,18 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
 
             resultado = json.loads(content)
 
+            observacoes = []
+            if any(p in transcricao.lower() for p in ["whatsapp", "zap", "wpp", "whats"]):
+                observacoes.append("Vendedor sugeriu continuar no WhatsApp")
+
             resultado['classificacao_ligacao'] = tipo
             resultado['motivo_classificacao'] = motivo
             resultado['confianca_classificacao'] = confianca
+            resultado['interlocutores_invertidos'] = info_interlocutores.get('interlocutores_invertidos')
+            resultado['confianca_interlocutores'] = info_interlocutores.get('confianca_interlocutores')
+            resultado['motivo_interlocutores'] = info_interlocutores.get('motivo_interlocutores')
+            if observacoes:
+                resultado['observacoes'] = observacoes
             
             # Retorna resultado completo com estrutura do avaliacao.txt
             tokens_avaliacao = getattr(getattr(response, "usage", None), "total_tokens", None)

@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime
 
 # Adiciona o diretório raiz ao path para encontrar os módulos
@@ -32,6 +33,7 @@ def run_page():
     # Converte tipos de dados e fuso horário em um só lugar
     df['data_aula'] = pd.to_datetime(df['data_aula'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
     df['valor_rateio_aula'] = pd.to_numeric(df['valor_rateio_aula'], errors='coerce')
+    df['carga_horaria_decimal'] = pd.to_numeric(df['carga_horaria_decimal'], errors='coerce')
     
     # --- 2. FILTROS NA BARRA LATERAL ---
     st.sidebar.header("Filtros de Análise")
@@ -122,7 +124,7 @@ def run_page():
     st.header("Detalhamento das Aulas")
     
     colunas_para_exibir = [
-        'data_aula', 'unidade', 'turma_nome', 'curso', 'professor', 'status_aula', 'valor_rateio_aula'
+        'data_aula', 'unidade', 'turma_nome', 'curso', 'professor', 'status_aula', 'carga_horaria_decimal', 'valor_rateio_aula'
     ]
     df_exibicao = df_filtrado[colunas_para_exibir].sort_values(by='data_aula', ascending=False)
     
@@ -132,6 +134,105 @@ def run_page():
         hide_index=True,
         column_config={
             "data_aula": st.column_config.DatetimeColumn("Data da Aula", format="DD/MM/YYYY"),
+            "carga_horaria_decimal": st.column_config.NumberColumn("Horas", format="%.2f"),
             "valor_rateio_aula": st.column_config.NumberColumn("Custo Previsto (R$)", format="R$ %.2f")
         }
+    )
+
+    # --- Exportar para Excel ---
+    tabela_para_exportar = df_exibicao.copy()
+    tabela_para_exportar['data_aula'] = tabela_para_exportar['data_aula'].dt.tz_localize(None)
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        tabela_para_exportar.to_excel(writer, index=False, sheet_name='Custo por Aula')
+    buffer.seek(0)
+    st.download_button(
+        label="📥 Exportar para Excel",
+        data=buffer,
+        file_name="custo_por_aula.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_custo_aula"
+    )
+
+    st.divider()
+
+    # --- 5. TABELA AGRUPADA POR CURSO ---
+    st.header("📚 Custo Previsto por Curso")
+    cursos_disponiveis = sorted(df_filtrado['curso'].dropna().unique())
+    cursos_filtro = st.multiselect(
+        "Filtrar cursos:", cursos_disponiveis, default=cursos_disponiveis, key="filtro_curso_agrupado"
+    )
+    df_por_curso = (
+        df_filtrado[df_filtrado['curso'].isin(cursos_filtro)]
+        .groupby('curso', dropna=False)
+        .agg(
+            total_aulas=('aula_id', 'nunique'),
+            total_horas=('carga_horaria_decimal', 'sum'),
+            custo_previsto=('valor_rateio_aula', 'sum')
+        )
+        .reset_index()
+        .sort_values(by='custo_previsto', ascending=False)
+    )
+    st.dataframe(
+        df_por_curso,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "curso": "Curso",
+            "total_aulas": st.column_config.NumberColumn("Total de Aulas"),
+            "total_horas": st.column_config.NumberColumn("Total de Horas", format="%.2f"),
+            "custo_previsto": st.column_config.NumberColumn("Custo Previsto (R$)", format="R$ %.2f")
+        }
+    )
+
+    buffer_curso = io.BytesIO()
+    with pd.ExcelWriter(buffer_curso, engine='xlsxwriter') as writer:
+        df_por_curso.to_excel(writer, index=False, sheet_name='Custo por Curso')
+    buffer_curso.seek(0)
+    st.download_button(
+        label="📥 Exportar Cursos para Excel",
+        data=buffer_curso,
+        file_name="custo_por_curso.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_custo_curso"
+    )
+
+    st.divider()
+
+    # --- 6. TABELA AGRUPADA POR TURMA ---
+    st.header("🏫 Custo Previsto por Turma")
+    df_por_turma = (
+        df_filtrado
+        .groupby(['turma_nome', 'curso'], dropna=False)
+        .agg(
+            total_aulas=('aula_id', 'nunique'),
+            total_horas=('carga_horaria_decimal', 'sum'),
+            custo_previsto=('valor_rateio_aula', 'sum')
+        )
+        .reset_index()
+        .sort_values(by='custo_previsto', ascending=False)
+    )
+    st.dataframe(
+        df_por_turma,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "turma_nome": "Turma",
+            "curso": "Curso",
+            "total_aulas": st.column_config.NumberColumn("Total de Aulas"),
+            "total_horas": st.column_config.NumberColumn("Total de Horas", format="%.2f"),
+            "custo_previsto": st.column_config.NumberColumn("Custo Previsto (R$)", format="R$ %.2f")
+        }
+    )
+
+    buffer_turma = io.BytesIO()
+    with pd.ExcelWriter(buffer_turma, engine='xlsxwriter') as writer:
+        df_por_turma.to_excel(writer, index=False, sheet_name='Custo por Turma')
+    buffer_turma.seek(0)
+    st.download_button(
+        label="📥 Exportar Turmas para Excel",
+        data=buffer_turma,
+        file_name="custo_por_turma.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_custo_turma"
     )

@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from collections import Counter
 import re as _re
+import json
 from datetime import datetime
 from utils.sql_loader import carregar_dados
 
@@ -28,7 +29,7 @@ _CAT_LABELS = {
 
 _CORES_CLASS = {
     'A': '#00CC96', 'B': '#636EFA',
-    'C': '#FFA15A', 'D': '#EF553B', '—': '#AAAAAA',
+    'C': '#FFA15A', 'D': '#EF553B', 'NA': '#999999', '—': '#AAAAAA',
 }
 
 # ──────────────────────────────────────────────
@@ -55,6 +56,29 @@ def _carregar_dados() -> pd.DataFrame:
     ).fillna('—')
     df['duracao_seg'] = pd.to_numeric(df.get('duracao'), errors='coerce')
     df['duracao_min'] = df['duracao_seg'] / 60
+
+    def _parse_insight(v):
+        if v is None:
+            return {}
+        txt = str(v).strip()
+        if not txt:
+            return {}
+        try:
+            return json.loads(txt)
+        except (TypeError, ValueError):
+            return {}
+
+    insight = df.get('insight_ia', pd.Series(dtype=str)).apply(_parse_insight)
+    df['classificacao_ligacao'] = insight.apply(lambda x: x.get('classificacao_ligacao', '') if isinstance(x, dict) else '')
+    df['motivo_nao_avaliacao'] = insight.apply(
+        lambda x: x.get('motivo_classificacao', '') if isinstance(x, dict) and x.get('classificacao_ligacao') and x.get('classificacao_ligacao') != 'venda' else ''
+    )
+    df['observacao_whatsapp'] = insight.apply(
+        lambda x: "; ".join(x.get('observacoes', [])) if isinstance(x, dict) and isinstance(x.get('observacoes'), list) else ''
+    )
+    lead_json = insight.apply(lambda x: x.get('lead_classificacao') if isinstance(x, dict) else None)
+    df['lead_classification'] = lead_json.where(lead_json.notna(), df['lead_classification'])
+
     return df
 
 
@@ -333,10 +357,12 @@ def run_page():
     pendentes  = max(0, avaliaveis - avaliadas)
     taxa_aval  = _safe_pct(avaliadas, avaliaveis)
     nota_media = df_av['evaluation_ia'].mean() if not df_av.empty else float('nan')
-    lead_media = df_av['lead_score'].mean()    if not df_av.empty else float('nan')
+    _lead_validos = df_av.loc[df_av['lead_score'] > 0, 'lead_score'] if not df_av.empty else pd.Series(dtype=float)
+    lead_media = _lead_validos.mean() if not _lead_validos.empty else float('nan')
+    _df_classificados = df_av[df_av['lead_classification'].isin(['A', 'B', 'C', 'D'])] if not df_av.empty else df_av
     pct_ab     = (
-        _safe_pct(df_av['lead_classification'].isin(['A', 'B']).sum(), len(df_av))
-        if not df_av.empty else 0.0
+        _safe_pct(_df_classificados['lead_classification'].isin(['A', 'B']).sum(), len(_df_classificados))
+        if not _df_classificados.empty else 0.0
     )
 
     st.markdown("### 📌 Resumo do Período")
@@ -504,10 +530,17 @@ def run_page():
                     nota_media=('evaluation_ia', 'mean'),
                     nota_min=('evaluation_ia', 'min'),
                     nota_max=('evaluation_ia', 'max'),
-                    lead_score_medio=('lead_score', 'mean'),
                 )
                 .reset_index()
             )
+            # lead_score médio excluindo 0/NA
+            _lead_por_agente = (
+                df_av[df_av['lead_score'] > 0]
+                .groupby('agente')['lead_score'].mean()
+                .reset_index(name='lead_score_medio')
+            )
+            df_rank = df_rank.merge(_lead_por_agente, on='agente', how='left')
+            df_rank['lead_score_medio'] = df_rank['lead_score_medio'].fillna(0)
             for cls in ['A', 'B', 'C', 'D']:
                 tmp = (
                     df_av[df_av['lead_classification'] == cls]
@@ -854,8 +887,10 @@ def run_page():
             df_ag       = df_av[df_av['agente'] == agente_rel].copy()
             media_time  = df_av['evaluation_ia'].mean()
             nota_ag     = df_ag['evaluation_ia'].mean()
-            lead_ag     = df_ag['lead_score'].mean()
-            pct_ab_ag   = df_ag['lead_classification'].isin(['A', 'B']).mean() * 100
+            _lead_ag_validos = df_ag.loc[df_ag['lead_score'] > 0, 'lead_score']
+            lead_ag     = _lead_ag_validos.mean() if not _lead_ag_validos.empty else 0
+            _df_ag_class = df_ag[df_ag['lead_classification'].isin(['A', 'B', 'C', 'D'])]
+            pct_ab_ag   = _df_ag_class['lead_classification'].isin(['A', 'B']).mean() * 100 if not _df_ag_class.empty else 0
             pos_ranking = agentes_ord.index(agente_rel) + 1
 
             st.markdown(f"## 📋 Relatório: {agente_rel}")
@@ -999,9 +1034,16 @@ def run_page():
                 'evaluation_ia', 'lead_score', 'lead_classification',
                 'etapa', 'transcricao',
             ]
-            # confianca_classificacao
+            # campos adicionais
+            extras = []
+            if 'motivo_nao_avaliacao' in df_ag.columns:
+                extras.append('motivo_nao_avaliacao')
+            if 'observacao_whatsapp' in df_ag.columns:
+                extras.append('observacao_whatsapp')
             if 'confianca_classificacao' in df_ag.columns:
-                _cols_tab.insert(7, 'confianca_classificacao')
+                extras.append('confianca_classificacao')
+            if extras:
+                _cols_tab = _cols_tab[:6] + extras + _cols_tab[6:]
             # tipo_classificacao_ia vem do JSON; fallback para tipo_ligacao se ausente
             if 'tipo_classificacao_ia' in df_ag.columns:
                 _cols_tab.insert(6, 'tipo_classificacao_ia')
@@ -1019,6 +1061,8 @@ def run_page():
                 'nome_lead':                'Lead',
                 'lead_score':               'Score Lead',
                 'lead_classification':      'Classificação',
+                'motivo_nao_avaliacao':     'Motivo da não avaliação',
+                'observacao_whatsapp':      'Obs. WhatsApp',
                 'tipo_classificacao_ia':    'Tipo IA',
                 'tipo_ligacao':             'Tipo IA',
                 'confianca_classificacao':  'Confiança IA',
@@ -1072,6 +1116,16 @@ def run_page():
                 use_container_width=True,
                 height=320,
                 column_config={
+                    'Motivo da não avaliação': st.column_config.TextColumn(
+                        'Motivo da não avaliação',
+                        help='Motivo quando a ligação foi marcada como NA (não avaliável).',
+                        width='medium',
+                    ),
+                    'Obs. WhatsApp': st.column_config.TextColumn(
+                        'Obs. WhatsApp',
+                        help='Registro automático quando a conversa migra para WhatsApp.',
+                        width='medium',
+                    ),
                     'Transcrição': st.column_config.TextColumn(
                         'Transcrição',
                         help='Clique na célula para ver a transcrição completa',
