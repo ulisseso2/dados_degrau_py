@@ -247,9 +247,26 @@ def run_page():
     # 7. RELATÓRIO CONSOLIDADO DE TURMA
     # ==========================================================================
     st.header("📋 Relatório Consolidado de Turma")
+    st.markdown("os filtros abaixo impactam apenas o relatório consolidado, permitindo uma análise mais detalhada por turma.")
 
     # DataFrame base: mesma empresa selecionada no filtro da página
     df_consolidado_base = df[df['empresa'] == empresa_selecionada].copy()
+
+    # Carregar matrículas por turma
+    df_matriculas = carregar_dados("consultas/turmas/matriculas_turma.sql")
+    df_matriculas['valor'] = pd.to_numeric(df_matriculas['valor'], errors='coerce')
+    df_matriculas = df_matriculas[df_matriculas['empresa'] == empresa_selecionada]
+    df_mat_turma = (
+        df_matriculas
+        .groupby('turma_id', dropna=False)
+        .agg(matriculas=('order_id', 'nunique'), faturado=('valor', 'sum'))
+        .reset_index()
+    )
+
+    # Carregar valor para iniciar por turma
+    df_valor_iniciar = carregar_dados("consultas/turmas/curso_valor_iniciar.sql")
+    df_valor_iniciar['valor_iniciar'] = pd.to_numeric(df_valor_iniciar['valor_iniciar'], errors='coerce')
+    df_valor_iniciar = df_valor_iniciar[['turma_id', 'valor_iniciar']].drop_duplicates()
 
     # --- Filtros independentes ---
     col_f1, col_f2 = st.columns(2)
@@ -356,26 +373,48 @@ def run_page():
         .rename(columns={'turma_nome_comp': 'turma_compartilhada'})
     )
 
+    # --- Colunas auxiliares para aulas dadas e não compartilhadas ---
+    hoje_ts = pd.Timestamp.now(tz=TIMEZONE)
+    df_cons['aula_dada'] = df_cons['data_aula'] <= hoje_ts
+    df_cons['aula_exclusiva'] = df_cons['turmas_compartilhadas'] == 1
+
     # --- Tabela agrupada por turma ---
     df_cons_turma = (
         df_cons
         .groupby(['turma_id', 'turma_nome', 'curso'], dropna=False)
         .agg(
             data_prevista=('data_prevista', 'first'),
+            tipo_turma=('tipo_turma', 'first'),
             inicio_grade=('inicio_grade', 'first'),
             turno=('turno', 'first'),
             total_aulas=('aula_id', 'nunique'),
+            aulas_dadas=('aula_dada', 'sum'),
+            aulas_nao_compartilhadas=('aula_exclusiva', 'sum'),
             total_horas=('carga_horaria_decimal', 'sum'),
             custo_previsto=('valor_rateio_aula', 'sum')
         )
         .reset_index()
     )
+    df_cons_turma['aulas_dadas'] = df_cons_turma['aulas_dadas'].astype(int)
+    df_cons_turma['aulas_nao_compartilhadas'] = df_cons_turma['aulas_nao_compartilhadas'].astype(int)
     df_cons_turma = df_cons_turma.merge(turma_compartilhada_map, on='turma_nome', how='left')
     df_cons_turma['turma_compartilhada'] = df_cons_turma['turma_compartilhada'].fillna('')
 
+    # Merge com matrículas
+    df_cons_turma = df_cons_turma.merge(df_mat_turma, on='turma_id', how='left')
+    df_cons_turma['matriculas'] = df_cons_turma['matriculas'].fillna(0).astype(int)
+    df_cons_turma['faturado'] = df_cons_turma['faturado'].fillna(0)
+
+    # Merge com valor para iniciar
+    df_cons_turma = df_cons_turma.merge(df_valor_iniciar, on='turma_id', how='left')
+
+    df_cons_turma['resultado'] = df_cons_turma['faturado'] - df_cons_turma['custo_previsto']
+
     colunas_cons = [
-        'turma_nome', 'data_prevista', 'curso', 'inicio_grade',
-        'turno', 'turma_compartilhada', 'total_aulas', 'total_horas', 'custo_previsto'
+        'turma_nome', 'data_prevista', 'curso', 'tipo_turma', 'valor_iniciar', 'inicio_grade',
+        'turno', 'turma_compartilhada', 'total_aulas', 'aulas_dadas',
+        'aulas_nao_compartilhadas', 'total_horas', 'custo_previsto',
+        'matriculas', 'faturado', 'resultado'
     ]
     df_cons_exib = df_cons_turma[colunas_cons].sort_values(by='turma_nome')
 
@@ -384,15 +423,22 @@ def run_page():
         use_container_width=True,
         hide_index=True,
         column_config={
-            "turma_nome": "Turma",
-            "data_prevista": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
-            "curso": "Curso",
-            "inicio_grade": st.column_config.DatetimeColumn("Início Grade", format="DD/MM/YYYY"),
-            "turno": "Turno",
-            "turma_compartilhada": "Turmas Compartilhadas",
-            "total_aulas": st.column_config.NumberColumn("Total de Aulas"),
-            "total_horas": st.column_config.NumberColumn("Total de Horas", format="%.2f"),
-            "custo_previsto": st.column_config.NumberColumn("Custo Previsto (R$)", format="R$ %.2f")
+            "turma_nome": st.column_config.TextColumn("Turma", width="small"),
+            "data_prevista": st.column_config.DateColumn("Data\nPrevista", format="DD/MM/YYYY"),
+            "curso": st.column_config.TextColumn("Curso", width="medium"),
+            "tipo_turma": st.column_config.TextColumn("Tipo\nTurma", width="small"),
+            "valor_iniciar": st.column_config.NumberColumn("Valor\nIniciar (R$)", format="R$ %.2f"),
+            "inicio_grade": st.column_config.DatetimeColumn("Início\nGrade", format="DD/MM/YYYY"),
+            "turno": st.column_config.TextColumn("Turno", width="small"),
+            "turma_compartilhada": st.column_config.TextColumn("Turmas\nCompartilhadas", width="medium"),
+            "total_aulas": st.column_config.NumberColumn("Total\nAulas"),
+            "aulas_dadas": st.column_config.NumberColumn("Aulas\nDadas"),
+            "aulas_nao_compartilhadas": st.column_config.NumberColumn("Aulas Não\nCompart."),
+            "total_horas": st.column_config.NumberColumn("Total\nHoras", format="%.2f"),
+            "custo_previsto": st.column_config.NumberColumn("Custo\nPrevisto (R$)", format="R$ %.2f"),
+            "matriculas": st.column_config.NumberColumn("Matrículas"),
+            "faturado": st.column_config.NumberColumn("Faturado\n(R$)", format="R$ %.2f"),
+            "resultado": st.column_config.NumberColumn("Resultado\n(R$)", format="R$ %.2f")
         }
     )
 

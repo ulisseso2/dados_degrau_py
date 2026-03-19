@@ -3,6 +3,7 @@ SELECT
     c.name AS turma_nome,
     c.confirmed_date AS data_confirmacao,
     cm.name AS modalidade,
+    c.start_type AS tipo_turma,
     cp_max.data_prevista as data_prevista,
     MIN(gl.date) OVER (PARTITION BY c.id) AS inicio_grade,
     s.name as turno,
