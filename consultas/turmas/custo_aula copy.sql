@@ -1,11 +1,6 @@
 SELECT
     c.id AS turma_id,
     c.name AS turma_nome,
-    c.confirmed_date AS data_confirmacao,
-    cm.name AS modalidade,
-    cp_max.data_prevista as data_prevista,
-    MIN(gl.date) OVER (PARTITION BY c.id) AS inicio_grade,
-    s.name as turno,
     CASE WHEN c.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS empresa,
     cu.title AS curso,
     cs.name AS curso_venda,
@@ -39,13 +34,6 @@ FROM seducar.classrooms c
 LEFT JOIN seducar.courses cu ON c.course_id = cu.id
 LEFT JOIN seducar.course_sales cs ON cu.course_sale_id = cs.id
 LEFT JOIN seducar.units un ON c.unit_id = un.id
-LEFT JOIN seducar.classroom_modalities cm ON c.classroom_modality_id = cm.id
-LEFT JOIN (
-    SELECT classroom_id, MAX(date) as data_prevista
-    FROM seducar.classroom_postponements
-    GROUP BY classroom_id
-) cp_max ON c.id = cp_max.classroom_id
-LEFT JOIN seducar.shifts s ON c.shift_id = s.id
 LEFT JOIN seducar.grids g ON g.classroom_id = c.id
 LEFT JOIN seducar.grid_x_lessons gxl ON gxl.grid_id = g.id
 LEFT JOIN seducar.grid_lessons gl ON gxl.grid_lesson_id = gl.id

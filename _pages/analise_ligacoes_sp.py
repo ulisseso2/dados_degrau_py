@@ -174,16 +174,6 @@ def _gerar_html_relatorio(
                            for lbl, lo, hi, cor in faixas)
             graficos_html += f'<div class="chart-box"><h3>&#128202; Distribuição de Notas</h3><div class="bar-chart">{bars}</div></div>'
 
-        # 2) Classificação de Leads
-        if 'lead_classification' in df_raw.columns:
-            lead_vc = df_raw['lead_classification'].dropna().value_counts()
-            if not lead_vc.empty:
-                CORES_LEAD = {'A': '#28a745', 'B': '#17a2b8', 'C': '#ffc107', 'D': '#dc3545'}
-                total_leads = int(lead_vc.sum())
-                bars_l = "".join(_barra(cls, int(lead_vc.get(cls, 0)), total_leads, CORES_LEAD.get(cls, '#999'))
-                                 for cls in ['A', 'B', 'C', 'D'])
-                graficos_html += f'<div class="chart-box"><h3>&#127919; Classificação de Leads</h3><div class="bar-chart">{bars_l}</div></div>'
-
         graficos_section = f'<div class="charts-row">{graficos_html}</div>' if graficos_html else ""
 
         # 3) Pontos Fortes
@@ -359,13 +349,6 @@ def run_page():
     pendentes  = max(0, avaliaveis - avaliadas)
     taxa_aval  = _safe_pct(avaliadas, avaliaveis)
     nota_media = df_av['evaluation_ia'].mean() if not df_av.empty else float('nan')
-    _lead_validos = df_av.loc[df_av['lead_score'] > 0, 'lead_score'] if not df_av.empty else pd.Series(dtype=float)
-    lead_media = _lead_validos.mean() if not _lead_validos.empty else float('nan')
-    _df_classificados = df_av[df_av['lead_classification'].isin(['A', 'B', 'C', 'D'])] if not df_av.empty else df_av
-    pct_ab     = (
-        _safe_pct(_df_classificados['lead_classification'].isin(['A', 'B']).sum(), len(_df_classificados))
-        if not _df_classificados.empty else 0.0
-    )
 
     st.markdown("### 📌 Resumo do Período")
     k1, k2, k3 = st.columns(3)
@@ -438,60 +421,42 @@ def run_page():
         )
         st.plotly_chart(fig_tempo, use_container_width=True)
 
-        # ── Linha 2: classificação + duração ──
-        col_v2, col_v3 = st.columns(2)
-
-        with col_v2:
-            st.markdown("#### 🏷️ Classificação dos Leads")
+        # ── Duração Média por Tipo ──
+        st.markdown("#### ⏱️ Duração Média por Tipo")
+        df_dur = (
+            df_base.dropna(subset=['tipo_ligacao', 'duracao_min'])
+            .groupby('tipo_ligacao')
+            .agg(duracao_media=('duracao_min', 'mean'), qtd=('transcricao_id', 'count'))
+            .reset_index()
+            .rename(columns={'tipo_ligacao': 'Tipo', 'duracao_media': 'Duração Média (min)'})
+            .sort_values('Duração Média (min)', ascending=False)
+        )
+        if not df_dur.empty:
             if not df_av.empty:
-                df_cl = df_av['lead_classification'].value_counts().reset_index()
-                df_cl.columns = ['Classificação', 'Qtd']
-                fig_pie = px.pie(
-                    df_cl, names='Classificação', values='Qtd',
-                    color='Classificação', color_discrete_map=_CORES_CLASS, hole=0.45,
+                nota_tipo = (
+                    df_av.dropna(subset=['tipo_ligacao', 'evaluation_ia'])
+                    .groupby('tipo_ligacao')['evaluation_ia']
+                    .mean().reset_index()
+                    .rename(columns={'tipo_ligacao': 'Tipo', 'evaluation_ia': 'nota_media'})
                 )
-                fig_pie.update_traces(textinfo='percent+label')
-                fig_pie.update_layout(height=270, margin=dict(t=10, b=10))
-                st.plotly_chart(fig_pie, use_container_width=True)
+                df_dur = df_dur.merge(nota_tipo, on='Tipo', how='left')
+                df_dur['label_bar'] = df_dur.apply(
+                    lambda r: f"n={int(r['qtd'])} | ⭐{r['nota_media']:.0f}"
+                    if pd.notna(r.get('nota_media')) else f"n={int(r['qtd'])}",
+                    axis=1,
+                )
             else:
-                st.info("Sem avaliações no período.")
-
-        with col_v3:
-            st.markdown("#### ⏱️ Duração Média por Tipo")
-            df_dur = (
-                df_base.dropna(subset=['tipo_ligacao', 'duracao_min'])
-                .groupby('tipo_ligacao')
-                .agg(duracao_media=('duracao_min', 'mean'), qtd=('transcricao_id', 'count'))
-                .reset_index()
-                .rename(columns={'tipo_ligacao': 'Tipo', 'duracao_media': 'Duração Média (min)'})
-                .sort_values('Duração Média (min)', ascending=False)
+                df_dur['label_bar'] = df_dur['qtd'].apply(lambda x: f"n={int(x)}")
+            fig_dur = px.bar(
+                df_dur, x='Tipo', y='Duração Média (min)',
+                text='label_bar',
+                color_discrete_sequence=['#AB63FA'],
             )
-            if not df_dur.empty:
-                if not df_av.empty:
-                    nota_tipo = (
-                        df_av.dropna(subset=['tipo_ligacao', 'evaluation_ia'])
-                        .groupby('tipo_ligacao')['evaluation_ia']
-                        .mean().reset_index()
-                        .rename(columns={'tipo_ligacao': 'Tipo', 'evaluation_ia': 'nota_media'})
-                    )
-                    df_dur = df_dur.merge(nota_tipo, on='Tipo', how='left')
-                    df_dur['label_bar'] = df_dur.apply(
-                        lambda r: f"n={int(r['qtd'])} | ⭐{r['nota_media']:.0f}"
-                        if pd.notna(r.get('nota_media')) else f"n={int(r['qtd'])}",
-                        axis=1,
-                    )
-                else:
-                    df_dur['label_bar'] = df_dur['qtd'].apply(lambda x: f"n={int(x)}")
-                fig_dur = px.bar(
-                    df_dur, x='Tipo', y='Duração Média (min)',
-                    text='label_bar',
-                    color_discrete_sequence=['#AB63FA'],
-                )
-                fig_dur.update_traces(textposition='outside')
-                fig_dur.update_layout(height=270, margin=dict(t=10, b=10), showlegend=False)
-                st.plotly_chart(fig_dur, use_container_width=True)
-            else:
-                st.info("Sem dados de duração.")
+            fig_dur.update_traces(textposition='outside')
+            fig_dur.update_layout(height=270, margin=dict(t=10, b=10), showlegend=False)
+            st.plotly_chart(fig_dur, use_container_width=True)
+        else:
+            st.info("Sem dados de duração.")
 
         # ── Linha 3: produtos ────────────────────
         st.markdown("#### 🎓 Produtos Mais Recomendados")
@@ -532,25 +497,6 @@ def run_page():
                 )
                 .reset_index()
             )
-            # lead_score médio excluindo 0/NA
-            _lead_por_agente = (
-                df_av[df_av['lead_score'] > 0]
-                .groupby('agente')['lead_score'].mean()
-                .reset_index(name='lead_score_medio')
-            )
-            df_rank = df_rank.merge(_lead_por_agente, on='agente', how='left')
-            df_rank['lead_score_medio'] = df_rank['lead_score_medio'].fillna(0)
-            for cls in ['A', 'B', 'C', 'D']:
-                tmp = (
-                    df_av[df_av['lead_classification'] == cls]
-                    .groupby('agente').size()
-                    .reset_index(name=f'leads_{cls}')
-                )
-                df_rank = df_rank.merge(tmp, on='agente', how='left')
-                df_rank[f'leads_{cls}'] = df_rank[f'leads_{cls}'].fillna(0).astype(int)
-
-            df_rank['leads_ab'] = df_rank['leads_A'] + df_rank['leads_B']
-            df_rank['pct_ab']   = (df_rank['leads_ab'] / df_rank['ligacoes'] * 100).round(1)
             df_rank = df_rank.sort_values('nota_media', ascending=False).reset_index(drop=True)
 
             max_lig = int(df_rank['ligacoes'].max())
@@ -576,17 +522,13 @@ def run_page():
             st.markdown("#### 🏅 Ranking de Desempenho")
             df_exibir = df_rank[[
                 'agente', 'ligacoes', 'nota_media', 'nota_min', 'nota_max',
-                'lead_score_medio', 'pct_ab', 'leads_A', 'leads_B', 'leads_C', 'leads_D',
             ]].copy()
             df_exibir.columns = [
                 'Agente', 'Ligações', 'Nota Média', 'Nota Mín', 'Nota Máx',
-                'Score Lead Médio', '% Leads A+B', 'A', 'B', 'C', 'D',
             ]
-            df_exibir['Nota Média']       = df_exibir['Nota Média'].round(1).fillna(0)
-            df_exibir['Nota Mín']         = df_exibir['Nota Mín'].round(0).fillna(0).astype(int)
-            df_exibir['Nota Máx']         = df_exibir['Nota Máx'].round(0).fillna(0).astype(int)
-            df_exibir['Score Lead Médio'] = df_exibir['Score Lead Médio'].round(1).fillna(0)
-            df_exibir['% Leads A+B']      = df_exibir['% Leads A+B'].astype(str) + '%'
+            df_exibir['Nota Média'] = df_exibir['Nota Média'].round(1).fillna(0)
+            df_exibir['Nota Mín']   = df_exibir['Nota Mín'].round(0).fillna(0).astype(int)
+            df_exibir['Nota Máx']   = df_exibir['Nota Máx'].round(0).fillna(0).astype(int)
 
             st.dataframe(
                 df_exibir,
@@ -594,63 +536,25 @@ def run_page():
                 height=min(420, 36 * len(df_exibir) + 42),
             )
 
-            col_r1, col_r2 = st.columns(2)
-
-            with col_r1:
-                st.markdown("#### 📊 Nota Média por Agente")
-                df_bar = df_rank.sort_values('nota_media').copy()
-                fig_bar = px.bar(
-                    df_bar, x='nota_media', y='agente', orientation='h',
-                    text='nota_media', color='nota_media',
-                    color_continuous_scale='RdYlGn', range_color=[0, 100],
-                    labels={'nota_media': 'Nota Média', 'agente': ''},
-                )
-                fig_bar.add_vline(
-                    x=media_time, line_dash='dash', line_color='#636EFA',
-                    annotation_text=f"Média: {media_time:.1f}",
-                    annotation_position='top right',
-                )
-                fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-                fig_bar.update_layout(
-                    height=max(300, 44 * len(df_rank)),
-                    margin=dict(t=10, b=10), showlegend=False,
-                )
-                st.plotly_chart(fig_bar, use_container_width=True)
-
-            with col_r2:
-                st.markdown("#### 🔵 Volume × Qualidade (tamanho = ligações)")
-                fig_bbl = px.scatter(
-                    df_rank, x='nota_media', y='lead_score_medio',
-                    size='ligacoes', color='pct_ab',
-                    color_continuous_scale='RdYlGn', range_color=[0, 100],
-                    text='agente',
-                    labels={
-                        'nota_media':       'Nota Média Vendedor',
-                        'lead_score_medio': 'Score Médio do Lead',
-                        'pct_ab':           '% Leads A+B',
-                        'ligacoes':         'Ligações',
-                    },
-                    hover_data=['ligacoes'],
-                )
-                fig_bbl.update_traces(textposition='top center', textfont_size=10)
-                fig_bbl.update_layout(
-                    height=max(300, 44 * len(df_rank)),
-                    margin=dict(t=10, b=10),
-                )
-                st.plotly_chart(fig_bbl, use_container_width=True)
-
-            st.markdown("#### 🎯 Distribuição de Classificações por Agente")
-            df_dist_m = df_rank[['agente', 'leads_A', 'leads_B', 'leads_C', 'leads_D']].melt(
-                id_vars='agente', var_name='Classe', value_name='Qtd'
+            st.markdown("#### 📊 Nota Média por Agente")
+            df_bar = df_rank.sort_values('nota_media').copy()
+            fig_bar = px.bar(
+                df_bar, x='nota_media', y='agente', orientation='h',
+                text='nota_media', color='nota_media',
+                color_continuous_scale='RdYlGn', range_color=[0, 100],
+                labels={'nota_media': 'Nota Média', 'agente': ''},
             )
-            df_dist_m['Classe'] = df_dist_m['Classe'].str.replace('leads_', '', regex=False)
-            fig_dist = px.bar(
-                df_dist_m, x='agente', y='Qtd', color='Classe',
-                barmode='stack', color_discrete_map=_CORES_CLASS,
-                labels={'agente': 'Agente'},
+            fig_bar.add_vline(
+                x=media_time, line_dash='dash', line_color='#636EFA',
+                annotation_text=f"Média: {media_time:.1f}",
+                annotation_position='top right',
             )
-            fig_dist.update_layout(height=340, margin=dict(t=10, b=10))
-            st.plotly_chart(fig_dist, use_container_width=True)
+            fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+            fig_bar.update_layout(
+                height=max(300, 44 * len(df_rank)),
+                margin=dict(t=10, b=10), showlegend=False,
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
 
     # ────────────────────────────────────────────
     # TAB 3 — ANÁLISE SPIN
@@ -771,10 +675,6 @@ def run_page():
             df_ag       = df_av[df_av['agente'] == agente_rel].copy()
             media_time  = df_av['evaluation_ia'].mean()
             nota_ag     = df_ag['evaluation_ia'].mean()
-            _lead_ag_validos = df_ag.loc[df_ag['lead_score'] > 0, 'lead_score']
-            lead_ag     = _lead_ag_validos.mean() if not _lead_ag_validos.empty else 0
-            _df_ag_class = df_ag[df_ag['lead_classification'].isin(['A', 'B', 'C', 'D'])]
-            pct_ab_ag   = _df_ag_class['lead_classification'].isin(['A', 'B']).mean() * 100 if not _df_ag_class.empty else 0
             pos_ranking = agentes_ord.index(agente_rel) + 1
 
             st.markdown(f"## 📋 Relatório: {agente_rel}")
@@ -784,7 +684,7 @@ def run_page():
                 f"{len(df_ag)} avaliação(ões)"
             )
 
-            kc1, kc2, kc3, kc4, kc5 = st.columns(5)
+            kc1, kc2, kc3 = st.columns(3)
             kc1.metric("Ligações avaliadas", len(df_ag))
             kc2.metric(
                 "Nota média",
@@ -792,17 +692,7 @@ def run_page():
                 delta=f"{nota_ag - media_time:+.1f} vs time"
                 if pd.notna(nota_ag) and pd.notna(media_time) else None,
             )
-            kc3.metric(
-                "Score lead médio",
-                f"{lead_ag:.1f}" if pd.notna(lead_ag) else "—",
-                delta=f"{lead_ag - lead_media:+.1f} vs time"
-                if pd.notna(lead_ag) and pd.notna(lead_media) else None,
-            )
-            kc4.metric(
-                "Leads A+B", f"{pct_ab_ag:.1f}%",
-                delta=f"{pct_ab_ag - pct_ab:+.1f}% vs time",
-            )
-            kc5.metric("Ranking", f"#{pos_ranking} / {len(agentes_ord)}")
+            kc3.metric("Ranking", f"#{pos_ranking} / {len(agentes_ord)}")
 
             st.markdown("#### 📈 Evolução da Nota ao Longo do Tempo")
             _df_ag_d = df_ag.copy()
@@ -872,44 +762,31 @@ def run_page():
                     f"— citado em **{freq_erro}** ligação(ões)"
                 )
 
-            col_rel5, col_rel6 = st.columns(2)
-            with col_rel5:
-                st.markdown("#### 🏷️ Classificação de Leads")
-                df_cl_ag = df_ag['lead_classification'].value_counts().reset_index()
-                df_cl_ag.columns = ['Classificação', 'Qtd']
-                fig_cl_ag = px.pie(
-                    df_cl_ag, names='Classificação', values='Qtd',
-                    color='Classificação', color_discrete_map=_CORES_CLASS, hole=0.4,
-                )
-                fig_cl_ag.update_layout(height=240, margin=dict(t=10, b=10))
-                st.plotly_chart(fig_cl_ag, use_container_width=True)
-
-            with col_rel6:
-                st.markdown("#### 🎓 Produtos Recomendados (Top 5)")
-                if 'produto_recomendado' in df_ag.columns:
-                    prod_ag = df_ag['produto_recomendado'].dropna()
-                    prod_ag = prod_ag[prod_ag.str.strip() != '']
-                    if not prod_ag.empty:
-                        df_pa = prod_ag.value_counts().head(5).reset_index()
-                        df_pa.columns = ['Produto', 'Qtd']
-                        fig_pa = px.bar(
-                            df_pa, x='Qtd', y='Produto', orientation='h',
-                            color_discrete_sequence=['#19D3F3'],
-                        )
-                        fig_pa.update_layout(
-                            height=240, margin=dict(t=10, b=10),
-                            yaxis=dict(categoryorder='total ascending'),
-                        )
-                        st.plotly_chart(fig_pa, use_container_width=True)
-                    else:
-                        st.info("Sem dados de produto.")
+            st.markdown("#### 🎓 Produtos Recomendados (Top 5)")
+            if 'produto_recomendado' in df_ag.columns:
+                prod_ag = df_ag['produto_recomendado'].dropna()
+                prod_ag = prod_ag[prod_ag.str.strip() != '']
+                if not prod_ag.empty:
+                    df_pa = prod_ag.value_counts().head(5).reset_index()
+                    df_pa.columns = ['Produto', 'Qtd']
+                    fig_pa = px.bar(
+                        df_pa, x='Qtd', y='Produto', orientation='h',
+                        color_discrete_sequence=['#19D3F3'],
+                    )
+                    fig_pa.update_layout(
+                        height=240, margin=dict(t=10, b=10),
+                        yaxis=dict(categoryorder='total ascending'),
+                    )
+                    st.plotly_chart(fig_pa, use_container_width=True)
                 else:
                     st.info("Sem dados de produto.")
+            else:
+                st.info("Sem dados de produto.")
 
             st.markdown("#### 📋 Ligações Avaliadas")
             _cols_tab = [
                 'transcricao_id', 'data_ligacao', 'nome_lead',
-                'evaluation_ia', 'lead_score', 'lead_classification',
+                'evaluation_ia',
                 'etapa', 'transcricao',
             ]
             extras = []
@@ -920,11 +797,13 @@ def run_page():
             if 'confianca_classificacao' in df_ag.columns:
                 extras.append('confianca_classificacao')
             if extras:
-                _cols_tab = _cols_tab[:6] + extras + _cols_tab[6:]
+                _cols_tab = _cols_tab[:4] + extras + _cols_tab[4:]
             if 'tipo_classificacao_ia' in df_ag.columns:
-                _cols_tab.insert(6, 'tipo_classificacao_ia')
+                _idx_etapa = _cols_tab.index('etapa')
+                _cols_tab.insert(_idx_etapa, 'tipo_classificacao_ia')
             else:
-                _cols_tab.insert(6, 'tipo_ligacao')
+                _idx_etapa = _cols_tab.index('etapa')
+                _cols_tab.insert(_idx_etapa, 'tipo_ligacao')
             df_ag_tab = df_ag[_cols_tab].copy()
             df_ag_tab['data_ligacao'] = df_ag['data_ligacao'].dt.strftime('%d/%m/%Y')
             df_ag_tab['Nota'] = df_ag['evaluation_ia'].apply(
@@ -935,8 +814,6 @@ def run_page():
                 'transcricao_id':           'ID',
                 'data_ligacao':             'Data',
                 'nome_lead':                'Lead',
-                'lead_score':               'Score Lead',
-                'lead_classification':      'Classificação',
                 'motivo_nao_avaliacao':     'Motivo da não avaliação',
                 'observacao_whatsapp':      'Obs. WhatsApp',
                 'tipo_classificacao_ia':    'Tipo IA',
@@ -952,8 +829,6 @@ def run_page():
                 _kpis_rel = {
                     'Ligações Avaliadas': len(df_ag),
                     'Nota Média':  f"{nota_ag:.1f}" if pd.notna(nota_ag) else '—',
-                    'Score Lead':  f"{lead_ag:.1f}" if pd.notna(lead_ag) else '—',
-                    'Leads A+B':   f"{pct_ab_ag:.1f}%",
                     'Ranking':     f"#{pos_ranking}/{len(agentes_ord)}",
                     'Média Time':  f"{media_time:.1f}" if pd.notna(media_time) else '—',
                 }

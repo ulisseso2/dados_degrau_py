@@ -34,6 +34,10 @@ def run_page():
     df['data_aula'] = pd.to_datetime(df['data_aula'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
     df['valor_rateio_aula'] = pd.to_numeric(df['valor_rateio_aula'], errors='coerce')
     df['carga_horaria_decimal'] = pd.to_numeric(df['carga_horaria_decimal'], errors='coerce')
+    df['inicio_grade'] = pd.to_datetime(df['inicio_grade'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df['data_prevista'] = pd.to_datetime(df['data_prevista'], errors='coerce')
+    df['turno'] = df['turno'].astype(str).replace('None', '')
+    df['possui_grade'] = df['possui_grade'].astype(str).replace('None', '')
     
     # --- 2. FILTROS NA BARRA LATERAL ---
     st.sidebar.header("Filtros de Análise")
@@ -235,4 +239,175 @@ def run_page():
         file_name="custo_por_turma.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="download_custo_turma"
+    )
+
+    st.divider()
+
+    # ==========================================================================
+    # 7. RELATÓRIO CONSOLIDADO DE TURMA
+    # ==========================================================================
+    st.header("📋 Relatório Consolidado de Turma")
+
+    # DataFrame base: mesma empresa selecionada no filtro da página
+    df_consolidado_base = df[df['empresa'] == empresa_selecionada].copy()
+
+    # --- Filtros independentes ---
+    col_f1, col_f2 = st.columns(2)
+
+    with col_f1:
+        # Filtro de data baseado em inicio_grade (padrão: mês atual)
+        df_com_grade = df_consolidado_base.dropna(subset=['inicio_grade'])
+        data_min_cons = df_com_grade['inicio_grade'].min().date() if not df_com_grade.empty else hoje_aware
+        data_max_cons = df_com_grade['inicio_grade'].max().date() if not df_com_grade.empty else hoje_aware
+        primeiro_dia_mes = hoje_aware.replace(day=1)
+        data_inicio_cons_padrao = max(primeiro_dia_mes, data_min_cons)
+
+        periodo_cons = st.date_input(
+            "Período (Início da Grade):",
+            value=[data_inicio_cons_padrao, hoje_aware],
+            min_value=data_min_cons,
+            max_value=data_max_cons,
+            key="cons_date_range"
+        )
+
+    with col_f2:
+        possui_grade_list = sorted(df_consolidado_base['possui_grade'].dropna().unique())
+        possui_grade_sel = st.multiselect(
+            "Possui Grade:", possui_grade_list, default=possui_grade_list, key="cons_possui_grade"
+        )
+
+    try:
+        inicio_cons_aware = pd.Timestamp(periodo_cons[0], tz=TIMEZONE)
+        fim_cons_aware = pd.Timestamp(periodo_cons[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+    except IndexError:
+        st.warning("👈 Por favor, selecione um período de datas para o relatório consolidado.")
+        st.stop()
+
+    # Aplica filtro de data e possui_grade primeiro para alimentar os demais filtros
+    df_cons_pre = df_consolidado_base[
+        (df_consolidado_base['inicio_grade'] >= inicio_cons_aware) &
+        (df_consolidado_base['inicio_grade'] < fim_cons_aware) &
+        (df_consolidado_base['possui_grade'].isin(possui_grade_sel))
+    ]
+
+    col_f3, col_f4, col_f5 = st.columns(3)
+
+    with col_f3:
+        unidades_cons_list = sorted(df_cons_pre['unidade'].dropna().unique())
+        unidades_cons_sel = st.multiselect(
+            "Unidade:", unidades_cons_list, default=unidades_cons_list, key="cons_unidade"
+        )
+
+    with col_f4:
+        turno_cons_list = sorted(df_cons_pre['turno'].dropna().unique())
+        turno_cons_sel = st.multiselect(
+            "Turno:", turno_cons_list, default=turno_cons_list, key="cons_turno"
+        )
+
+    with col_f5:
+        cursos_cons_list = sorted(df_cons_pre['curso'].dropna().unique())
+        cursos_cons_sel = st.multiselect(
+            "Curso:", cursos_cons_list, default=cursos_cons_list, key="cons_curso"
+        )
+
+    col_f6, col_f7 = st.columns(2)
+
+    with col_f6:
+        cursos_venda_cons_list = sorted(df_cons_pre['curso_venda'].dropna().unique())
+        cursos_venda_cons_sel = st.multiselect(
+            "Curso Venda:", cursos_venda_cons_list, default=cursos_venda_cons_list, key="cons_curso_venda"
+        )
+
+    with col_f7:
+        turmas_cons_list = sorted(df_cons_pre['turma_nome'].dropna().unique())
+        turmas_cons_sel = st.multiselect(
+            "Turma:", turmas_cons_list, default=turmas_cons_list, key="cons_turma"
+        )
+
+    # Aplicação final dos filtros do consolidado
+    df_cons = df_cons_pre[
+        (df_cons_pre['unidade'].isin(unidades_cons_sel)) &
+        (df_cons_pre['turno'].isin(turno_cons_sel)) &
+        (df_cons_pre['curso'].isin(cursos_cons_sel)) &
+        (df_cons_pre['curso_venda'].isin(cursos_venda_cons_sel)) &
+        (df_cons_pre['turma_nome'].isin(turmas_cons_sel))
+    ].copy()
+
+    if df_cons.empty:
+        st.warning("Não há dados para os filtros selecionados no relatório consolidado.")
+        st.stop()
+
+    # --- Montar coluna turma_compartilhada ---
+    # Para cada aula (aula_id), descobrir todas as turmas que a compartilham
+    aula_turmas = (
+        df_consolidado_base[['aula_id', 'turma_nome']]
+        .dropna(subset=['aula_id'])
+        .drop_duplicates()
+    )
+    # Para cada turma, juntar as turmas que compartilham pelo menos uma aula
+    turma_aulas = df_cons[['turma_id', 'turma_nome', 'aula_id']].dropna(subset=['aula_id']).drop_duplicates()
+    merged = turma_aulas.merge(aula_turmas, on='aula_id', suffixes=('', '_comp'))
+    # Remover a própria turma da lista de compartilhadas
+    merged = merged[merged['turma_nome'] != merged['turma_nome_comp']]
+    turma_compartilhada_map = (
+        merged.groupby('turma_nome')['turma_nome_comp']
+        .apply(lambda x: ', '.join(sorted(x.unique())))
+        .reset_index()
+        .rename(columns={'turma_nome_comp': 'turma_compartilhada'})
+    )
+
+    # --- Tabela agrupada por turma ---
+    df_cons_turma = (
+        df_cons
+        .groupby(['turma_id', 'turma_nome', 'curso'], dropna=False)
+        .agg(
+            data_prevista=('data_prevista', 'first'),
+            inicio_grade=('inicio_grade', 'first'),
+            turno=('turno', 'first'),
+            total_aulas=('aula_id', 'nunique'),
+            total_horas=('carga_horaria_decimal', 'sum'),
+            custo_previsto=('valor_rateio_aula', 'sum')
+        )
+        .reset_index()
+    )
+    df_cons_turma = df_cons_turma.merge(turma_compartilhada_map, on='turma_nome', how='left')
+    df_cons_turma['turma_compartilhada'] = df_cons_turma['turma_compartilhada'].fillna('')
+
+    colunas_cons = [
+        'turma_nome', 'data_prevista', 'curso', 'inicio_grade',
+        'turno', 'turma_compartilhada', 'total_aulas', 'total_horas', 'custo_previsto'
+    ]
+    df_cons_exib = df_cons_turma[colunas_cons].sort_values(by='turma_nome')
+
+    st.dataframe(
+        df_cons_exib,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "turma_nome": "Turma",
+            "data_prevista": st.column_config.DateColumn("Data Prevista", format="DD/MM/YYYY"),
+            "curso": "Curso",
+            "inicio_grade": st.column_config.DatetimeColumn("Início Grade", format="DD/MM/YYYY"),
+            "turno": "Turno",
+            "turma_compartilhada": "Turmas Compartilhadas",
+            "total_aulas": st.column_config.NumberColumn("Total de Aulas"),
+            "total_horas": st.column_config.NumberColumn("Total de Horas", format="%.2f"),
+            "custo_previsto": st.column_config.NumberColumn("Custo Previsto (R$)", format="R$ %.2f")
+        }
+    )
+
+    # Exportar consolidado
+    df_cons_export = df_cons_exib.copy()
+    if 'inicio_grade' in df_cons_export.columns:
+        df_cons_export['inicio_grade'] = df_cons_export['inicio_grade'].dt.tz_localize(None)
+    buffer_cons = io.BytesIO()
+    with pd.ExcelWriter(buffer_cons, engine='xlsxwriter') as writer:
+        df_cons_export.to_excel(writer, index=False, sheet_name='Consolidado por Turma')
+    buffer_cons.seek(0)
+    st.download_button(
+        label="📥 Exportar Consolidado para Excel",
+        data=buffer_cons,
+        file_name="relatorio_consolidado_turma.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_consolidado_turma"
     )
