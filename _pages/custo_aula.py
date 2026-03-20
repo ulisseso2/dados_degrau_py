@@ -247,7 +247,7 @@ def run_page():
     # 7. RELATÓRIO CONSOLIDADO DE TURMA
     # ==========================================================================
     st.header("📋 Relatório Consolidado de Turma")
-    st.markdown("os filtros abaixo impactam apenas o relatório consolidado, permitindo uma análise mais detalhada por turma.")
+    st.markdown("Os filtros abaixo impactam apenas o relatório consolidado, permitindo uma análise mais detalhada por turma.")
 
     # DataFrame base: mesma empresa selecionada no filtro da página
     df_consolidado_base = df[df['empresa'] == empresa_selecionada].copy()
@@ -281,9 +281,8 @@ def run_page():
 
         periodo_cons = st.date_input(
             "Período (Início da Grade):",
-            value=[data_inicio_cons_padrao, hoje_aware],
+            value=[data_inicio_cons_padrao, data_max_cons],
             min_value=data_min_cons,
-            max_value=data_max_cons,
             key="cons_date_range"
         )
 

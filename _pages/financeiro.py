@@ -172,7 +172,7 @@ def run_page():
     if not df_filtrado.empty:
             # Agrupa os dados conforme sua estrutura original
             tabela_agrupada = (
-                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_pagamento_parcela"])
+                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_vencimento_parcela", "data_pagamento_parcela"])
                 .agg(
                     valor_total=("valor_corrigido", "sum"),
                 )
@@ -201,6 +201,14 @@ def run_page():
                 field="descricao_pedido_compra",
                 header_name="Histórico",
                 minWidth=200
+            )
+
+            gb.configure_column(
+                field="data_vencimento_parcela",
+                header_name="Data de Vencimento",
+                type=["dateColumnFilter", "customDateTimeFormat"],
+                custom_format_string='dd/MM/yyyy',
+                minWidth=150
             )
 
             gb.configure_column(
@@ -271,6 +279,8 @@ def run_page():
             tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
             
             # Remove timezone e converte para apenas data (sem hora)
+            if 'data_vencimento_parcela' in tabela_export.columns:
+                tabela_export['data_vencimento_parcela'] = tabela_export['data_vencimento_parcela'].dt.tz_localize(None).dt.date
             if 'data_pagamento_parcela' in tabela_export.columns:
                 tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
                 
@@ -282,7 +292,7 @@ def run_page():
                     writer, 
                     index=False, 
                     sheet_name='Despesas Detalhadas',
-                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
+                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_vencimento_parcela", "data_pagamento_parcela", "valor_total"]
                 )
                 
                 # Adiciona uma aba com totais consolidados
