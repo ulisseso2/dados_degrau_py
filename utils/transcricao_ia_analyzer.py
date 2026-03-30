@@ -1,23 +1,24 @@
 """
-Análise de transcrições usando IA (Groq)
+Análise de transcrições usando IA (OpenAI)
 Usa contexto completo do negócio para avaliações detalhadas
 """
 import os
 import json
 from typing import Dict, Optional
-from groq import Groq
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class TranscricaoIAAnalyzer:
     def __init__(self):
-        """Inicializa cliente Groq"""
-        self.api_key = os.getenv("GROQ_API_KEY")
-        self.client = Groq(api_key=self.api_key) if self.api_key else None
-        self.model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        self.temperature = float(os.getenv("GROQ_TEMPERATURE", "0.2"))
-        self.max_tokens = int(os.getenv("GROQ_MAX_TOKENS", "8000"))  # Aumentado para análise completa
+        """Inicializa cliente OpenAI"""
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.model = os.getenv("OPENAI_MODEL", "gpt-5.1")
+        self.model_classificacao = os.getenv("OPENAI_MODEL_CLASSIFICACAO", self.model)
+        self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
+        self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "8000"))  # Aumentado para análise completa
         
         # Carrega contexto do arquivo
         self.contexto = self._carregar_contexto()
@@ -323,14 +324,14 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
         
         if not self.api_key:
             return {
-                'erro': 'GROQ_API_KEY não configurada no .env',
+                'erro': 'OPENAI_API_KEY não configurada no .env',
                 'classificacao_ligacao': 'erro',
                 'qualidade_atendimento': 'n/a'
             }
 
         if not self.client:
             return {
-                'erro': 'Cliente Groq não inicializado',
+                'erro': 'Cliente OpenAI não inicializado',
                 'classificacao_ligacao': 'erro',
                 'qualidade_atendimento': 'n/a'
             }
@@ -392,7 +393,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
                 ],
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}  # Groq suporta JSON mode
+                response_format={"type": "json_object"}
             )
             
             content = (response.choices[0].message.content or "").strip()
@@ -439,11 +440,11 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
             return analise
             
         except json.JSONDecodeError as e:
-            print("Erro ao decodificar JSON retornado pela Groq:")
+            print("Erro ao decodificar JSON retornado pela OpenAI:")
             print(content[:1000])
             return {'erro': f'Erro ao decodificar JSON: {str(e)}', 'classificacao_ligacao': 'erro'}
         except Exception as e:
-            print("Erro na análise Groq:")
+            print("Erro na análise OpenAI:")
             print(repr(e))
             return {'erro': f'Erro na análise: {type(e).__name__}: {str(e)}', 'classificacao_ligacao': 'erro'}
 
@@ -463,7 +464,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
         if not self.client:
             return {
                 'tipo': 'outros',
-                'motivo': 'Cliente Groq não inicializado',
+                'motivo': 'Cliente OpenAI não inicializado',
                 'confianca': 0,
                 'deve_avaliar': False,
                 'tokens_usados': 0
@@ -477,7 +478,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.model_classificacao,
                 messages=[
                     {
                         "role": "system",
@@ -512,7 +513,7 @@ DADOS ADICIONAIS (SE USAR, NÃO INVENTE):
             return resultado
 
         except Exception as e:
-            print("Erro ao classificar ligação:")
+            print("Erro ao classificar ligação (OpenAI):")
             print(repr(e))
             return {
                 'tipo': 'outros',

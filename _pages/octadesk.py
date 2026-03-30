@@ -12,9 +12,21 @@ import time
 from datetime import datetime
 import plotly.express as px
 import octadesk_db
+from utils.chat_ia_analyzer import ChatIAAnalyzer
+from utils.chat_mysql_writer import salvar_avaliacao_chat
+from utils.sql_loader import carregar_dados
 
 load_dotenv()
 TIMEZONE = 'America/Sao_Paulo'
+
+SQL_MATCH_OPORTUNIDADES = os.path.join(
+    os.path.dirname(__file__), '..', 'consultas', 'chat_oportunidades',
+    'buscar_oportunidades_match.sql'
+)
+SQL_AVALIACOES_EXISTENTES = os.path.join(
+    os.path.dirname(__file__), '..', 'consultas', 'chat_oportunidades',
+    'avaliacoes_existentes.sql'
+)
 
 # ==============================================================================
 # 0. CONFIGURAÇÕES
@@ -56,12 +68,37 @@ def _normalize_list_response(data):
                 return data[key]
     return []
 
-def _fetch_chats_from_api(api_token, base_url, max_pages=5, limit=100, stop_before_date=None):
-    """Busca chats da API do Octadesk com paginação inteligente.
-    
-    A API retorna chats do mais recente ao mais antigo.
-    Se stop_before_date for informado, para de paginar quando todos os
-    chats de uma página forem anteriores a essa data (não precisa ir além).
+def _api_request_with_retry(url, headers, params=None, max_retries=3):
+    """Faz request GET com retry e backoff exponencial."""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=30)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.HTTPError as http_err:
+            status = http_err.response.status_code if http_err.response else 0
+            if status == 429 or status >= 500:
+                wait = 2 ** (attempt + 1)
+                time.sleep(wait)
+                continue
+            raise
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** (attempt + 1))
+                continue
+            raise
+    return None
+
+
+def _fetch_chats_from_api(api_token, base_url, max_pages=5, limit=100,
+                          start_date=None, end_date=None, stop_before_date=None,
+                          updated_since=None):
+    """Busca chats da API do Octadesk com filtros de data e paginação.
+
+    Parâmetros:
+      start_date/end_date: filtrar por createdAt (date objects)
+      updated_since: filtrar por updatedAt >= (ISO string), para sync incremental
+      stop_before_date: fallback — para de paginar quando chats são anteriores
     """
     url = f"{base_url}/chat"
     headers = {"accept": "application/json", "X-API-KEY": api_token}
@@ -71,18 +108,45 @@ def _fetch_chats_from_api(api_token, base_url, max_pages=5, limit=100, stop_befo
 
     while page <= max_pages:
         params = {"page": page, "limit": limit}
+
+        # Filtros de data via deep-object query (API Octadesk)
+        filter_idx = 0
+        if start_date:
+            params[f"filters[{filter_idx}][property]"] = "createdAt"
+            params[f"filters[{filter_idx}][operator]"] = "ge"
+            params[f"filters[{filter_idx}][value]"] = str(start_date)
+            filter_idx += 1
+        if end_date:
+            from datetime import timedelta
+            # +1 dia para incluir o dia inteiro (API compara com datetime UTC)
+            end_plus = end_date + timedelta(days=1)
+            params[f"filters[{filter_idx}][property]"] = "createdAt"
+            params[f"filters[{filter_idx}][operator]"] = "le"
+            params[f"filters[{filter_idx}][value]"] = str(end_plus)
+            filter_idx += 1
+        if updated_since:
+            params[f"filters[{filter_idx}][property]"] = "updatedAt"
+            params[f"filters[{filter_idx}][operator]"] = "ge"
+            params[f"filters[{filter_idx}][value]"] = updated_since
+            filter_idx += 1
+
+        # Ordenação: mais recentes primeiro
+        params["sort[property]"] = "createdAt"
+        params["sort[direction]"] = "desc"
+
         try:
-            response = requests.get(url, params=params, headers=headers)
-            response.raise_for_status()
+            response = _api_request_with_retry(url, headers, params)
+            if response is None:
+                st.error(f"Falha após retries na página {page}")
+                break
             data = response.json()
             items = _normalize_list_response(data)
             if not items:
                 break
             all_results.extend(items)
 
-            # Paginação inteligente: se todos os itens da página são anteriores
-            # à data alvo, não precisa buscar mais páginas
-            if stop_before_date and items:
+            # Paginação inteligente (fallback se sem filtro de data)
+            if stop_before_date and not start_date and items:
                 oldest_on_page = min(
                     (i.get('createdAt', '')[:10] for i in items if i.get('createdAt')),
                     default=''
@@ -94,6 +158,7 @@ def _fetch_chats_from_api(api_token, base_url, max_pages=5, limit=100, stop_befo
             if len(items) < limit:
                 break
             page += 1
+            time.sleep(0.3)  # Rate limiting
         except requests.exceptions.HTTPError as http_err:
             st.error(f"Erro na API do Octadesk (página {page}): {http_err.response.status_code} - {http_err.response.text}")
             break
@@ -145,6 +210,7 @@ def get_octadesk_chats(api_token, base_url, start_date, end_date, max_pages=5, l
         if need_api:
             api_chats = _fetch_chats_from_api(
                 api_token, base_url, max_pages, limit,
+                start_date=start_date, end_date=end_date,
                 stop_before_date=start_date
             )
             # Salvar TODOS os chats da API no cache automaticamente
@@ -204,30 +270,54 @@ def get_octadesk_chats(api_token, base_url, start_date, end_date, max_pages=5, l
         return pd.DataFrame()
 
 
-def _fetch_messages_from_api(api_token, base_url, chat_id):
-    """Busca mensagens de um chat diretamente da API (sem cache)."""
+def _fetch_messages_from_api(api_token, base_url, chat_id, max_pages=10):
+    """Busca TODAS as mensagens de um chat com paginação completa."""
     headers = {"accept": "application/json", "X-API-KEY": api_token}
     endpoints = [
         f"{base_url}/chat/{chat_id}/messages",
         f"{base_url}/chat/{chat_id}/message"
     ]
     for url in endpoints:
+        all_messages = []
+        page = 1
         try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 404:
-                continue
-            response.raise_for_status()
-            data = response.json()
-            return _normalize_list_response(data)
+            while page <= max_pages:
+                params = {
+                    "page": page,
+                    "limit": 100,
+                    "property": "time",
+                    "direction": "asc"
+                }
+                response = _api_request_with_retry(url, headers, params)
+                if response is None:
+                    break
+                if response.status_code == 404:
+                    break
+                response.raise_for_status()
+                data = response.json()
+                items = _normalize_list_response(data)
+                if not items:
+                    break
+                all_messages.extend(items)
+                if len(items) < 100:
+                    break
+                page += 1
+                time.sleep(0.2)
+            if all_messages:
+                return all_messages
+            if page > 1:
+                return all_messages
         except requests.exceptions.HTTPError as http_err:
+            if http_err.response and http_err.response.status_code == 404:
+                continue
             st.error(
                 f"Erro na API do Octadesk ao buscar mensagens do chat {chat_id}: "
                 f"{http_err.response.status_code} - {http_err.response.text}"
             )
-            return []
+            return all_messages if all_messages else []
         except Exception as e:
             st.error(f"Erro ao buscar mensagens do chat {chat_id}: {e}")
-            return []
+            return all_messages if all_messages else []
     return []
 
 
@@ -248,38 +338,73 @@ def get_octadesk_chat_messages(api_token, base_url, chat_id, chat_status=None):
     return messages
 
 
-def sync_octadesk_history(api_token, base_url, max_pages=120, limit=100):
-    """Sincroniza TODOS os chats e mensagens do Octadesk para o cache SQLite.
-    
-    Fase 1: Busca todas as páginas de chats da API e salva no cache.
-    Fase 2: Para cada chat sem mensagens em cache, busca as mensagens.
-    """
-    url = f"{base_url}/chat"
-    headers = {"accept": "application/json", "X-API-KEY": api_token}
+def sync_octadesk_history(api_token, base_url, max_pages=120, limit=100, mode='auto'):
+    """Sincroniza chats e mensagens do Octadesk para o cache SQLite.
 
-    # ── FASE 1: Buscar todos os chats ──────────────────────────────
-    st.info("📥 **Fase 1/2**: Buscando chats da API...")
+    Modos:
+      'auto': Incremental se já sincronizou antes, completo se não.
+      'completo': Busca todas as páginas do zero.
+      'incremental': Busca apenas chats atualizados desde a última sync.
+
+    Fase 1: Busca chats (com filtro incremental quando possível).
+    Fase 2: Busca mensagens dos chats sem cache (priorizando os mais recentes).
+    """
+    cache_stats = octadesk_db.get_cache_stats()
+    last_sync = cache_stats.get('last_sync')
+
+    # Decidir modo efetivo
+    if mode == 'auto':
+        effective_mode = 'incremental' if last_sync else 'completo'
+    else:
+        effective_mode = mode
+
+    updated_since = None
+    if effective_mode == 'incremental' and last_sync:
+        # Buscar chats atualizados desde a última sync (com margem de 1h)
+        from datetime import timedelta as _td
+        try:
+            last_dt = pd.to_datetime(last_sync)
+            updated_since = (last_dt - _td(hours=1)).strftime('%Y-%m-%dT%H:%M:%S')
+        except Exception:
+            effective_mode = 'completo'
+
+    mode_label = "incremental" if effective_mode == 'incremental' else "completa"
+    st.info(f"📥 **Fase 1/2**: Buscando chats da API (sync {mode_label})...")
     progress_bar = st.progress(0, text="Buscando chats...")
     total_chats_saved = 0
     page = 1
 
-    while page <= max_pages:
+    # Sync incremental usa menos páginas (dados são recentes)
+    effective_max_pages = min(30, max_pages) if effective_mode == 'incremental' else max_pages
+
+    while page <= effective_max_pages:
         progress_bar.progress(
-            page / max_pages,
-            text=f"Fase 1/2 — Página {page}/{max_pages} — {total_chats_saved} chats salvos"
+            page / effective_max_pages,
+            text=f"Fase 1/2 — Página {page}/{effective_max_pages} — {total_chats_saved} chats salvos"
         )
 
         params = {"page": page, "limit": limit}
+        params["sort[property]"] = "createdAt"
+        params["sort[direction]"] = "desc"
+
+        if updated_since:
+            params["filters[0][property]"] = "updatedAt"
+            params["filters[0][operator]"] = "ge"
+            params["filters[0][value]"] = updated_since
+
         try:
-            response = requests.get(url, params=params, headers=headers)
-            response.raise_for_status()
+            url = f"{base_url}/chat"
+            headers = {"accept": "application/json", "X-API-KEY": api_token}
+            response = _api_request_with_retry(url, headers, params)
+            if response is None:
+                st.error(f"Falha após retries na página {page}")
+                break
             data = response.json()
             items = _normalize_list_response(data)
 
             if not items:
                 break
 
-            # Salvar TODOS os chats (não apenas fechados)
             saved = octadesk_db.save_chats(items)
             total_chats_saved += saved
 
@@ -287,7 +412,7 @@ def sync_octadesk_history(api_token, base_url, max_pages=120, limit=100):
                 break
 
             page += 1
-            time.sleep(0.5)  # Rate limiting entre páginas
+            time.sleep(0.3)
 
         except Exception as e:
             st.error(f"Erro na sincronização (página {page}): {e}")
@@ -295,40 +420,47 @@ def sync_octadesk_history(api_token, base_url, max_pages=120, limit=100):
 
     progress_bar.progress(1.0, text=f"✅ Fase 1/2 concluída: {total_chats_saved} chats salvos")
 
-    # ── FASE 2: Buscar mensagens dos chats sem cache ───────────────
-    st.info("📨 **Fase 2/2**: Buscando mensagens dos chats...")
+    # ── FASE 2: Buscar mensagens (priorizando chats recentes) ──────
+    st.info("📨 **Fase 2/2**: Buscando mensagens dos chats sem cache...")
     chats_missing = octadesk_db.get_chats_without_messages()
     total_missing = len(chats_missing)
     total_messages_saved = 0
+    errors = 0
 
     if total_missing > 0:
         progress_msgs = st.progress(0, text=f"Buscando mensagens... 0/{total_missing}")
         for idx, chat_id in enumerate(chats_missing):
             progress_msgs.progress(
                 (idx + 1) / total_missing,
-                text=f"Fase 2/2 — Chat {idx+1}/{total_missing} — {total_messages_saved} msgs salvas"
+                text=f"Fase 2/2 — Chat {idx+1}/{total_missing} — {total_messages_saved} msgs salvas ({errors} erros)"
             )
             try:
                 msgs = _fetch_messages_from_api(api_token, base_url, chat_id)
                 if msgs:
                     octadesk_db.save_messages(chat_id, msgs)
                     total_messages_saved += len(msgs)
-                time.sleep(0.2)  # Rate limiting
+                else:
+                    # Salvar registro vazio para não tentar novamente
+                    octadesk_db.save_messages(chat_id, [{"id": f"{chat_id}_empty", "body": "", "type": "placeholder"}])
             except Exception:
+                errors += 1
+                if errors > 50:
+                    st.warning(f"⚠️ Muitos erros ({errors}), interrompendo busca de mensagens.")
+                    break
                 continue
         progress_msgs.progress(1.0, text=f"✅ Fase 2/2 concluída: {total_messages_saved} mensagens salvas")
     else:
         st.success("✅ Todos os chats já possuem mensagens em cache!")
 
     octadesk_db.log_sync(
-        sync_type='manual_completo',
+        sync_type=f'manual_{effective_mode}',
         pages_fetched=page,
         chats_saved=total_chats_saved,
         messages_saved=total_messages_saved
     )
 
     st.success(
-        f"✅ Sincronização concluída: **{total_chats_saved}** chats e "
+        f"✅ Sincronização {mode_label} concluída: **{total_chats_saved}** chats e "
         f"**{total_messages_saved}** mensagens salvas no cache."
     )
     return total_chats_saved, total_messages_saved
@@ -621,15 +753,20 @@ def run_page():
         value=False,
         help="Ignora o cache local e busca tudo direto da API"
     )
-    col_sync1, col_sync2 = st.sidebar.columns(2)
+    col_sync1, col_sync2, col_sync3 = st.sidebar.columns(3)
     with col_sync1:
-        btn_sync = st.button("📥 Sincronizar Tudo", use_container_width=True,
-                              help="Busca TODOS os chats e mensagens da API e salva no cache")
+        btn_sync = st.button("📥 Sync Auto", use_container_width=True,
+                              help="Incremental se já sincronizou, completa se não")
     with col_sync2:
+        btn_sync_full = st.button("📥 Sync Completa", use_container_width=True,
+                                   help="Busca TODOS os chats e mensagens da API")
+    with col_sync3:
         btn_clear = st.button("🗑️ Limpar Cache", use_container_width=True)
 
     if btn_sync:
-        sync_octadesk_history(api_token, base_url, max_pages=120, limit=100)
+        sync_octadesk_history(api_token, base_url, max_pages=120, limit=100, mode='auto')
+    if btn_sync_full:
+        sync_octadesk_history(api_token, base_url, max_pages=120, limit=100, mode='completo')
     if btn_clear:
         octadesk_db.clear_cache()
         st.toast("Cache limpo com sucesso!")
@@ -670,6 +807,18 @@ def run_page():
                 return val
 
             df_chats_filtered['conversationOriginLabel'] = df_chats_filtered['conversationOrigin'].apply(_map_origin)
+
+        # --- Marcar chats já avaliados via IA ---
+        try:
+            df_aval = carregar_dados(SQL_AVALIACOES_EXISTENTES)
+            evaluated_ids = set(df_aval['chat_id'].dropna().astype(str).tolist()) if df_aval is not None and not df_aval.empty else set()
+        except Exception:
+            evaluated_ids = set()
+
+        if 'id' in df_chats_filtered.columns:
+            df_chats_filtered['Já Avaliado'] = df_chats_filtered['id'].astype(str).isin(evaluated_ids)
+        else:
+            df_chats_filtered['Já Avaliado'] = False
 
         # Status
         if 'status' in df_chats_filtered.columns:
@@ -718,6 +867,17 @@ def run_page():
             origin_sel = st.sidebar.multiselect("Origem da conversa", origin_opts)
             if origin_sel:
                 df_chats_filtered = df_chats_filtered[df_chats_filtered[origin_col].isin(origin_sel)]
+
+        # Avaliação IA
+        ja_avaliado_sel = st.sidebar.selectbox(
+            "Avaliação IA",
+            ["Todos", "Já avaliados", "Não avaliados"],
+            index=0
+        )
+        if ja_avaliado_sel == "Já avaliados":
+            df_chats_filtered = df_chats_filtered[df_chats_filtered['Já Avaliado'] == True]
+        elif ja_avaliado_sel == "Não avaliados":
+            df_chats_filtered = df_chats_filtered[df_chats_filtered['Já Avaliado'] == False]
 
         cache_info = f" (💾 {cache_stats['total_chats']} em cache)" if cache_stats['total_chats'] > 0 else ""
         st.success(f"✅ {len(df_chats)} chats encontrados e analisados{cache_info}.")
@@ -821,7 +981,6 @@ def run_page():
             ).drop(columns=['chatId'], errors='ignore')
 
         cols_remover = [
-            'botName',
             'assignedToGroupDate',
             'contact.id',
             'contact.phoneContacts',
@@ -840,10 +999,254 @@ def run_page():
         ]
         df_detalhes = df_detalhes.drop(columns=[c for c in cols_remover if c in df_detalhes.columns])
 
-        st.dataframe(df_detalhes, use_container_width=True, height=600)
+        # --- MATCHING COM OPORTUNIDADES ---
+        def _normalizar_telefone_octa(tel_raw):
+            """Remove +55 do DDI e retorna lista de números locais para match."""
+            if not tel_raw or not isinstance(tel_raw, str):
+                return []
+            numeros = []
+            for parte in tel_raw.split('/'):
+                n = ''.join(filter(str.isdigit, parte.strip()))
+                if n.startswith('55') and len(n) > 11:
+                    n = n[2:]  # Remove DDI 55
+                if n:
+                    numeros.append(n)
+            return numeros
 
-        if st.button("Exibir mais 50"):
-            st.session_state['octadesk_table_limit'] += 50
+        try:
+            df_opor = carregar_dados(SQL_MATCH_OPORTUNIDADES)
+            if df_opor is not None and not df_opor.empty:
+                # Pré-processa telefones do CRM para lookup rápido
+                crm_phone_map = {}
+                for _, r in df_opor.iterrows():
+                    tel = ''.join(filter(str.isdigit, str(r.get('telefone', '') or '')))
+                    if tel:
+                        crm_phone_map.setdefault(tel, []).append(r['oportunidade_id'])
+
+                oportunidade_ids = []
+                for _, row in df_detalhes.iterrows():
+                    octa_number = str(row.get('number', '') or '')
+                    octa_email = str(row.get('contact.email', '') or '').lower().strip()
+                    octa_tel_raw = str(row.get('Telefone Cliente', '') or '')
+
+                    # 1. Tentar por chat_id (number do Octadesk)
+                    if octa_number:
+                        match = df_opor[df_opor['chat_id'].astype(str) == octa_number]
+                        if not match.empty:
+                            oportunidade_ids.append(match.iloc[0]['oportunidade_id'])
+                            continue
+
+                    # 2. Tentar por email (ignorar @octachat.com)
+                    if octa_email and '@octachat.com' not in octa_email:
+                        match = df_opor[df_opor['email'] == octa_email]
+                        if not match.empty:
+                            com_chat = match[match['chat_id'].notna() & (match['chat_id'] != '')]
+                            oportunidade_ids.append(
+                                com_chat.iloc[0]['oportunidade_id'] if not com_chat.empty
+                                else match.iloc[0]['oportunidade_id']
+                            )
+                            continue
+
+                    # 3. Tentar por telefone (remove +55 do DDI do Octadesk)
+                    fones_locais = _normalizar_telefone_octa(octa_tel_raw)
+                    matched_by_phone = None
+                    for fone in fones_locais:
+                        if fone in crm_phone_map:
+                            matched_by_phone = crm_phone_map[fone][0]
+                            break
+                    if matched_by_phone is not None:
+                        oportunidade_ids.append(matched_by_phone)
+                        continue
+
+                    oportunidade_ids.append(None)
+
+                df_detalhes['oportunidade_id'] = oportunidade_ids
+            else:
+                df_detalhes['oportunidade_id'] = None
+        except Exception as e:
+            st.warning(f"⚠️ Não foi possível buscar oportunidades: {e}")
+            df_detalhes['oportunidade_id'] = None
+
+        # --- LÓGICA DE AVALIAÇÃO (FASE 5) ---
+        def _check_avaliavel(row):
+            # 1) Agent.name é Bot / Ariel / Octabot
+            agent = str(row.get('agent.name', '')).lower().strip()
+            if agent in ['bot', 'ariel', 'octabot', 'none']:
+                return False, "Atendido apenas por robô"
+                
+            # 2) Whats sem Human Response
+            origem = str(row.get('conversationOriginLabel', '')).strip()
+            if origem in ['Whats Degrau', 'Whats Central']:
+                human_resp = row.get('bot.firstHumanResponseAt')
+                if human_resp is None or (isinstance(human_resp, (list, tuple)) and len(human_resp) == 0):
+                    return False, "Whats sem resposta humana"
+                try:
+                    if pd.isna(human_resp):
+                        return False, "Whats sem resposta humana"
+                except Exception:
+                    pass
+                if str(human_resp).strip() == '':
+                    return False, "Whats sem resposta humana"
+                    
+            # 3) Transcrição muito curta
+            transcricao = str(row.get('transcricao', '')).strip()
+            if len(transcricao) < 1200:
+                return False, f"Muito curta ({len(transcricao)} chars)"
+                
+            return True, "Apto para IA"
+
+        df_detalhes['Avaliável'], df_detalhes['Motivo Inapto'] = zip(*df_detalhes.apply(_check_avaliavel, axis=1))
+
+        # Reordenar colunas para trazer 'Avaliável' para frente
+        cols_ordered = ['number', 'oportunidade_id', 'Já Avaliado', 'Avaliável', 'Motivo Inapto', 'createdAt', 'status', 'group.name', 'agent.name', 'conversationOriginLabel', 'Telefone Cliente', 'transcricao']
+        cols_ordered_final = [c for c in cols_ordered if c in df_detalhes.columns] + [c for c in df_detalhes.columns if c not in cols_ordered]
+        df_detalhes = df_detalhes[cols_ordered_final]
+        
+        # Interface de Seleção
+        st.write("### 🤖 Avaliação em Lote via IA")
+        st.info("Selecione abaixo os chats que deseja enviar para análise de qualidade. Chats sinalizados como inaptos serão ignorados ou reprovados automaticamente.")
+
+        df_show = df_detalhes.copy()
+        df_show.insert(0, "Selecionar", False)
+        
+        edited_df = st.data_editor(
+            df_show, 
+            hide_index=True,
+            use_container_width=True, 
+            height=500,
+            column_config={
+                "Selecionar": st.column_config.CheckboxColumn("Avaliar?", default=False),
+                "Já Avaliado": st.column_config.CheckboxColumn("Avaliado?", disabled=True),
+                "Avaliável": st.column_config.CheckboxColumn("Apto?", disabled=True),
+            }
+        )
+
+        col_btn1, col_btn2 = st.columns([3, 7])
+        with col_btn1:
+            if st.button("Exibir mais 50", use_container_width=True):
+                st.session_state['octadesk_table_limit'] += 50
+                st.rerun()
+
+        with col_btn2:
+            if st.button("🧠 Enviar Selecionados para IA", type="primary", use_container_width=True):
+                selected_rows = edited_df[edited_df["Selecionar"]]
+                
+                if selected_rows.empty:
+                    st.warning("Selecione pelo menos um chat para avaliar!")
+                else:
+                    analyzer = ChatIAAnalyzer()
+                    progress_bar = st.progress(0, text="Iniciando avaliação em lote...")
+                    
+                    total = len(selected_rows)
+                    sucesso = 0
+                    
+                    for i, (idx_row, row) in enumerate(selected_rows.iterrows()):
+                        # Usa o id (UUID) do Octadesk como chat_id
+                        chat_id = str(row.get('id', '') or row.get('number', '')).strip()
+                        if not chat_id:
+                            progress_bar.progress((i + 1) / total, text=f"Chat inválido: pulando... ({i+1}/{total})")
+                            continue
+                            
+                        progress_bar.progress(i / total, text=f"Analisando chat {chat_id} ({i+1}/{total})...")
+                        
+                        transcript = row.get('transcricao', '')
+                        apto = row.get('Avaliável', False)
+                        
+                        agent_name = str(row.get('agent.name', ''))
+                        
+                        # Extrair Metadados Limpos do row DataFrame para o Banco
+                        def _get_clean(c):
+                            val = row.get(c)
+                            if val is None:
+                                return None
+                            if isinstance(val, (list, tuple)):
+                                return str(val) if len(val) > 0 else None
+                            import pandas as pd
+                            if pd.isna(val) is True:
+                                return None
+                            try:
+                                if pd.isna(val): return None
+                            except ValueError:
+                                pass # Catch 'truth value of an array is ambiguous' if passed a numpy array
+                            return str(val)
+                            
+                        # Avaliação ou Aborto Limpo
+                        if not apto:
+                            # Chat inapto: grava sem chamar IA (economiza tokens)
+                            eval_result = {
+                                "classificacao": "inapto_ia",
+                                "motivo": str(row.get('Motivo Inapto', 'Regra não atendida')),
+                                "lead_score": 0,
+                                "vendor_score": 0,
+                                "main_product": None,
+                                "ai_evaluation": None,
+                                "erro": None
+                            }
+                        else:
+                            # 2. Avalia com IA de fato
+                            contexto_extra = {
+                                "origem": _get_clean('conversationOriginLabel'),
+                                "canal": _get_clean('channel'),
+                            }
+                            eval_result = analyzer.avaliar_chat(transcript, contexto_extra)
+
+                        if eval_result.get('erro'):
+                            st.warning(f"⚠️ Erro parcial ao avaliar {chat_id}: {eval_result['erro']}")
+                            # Salva mesmo com erro parcial — ai_evaluation pode ter dados úteis
+
+                        # Tags como string limpa (comma-separated)
+                        tags_raw = row.get('tags')
+                        if isinstance(tags_raw, list):
+                            tags_str = ', '.join(
+                                t.get('name', str(t)) if isinstance(t, dict) else str(t)
+                                for t in tags_raw if t
+                            ) or None
+                        else:
+                            tags_str = _get_clean('tags')
+                        telefone_str = _get_clean('Telefone Cliente')
+
+                        # Usar oportunidade_id do matching (pode ser None)
+                        matched_op_id = row.get('oportunidade_id')
+                        try:
+                            if pd.notna(matched_op_id):
+                                matched_op_id = int(matched_op_id)
+                            else:
+                                matched_op_id = None
+                        except (ValueError, TypeError):
+                            matched_op_id = None
+
+                        saved, msg = salvar_avaliacao_chat(
+                            opportunity_id=matched_op_id,
+                            chat_id=chat_id,
+                            classification=eval_result.get('classificacao', 'outros'),
+                            classification_reason=eval_result.get('motivo'),
+                            ai_evaluation=eval_result.get('ai_evaluation'),  # dict ou None
+                            transcript=transcript,
+                            lead_score=eval_result.get('lead_score'),
+                            vendor_score=eval_result.get('vendor_score'),
+                            main_product=eval_result.get('main_product'),
+                            octa_agent=_get_clean('agent.name'),
+                            octa_channel=_get_clean('channel'),
+                            octa_status=_get_clean('status'),
+                            octa_tags=tags_str,
+                            octa_group=_get_clean('group.name'),
+                            octa_origin=_get_clean('conversationOriginLabel'),
+                            octa_contact_name=_get_clean('contact.name'),
+                            octa_contact_phone=telefone_str,
+                            octa_bot_name=_get_clean('botName'),
+                            octa_created_at=_get_clean('createdAt'),
+                            octa_survey_response=_get_clean('conversationOriginLabel')
+                        )
+
+                        if saved:
+                            sucesso += 1
+                        else:
+                            st.error(f"❌ Falha banco {chat_id}: {msg}")
+
+                        progress_bar.progress((i + 1) / total, text=f"Progresso: {i+1}/{total} concluídos")
+                        time.sleep(1) # limit rate
+                        
+                    st.success(f"🎉 Processamento finalizado! {sucesso} análises de chat cadastradas com sucesso.")
         
     else:
         st.info(

@@ -9,12 +9,16 @@ SELECT
     s.name as etapa,
     d.full_name as dono,
     a.name as area,
-    o.name as origem
+    o.name as origem,
+    CASE WHEN eval.id IS NOT NULL THEN 'Sim' ELSE 'Não' END as analisado,
+    eval.classification as classificacao_ia,
+    eval.lead_score as score_ia
 FROM seducar.interesteds i
 LEFT JOIN seducar.opportunity_steps s ON i.opportunity_step_id = s.id
 LEFT JOIN seducar.users d ON i.owner_id = d.id
 LEFT JOIN seducar.areas a ON i.area_id = a.id
 LEFT JOIN seducar.opportunity_origins o ON i.opportunity_origin_id = o.id
+LEFT JOIN seducar.chat_ai_evaluations eval ON i.chat_id = eval.chat_id
 WHERE i.chat_id IS NOT NULL 
   AND i.chat_id != ''
 ORDER BY i.created_at DESC

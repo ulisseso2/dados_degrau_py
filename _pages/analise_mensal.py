@@ -137,6 +137,7 @@ def run_page():
     ].copy()
 
     # Origem mais recente para clientes com etapa 1 ou 15 (no período da tabela)
+    #etapa 1 = 
     if "id_etapa" in oportunidades_periodo.columns:
         oportunidades_periodo_ordenado = oportunidades_periodo.sort_values("criacao")
 

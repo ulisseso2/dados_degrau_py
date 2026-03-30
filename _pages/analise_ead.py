@@ -460,10 +460,16 @@ def run_page():
                     st.plotly_chart(fig_cohort, use_container_width=True)
 
                 # Adicionar sheets adicionais no arquivo exportado
+                def strip_tz(df):
+                    df = df.copy()
+                    for col in df.select_dtypes(include=['datetimetz']).columns:
+                        df[col] = df[col].dt.tz_localize(None)
+                    return df
+
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    clientes_online.to_excel(writer, index=False, sheet_name='clientes_primeira_online')
-                    resultado.to_excel(writer, index=False, sheet_name='proxima_compra')
+                    strip_tz(clientes_online).to_excel(writer, index=False, sheet_name='clientes_primeira_online')
+                    strip_tz(resultado).to_excel(writer, index=False, sheet_name='proxima_compra')
                     # salvar ltv e cohorts se existirem
                     if 'ltv_df' in locals():
                         ltv_df.to_excel(writer, index=False, sheet_name='ltv_por_janela')

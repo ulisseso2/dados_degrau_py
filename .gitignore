@@ -20,3 +20,5 @@ COPIAR_PARA_STREAMLIT.toml
 INSTRUCOES_SECRETS_STREAMLIT.md
 gerar_token_rapido.py
 .streamlit/secrets.toml
+octadesk_cache.db
+data_cache/octadesk_cache.db

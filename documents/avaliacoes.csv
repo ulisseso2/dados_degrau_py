@@ -1,0 +1,752 @@
+id,uuid,opportunity_id,chat_id,classification,classification_reason,transcript,ai_evaluation,lead_score,vendor_score,main_product,octa_agent,octa_channel,octa_status,octa_tags,octa_group,octa_origin,octa_contact_name,octa_contact_phone,octa_bot_name,octa_created_at,octa_closed_at,octa_survey_response,created_at,updated_at
+8,74e1ad14-b92d-45d3-99d3-fc95d3a5e580,1427697,3e31dea8-e6a6-42d6-990b-d4899a4b5813,venda,"O atendente está tentando contatar o cliente para falar sobre um concurso de seu interesse e oferecer ajuda para conquistar a aprovação.","Ariel: 📢 Oi, Francisco! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇
+Ariel: Olá, Francisco, Aqui é Ariel, da Degrau de Cultural. 🏛
+Você nos procurou através do formulário em nosso site, e tentei retornar por telefone, mas não consegui. 😕
+Ta livre agora? ⏱
+Ariel: 📢 Oi, Francisco! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Francisco", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 5, "abertura_personalizacao_0_10": 0, "intencao_micro_momentos_0_30": 5, "restricoes_barreiras_0_10_invertido": 0}, "sinais_frio": [{"sinal": "Não respondeu às mensagens", "evidencia": "Falta de resposta do lead"}], "classificacao": "D", "sinais_quente": [], "lead_score_0_100": 20}, "qualidade_entrada": {"nivel": "Baixa", "iqh_0_100": 60, "quem_e_lead": "Francisco", "quem_e_vendedor": "Ariel", "precisa_reparacao": true, "problemas_detectados": ["Falta de interação do lead", "Mensagem repetida"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": ["Falta de interação do lead"], "melhorias": [{"melhoria": "Personalizar a mensagem para o lead", "como_fazer": "Usar o nome do lead e mencionar o concurso específico", "evidencia_do_gap": "Mensagem genérica"}, {"melhoria": "Oferecer mais informações sobre o produto ou serviço", "como_fazer": "Mencionar os benefícios e características do curso", "evidencia_do_gap": "Falta de informações sobre o curso"}, {"melhoria": "Evitar mensagens repetidas", "como_fazer": "Verificar se o lead já recebeu a mensagem antes de enviar novamente", "evidencia_do_gap": "Mensagem repetida"}], "pontos_fortes": [{"ponto": "Ariel tentou contatar o lead por telefone e, não conseguindo, enviou mensagem no WhatsApp", "evidencia": "Mensagem de Ariel"}, {"ponto": "Ariel ofereceu ajuda para conquistar a aprovação do concurso", "evidencia": "Mensagem de Ariel"}, {"ponto": "Ariel forneceu opção para prosseguir com o atendimento", "evidencia": "Mensagem de Ariel"}], "erro_mais_caro": {"descricao": "Não personalizar a mensagem para o lead", "evidencia": "Mensagem genérica"}, "nota_final_0_100": 40, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Ariel tentou contatar Francisco sobre um concurso, mas não conseguiu. Enviou mensagem no WhatsApp para prosseguir com o atendimento."]}",20,40,NULL,NULL,whatsapp,hidden,NULL,NULL,+552139701015,Francisco,NULL,NULL,2025-11-11T22:38:25.362Z,,not_sent,"2026-03-24 22:01:21","2026-03-24 22:01:21"
+9,0cf5a28a-3fa4-4536-9f2c-1d17b54f62f4,1427694,5ce7f976-d8bf-4cb9-a4c6-9f37c0e83b16,venda,"Conversa sobre curso de concurso público e condições de pagamento","Ariel: 📢 Oi, Eliane  De Souza ! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇
+Eliane  De Souza: Sim, quero continuar!
+OctaBot: Perfeito!
+Estou te encaminhando agora para o responsável!
+Luana Fernandes: Oi Eliane, tudo bem? 
+Sou especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+Eliane  De Souza: Sim
+Luana Fernandes: DETRAN RJ, live, noite
+Luana Fernandes: correto?
+Eliane  De Souza: Sim
+Luana Fernandes: bom dia
+Luana Fernandes: previsao de inicio dia 8/1
+Luana Fernandes: 14/1*
+Luana Fernandes: aulas sao seg, qua e sex
+Luana Fernandes: 18:30 as 21:45
+Luana Fernandes: conhece nossa modalidade live?
+Eliane  De Souza: Qual o valor
+Luana Fernandes: o investimento do curso são 12x de 194 Esse é o único investimento. Não há taxa de matrícula, e nele estão inclusos 100% da carga horária mais o material do curso digital
+Luana Fernandes: Detalhando melhor pra você, o material é personalizado e produzido pelos nossos professores em parceria com nosso pedagógico.
+Luana Fernandes: fechando hoje no cartao derrubo para 12x 97,00
+Luana Fernandes: fechamos?
+Eliane  De Souza: Só  vou ter dinheiro Só  final do mês
+Luana Fernandes: utiliza cartao como forma de pagamento?
+Eliane  De Souza: Não
+Eliane  De Souza: Só  boleto
+Luana Fernandes: Temos a possibilidade de boleto pra te ajudar a viabilizar a matrícula. Ela é feita através da nossa parceira PRINCÍPIA.
+Luana Fernandes: As condições são diferentes do que negociamos até agora, mas além de pagar mês a mês, você consegue parcelar em até 24x. Vou enviar o link de acesso pra você consultar as condições. Lá o passo a passo vai ser o seguinte:
+Luana Fernandes: 1 – Realizar cadastro;
+2 - A partir da aprovação escolher um plano de pagamento;
+3 - Dar uma ENTRADA;
+4 - E pagar a PRIMEIRA PARCELA APARTIR DE 17 DIAS.
+Luana Fernandes: Link boleto LIVE Detran-RJ:
+
+
+https://pay.principia.net/checkout/degrau-cultural?classes=63791
+Ariel: Olá, Eliane  De Souza , Aqui é Ariel, da Degrau de Cultural. 🏛
+Você nos procurou através do formulário em nosso site, e tentei retornar por telefone, mas não consegui. 😕
+Ta livre agora? ⏱","{"canal": "whatsapp", "extracao": {"restricoes": ["Não tem cartão de crédito"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "DETRAN RJ", "tomador_decisao": "Eliane De Souza", "dores_principais": ["Dificuldade em pagar o curso"], "produtos_citados": [{"produto": "Live", "evidencias": ["Luana Fernandes apresentou o valor e as condições de pagamento"], "ancoragem_de_valor": "12x de R$ 194,00", "foi_indicado_por_que": "Por ser a modalidade mais adequada para o concurso DETRAN RJ", "respeitou_prioridade_presencial_live": "Sim"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Eliane De Souza", "quem_e_vendedor": "Luana Fernandes", "precisa_reparacao": false, "problemas_detectados": ["Falta de informações sobre o histórico do lead"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": ["Eliane De Souza disse que só teria dinheiro no final do mês"], "melhorias": [{"melhoria": "Deveria ter perguntado mais sobre as dores e restrições do lead", "como_fazer": "Perguntar mais sobre as dores e restrições do lead", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Deveria ter apresentado mais opções de produtos", "como_fazer": "Apresentar mais opções de produtos", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Deveria ter fechado a venda de forma mais eficaz", "como_fazer": "Fechado a venda de forma mais eficaz", "evidencia_do_gap": "Não mencionado"}], "pontos_fortes": [{"ponto": "Apresentou o valor e as condições de pagamento de forma clara", "evidencia": "Luana Fernandes apresentou o valor e as condições de pagamento"}, {"ponto": "Ofereceu opções de pagamento para ajudar o lead", "evidencia": "Luana Fernandes ofereceu a opção de boleto"}, {"ponto": "Foi paciente e respeitosa com o lead", "evidencia": "Luana Fernandes respondeu às perguntas do lead de forma paciente e respeitosa"}], "erro_mais_caro": {"descricao": "Não ter fechado a venda", "evidencia": "Eliane De Souza disse que só teria dinheiro no final do mês"}, "nota_final_0_100": 70, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 6, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 15, "investigacao_spin_0_30": 20, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["Ariel tentou contato com Eliane De Souza por telefone, mas não conseguiu.", "Eliane De Souza respondeu ao WhatsApp e foi encaminhada para Luana Fernandes.", "Luana Fernandes apresentou o curso de concurso público para DETRAN RJ, modalidade live, e discutiu o valor e as condições de pagamento."]}",NULL,70,NULL,"Luana Fernandes",whatsapp,closed,NULL,"DC - Vendas Receptivo",+552139701015,"Eliane  De Souza",NULL,"Qualificação de Contato",2026-01-06T12:10:08.449Z,,not_sent,"2026-03-24 22:02:25","2026-03-24 22:02:25"
+10,73babfab-f69b-4500-8691-f483b2cf66e0,1427687,21517347-c012-403c-b617-90c55b23e0c6,venda,"O lead está recebendo uma oferta de curso com vagas limitadas e é incentivado a garantir sua vaga.","Ariel: 📢 Marcio Fernandes, sua chance está acabando!
+
+⏳ As últimas vagas do nosso curso estão quase esgotadas, e a proposta que te enviamos expira em breve! 📞 Tem alguma dúvida?
+
+🏆 Essa pode ser sua grande virada! Estamos prontos para te ajudar a alcançar a aprovação.
+Não deixe para depois o que pode mudar o seu futuro!
+
+Clique no botão 👇 para falar com a gente e garantir sua vaga.","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Marcio Fernandes", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Curso", "evidencias": ["Mensagem de Ariel"], "ancoragem_de_valor": "Aprovação", "foi_indicado_por_que": "Vagas quase esgotadas", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 10, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 10, "restricoes_barreiras_0_10_invertido": 5}, "sinais_frio": [{"sinal": "Falta de resposta", "evidencia": "Não há resposta do lead"}], "classificacao": "C", "sinais_quente": [{"sinal": "Interesse no curso", "evidencia": "Mensagem de Ariel"}], "lead_score_0_100": 40, "perguntas_faltantes_spin": ["Qual é o objetivo do lead?", "Qual é o nível de conhecimento do lead sobre o curso?"]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Marcio Fernandes", "quem_e_vendedor": "Ariel", "precisa_reparacao": false, "problemas_detectados": ["Falta de personalização"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": ["Falta de personalização"], "melhorias": [{"melhoria": "Personalizar a mensagem", "como_fazer": "Usar o nome do lead e informações sobre o curso", "evidencia_do_gap": "Mensagem de Ariel"}, {"melhoria": "Oferecer mais informações sobre o curso", "como_fazer": "Incluir detalhes sobre o curso e benefícios", "evidencia_do_gap": "Mensagem de Ariel"}, {"melhoria": "Responder a possíveis objeções", "como_fazer": "Incluir respostas a objeções comuns", "evidencia_do_gap": "Mensagem de Ariel"}], "pontos_fortes": [{"ponto": "Uso de emojis para chamar atenção", "evidencia": "Mensagem de Ariel"}, {"ponto": "Mensagem clara e objetiva", "evidencia": "Mensagem de Ariel"}, {"ponto": "Uso de botão para falar com a equipe", "evidencia": "Mensagem de Ariel"}], "erro_mais_caro": {"descricao": "Falta de personalização", "evidencia": "Mensagem de Ariel"}, "nota_final_0_100": 60, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 15, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Ariel envia mensagem para Marcio Fernandes sobre o curso com vagas quase esgotadas"]}",40,60,NULL,NULL,whatsapp,hidden,NULL,NULL,+551130178800,"Marcio Fernandes",NULL,NULL,2026-03-06T13:39:34.432Z,,not_sent,"2026-03-24 22:02:33","2026-03-24 22:02:33"
+11,9b55ed86-b137-45e4-a44c-ed23a2b1a1f3,1427683,5e6d87d6-3412-40e5-844a-3de20291ad6f,venda,"O lead está recebendo uma oferta de curso com vagas limitadas e é incentivado a garantir sua vaga.","Ariel: 📢 Mônica Renata, sua chance está acabando!
+
+⏳ As últimas vagas do nosso curso estão quase esgotadas, e a proposta que te enviamos expira em breve! 📞 Tem alguma dúvida?
+
+🏆 Essa pode ser sua grande virada! Estamos prontos para te ajudar a alcançar a aprovação.
+Não deixe para depois o que pode mudar o seu futuro!
+
+Clique no botão 👇 para falar com a gente e garantir sua vaga.","{"canal": "whatsapp", "extracao": {"restricoes": ["Vagas esgotando"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Mônica Renata", "dores_principais": ["Dúvidas sobre o curso"], "produtos_citados": [{"produto": "Curso", "evidencias": ["Proposta que expira em breve"], "ancoragem_de_valor": "Pode ser sua grande virada", "foi_indicado_por_que": "Para ajudar a alcançar a aprovação", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 20, "orientacao_valor_0_20": 10, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 15, "restricoes_barreiras_0_10_invertido": 8}, "classificacao": "B", "lead_score_0_100": 60}, "qualidade_entrada": {"nivel": "Alta", "iqh_0_100": 80, "quem_e_lead": "Mônica Renata", "quem_e_vendedor": "Ariel", "precisa_reparacao": false, "problemas_detectados": [], "confianca_identificacao_papeis_0_1": 1.0}, "avaliacao_vendedor": {"alertas": ["Importância de personalizar a abordagem"], "melhorias": [{"melhoria": "Investigação mais aprofundada", "como_fazer": "Perguntar mais sobre as dúvidas de Mônica Renata", "evidencia_do_gap": "Falta de perguntas sobre as necessidades específicas de Mônica Renata"}, {"melhoria": "Tratamento de objeções", "como_fazer": "Antecipar e responder às objeções potenciais", "evidencia_do_gap": "Não há menção a objeções"}, {"melhoria": "Compliance e clareza", "como_fazer": "Garantir que todas as informações sejam claras e transparentes", "evidencia_do_gap": "Informações sobre o curso poderiam ser mais detalhadas"}], "pontos_fortes": [{"ponto": "Abertura eficaz", "evidencia": "Mensagem de abertura atraente"}, {"ponto": "Destaque do valor", "evidencia": "Pode ser sua grande virada"}, {"ponto": "Chamada para ação clara", "evidencia": "Clique no botão para falar conosco"}], "erro_mais_caro": {"descricao": "Não investigar suficientemente as necessidades de Mônica Renata", "evidencia": "Falta de perguntas sobre as dúvidas e necessidades específicas"}, "nota_final_0_100": 70, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 8, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 10, "investigacao_spin_0_30": 15, "compromisso_prox_passos_0_15": 12, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["Ariel está tentando convencer Mônica Renata a adquirir o curso antes que as vagas esgotem.", "Ariel destaca a importância de não deixar para depois o que pode mudar o futuro de Mônica Renata."]}",60,70,NULL,NULL,whatsapp,hidden,NULL,NULL,+551130178800,"Mônica Renata",NULL,NULL,2026-03-06T13:39:33.598Z,,not_sent,"2026-03-24 22:02:42","2026-03-24 22:02:42"
+12,856e6e4a-d880-479d-ae6e-4109552c6e40,1427675,c267913b-b400-4a81-8076-eff6b40b22b1,venda,"O atendente está oferecendo ajuda para conquistar a aprovação em um concurso e tirar dúvidas, além de mencionar o início de turmas.","Ariel: 📢 Oi, Robert Luis de Souza Costa! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Robert Luis de Souza Costa", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 5, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 10, "restricoes_barreiras_0_10_invertido": 5}, "classificacao": "C", "sinais_quente": [{"sinal": "Resposta ao contato", "evidencia": "Robert Luis de Souza Costa respondeu ao contato"}], "lead_score_0_100": 40}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Robert Luis de Souza Costa", "quem_e_vendedor": "Ariel", "precisa_reparacao": false, "problemas_detectados": ["Falta de informações sobre o concurso"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": ["Falta de informações sobre o concurso"], "melhorias": [{"melhoria": "Investigar mais sobre as necessidades do lead", "como_fazer": "Perguntar mais sobre as dores e objetivos do lead", "evidencia_do_gap": "Falta de informações sobre o concurso"}, {"melhoria": "Oferecer mais opções de produtos", "como_fazer": "Mencionar diferentes opções de produtos", "evidencia_do_gap": "Não mencionou produtos específicos"}, {"melhoria": "Ser mais claro sobre o próximo passo", "como_fazer": "Esclarecer o que o lead precisa fazer em seguida", "evidencia_do_gap": "Não mencionou o próximo passo"}], "pontos_fortes": [{"ponto": "Abertura eficaz", "evidencia": "Ariel tentou contatar Robert Luis de Souza Costa"}, {"ponto": "Ofereceu ajuda", "evidencia": "Ariel ofereceu ajuda para conquistar a aprovação"}, {"ponto": "Chamou a atenção para a importância do concurso", "evidencia": "Ariel mencionou que as turmas estão começando"}], "erro_mais_caro": {"descricao": "Não investigar as necessidades do lead", "evidencia": "Falta de informações sobre o concurso"}, "nota_final_0_100": 60, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 12, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 3}}, "resumo_da_conversa": ["Ariel tentou contatar Robert Luis de Souza Costa sobre um concurso", "Ariel ofereceu ajuda para conquistar a aprovação e tirar dúvidas"]}",40,60,NULL,NULL,whatsapp,hidden,NULL,NULL,+552139701015,"Robert Luis de Souza Costa",NULL,NULL,2026-01-08T23:16:53.647Z,,not_sent,"2026-03-24 22:02:50","2026-03-24 22:02:50"
+13,1969408c-5e31-4f93-9b43-6d8e7070e419,1445015,6c0f6d3b-bb74-4244-9fa2-192a40329449,venda,"O lead Nayron Ryan está interessado em realizar um curso de preparação para o concurso da GCM municipal e está discutindo detalhes do curso com a consultora Mariana Telles.","Ariel: Oi! 🎯
+
+Que ótimo ter você aqui! ✅ Seu cadastro foi confirmado com sucesso.
+
+Você está a um passo de começar sua jornada rumo à aprovação!
+A Central de Concursos tem mais de 35 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆
+
+Agora é a SUA vez! 💪
+
+Como você prefere que a gente continue essa conversa? 📲
+Nayron Ryan: WhatsApp
+Ariel: Perfeito!
+Nosso horário de atendimento é de 8 às 20h, assim que um especialista estiver online ele lhe atenderá prioritariamente.
+Mariana Telles: Olá!  Sou a Consultora Mariana Telles, vou dar continuidade ao seu atendimento. Para qual concurso deseja se preparar ?
+Nayron Ryan: Bom dia, gostaria da GCM
+Nayron Ryan: Vai ser a primeira vez
+Nayron Ryan: Pelo que eu vi numa matéria do Google, a prova aconteceria lá em São Paulo capital
+Nayron Ryan: Sou de Sorocaba
+Nayron Ryan: Sim
+Nayron Ryan: A que horas são essas lives?
+Nayron Ryan: Entendi
+Nayron Ryan: Quanto tempo dura o curso?
+Ariel: Olá, Nayron Ryan, aqui é da Central de Concursos.
+Podemos falar por aqui?
+Nayron Ryan: Sim, podemos!
+Nayron Ryan: Bom dia, eu estava falando com um rapaz sobre o curso da GCM municipal, eu perguntei sobre quanto tempo dura o curso, mas por conta do final de semana eu fiquei sem resposta
+Mariana Telles: Vamos la Nayron, vou te explicar
+Mariana Telles: Aproximadamente 1 mes e meio nayron
+Nayron Ryan: Entendi, como posso começar?
+Mariana Telles: Só precisamos realizar a sua matricula
+Mariana Telles: Deixa eu te passar valores
+Mariana Telles: 💻 Turma 100% LIVES
+Segunda a Sexta [LIVES]
+Noite: das 19h às 22h30
+
+Investimento: em até 12x de R$ 85,40
+&gt;&gt; Parcelamento em Cartão de Crédito
+Mariana Telles: O que acha, vamos dar inicio ao seu projeto e garantir sua vaga?
+Nayron Ryan: Eu posso iniciar após o dia 5?
+Nayron Ryan: Infelizmente só após esse dia mesmo","{"canal": "whatsapp", "extracao": {"restricoes": ["Disponibilidade após dia 5"], "nivel_atual": "Iniciante", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "GCM", "tomador_decisao": "Nayron Ryan", "dores_principais": ["Dificuldade em encontrar curso adequado"], "produtos_citados": [{"produto": "LIVES", "evidencias": ["Mariana Telles mencionou que o curso é 100% LIVES"], "ancoragem_de_valor": "R$ 85,40 em até 12x", "foi_indicado_por_que": "Por ser uma opção de curso com horário flexível", "respeitou_prioridade_presencial_live": "Sim"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Nayron Ryan", "quem_e_vendedor": "Mariana Telles", "precisa_reparacao": false, "problemas_detectados": [], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": ["Mariana Telles não foi proativa em fechar a venda"], "melhorias": [{"melhoria": "Mariana Telles poderia ter perguntado mais sobre as dores e necessidades do lead", "como_fazer": "Perguntar mais sobre as dores e necessidades do lead", "evidencia_do_gap": "Mariana Telles não perguntou sobre as dores e necessidades do lead"}, {"melhoria": "Mariana Telles poderia ter fornecido mais informações sobre o curso", "como_fazer": "Fornecer mais informações sobre o curso", "evidencia_do_gap": "Mariana Telles não forneceu informações detalhadas sobre o curso"}, {"melhoria": "Mariana Telles poderia ter sido mais proativa em fechar a venda", "como_fazer": "Ser mais proativa em fechar a venda", "evidencia_do_gap": "Mariana Telles não foi proativa em fechar a venda"}], "pontos_fortes": [{"ponto": "Mariana Telles foi clara e objetiva nas respostas", "evidencia": "Mariana Telles forneceu informações detalhadas sobre o curso"}, {"ponto": "Mariana Telles foi atenciosa e respeitou a disponibilidade do lead", "evidencia": "Mariana Telles perguntou sobre a disponibilidade do lead"}, {"ponto": "Mariana Telles forneceu opções de parcelamento", "evidencia": "Mariana Telles mencionou que o curso pode ser parcelado em até 12x"}], "erro_mais_caro": {"descricao": "Não ter perguntado sobre as dores e necessidades do lead", "evidencia": "Mariana Telles não perguntou sobre as dores e necessidades do lead"}, "nota_final_0_100": 85, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 8, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 15, "investigacao_spin_0_30": 20, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["Nayron Ryan iniciou conversa sobre concurso GCM", "Mariana Telles atendeu e forneceu informações sobre o curso", "Nayron Ryan perguntou sobre duração do curso e como começar", "Mariana Telles forneceu informações sobre valores e parcelamento"]}",NULL,85,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"2026-03-24 22:05:06","2026-03-24 22:05:06"
+14,e92e32f2-4f23-4923-b0a9-0734e78f39dd,1445006,fe7dfc6c-0af0-425e-a222-0648bfe74b2a,venda,"O lead/cliente está procurando informações sobre cursos e concursos, e o vendedor está oferecendo produtos e serviços","Ariel: Olá, ~João, aqui é da Central de Concursos.
+Podemos falar por aqui?
+~joão: Boa noite
+Ariel: Olá, ~joão!
+
+Já vou te passar para um especialista em concursos públicos da *Central de Concursos* que vai esclarecer todas as suas dúvidas.
+Ariel: Você já é nosso aluno?
+~joão: Não sou aluno
+Ariel: Qual  a modalidade de estudo está buscando?
+~joão: Online
+Ariel: Boa escolha!
+
+Vídeos aulas EAD online te traz a autonomia de estudar no seu horário e poder repetir as aulas dentro do prazo 👏
+
+Você consegue ver tudo e fazer sua matrícula aqui: https://centraldeconcursos.com.br/cursos/online
+
+suporteead@centraldeconcursos.com.br
+~joão: Quero para a PM SP
+Ariel: Quer tirar mais alguma dúvida com um atendente?
+~joão: Sim
+Ariel: O horário de atendimento dos nossos especialistas é de segunda a sexta das 8h às 20h e de sábados das 9h às 13h.
+Mas não se preocupe, deixe sua mensagem que assim que possível te responderemos!
+~joão: Edital ainda está aberto?
+~joão: .
+Vitória: Olá!  Sou a Consultora Vitória, vou dar continuidade ao seu atendimento. Para qual concurso deseja se preparar?
+~joão: PM SP
+Ariel: Oi! 🎯
+
+Que ótimo ter você aqui! ✅ Seu cadastro foi confirmado com sucesso.
+
+Você está a um passo de começar sua jornada rumo à aprovação!
+A Central de Concursos tem mais de 35 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆
+
+Agora é a SUA vez! 💪
+
+Como você prefere que a gente continue essa conversa? 📲
+~joão: WhatsApp
+~joão: GCM SP
+Wanderley Oliveira: abriu o edital voce viu
+Wanderley Oliveira: Qual sua idade e formação escolar?
+~joão: Médio completo
+~joão: 20 anos
+Wanderley Oliveira: então dá
+~joão: Por onde começo ?
+~joão: Queria saber como faço minha inscrição, qual o local da prova no dia 26/04
+~joão: Poderia me ajudar ?
+Wanderley Oliveira: O chat será encerrado por falta de interação. Caso tenha interesse em iniciar a preparação, basta reativar o chat e daremos sequência ao atendimento.","{"canal": "whatsapp", "extracao": {"restricoes": ["Idade (20 anos)", "Formação escolar (Médio completo)"], "nivel_atual": "Médio completo", "prazo_prova": "26/04", "tempo_estudo": "Não mencionado", "concurso_area": "PM SP", "tomador_decisao": "~joão", "dores_principais": ["Dificuldade em encontrar um curso adequado", "Dúvidas sobre o processo de inscrição"], "produtos_citados": [{"produto": "EAD", "evidencias": ["https://centraldeconcursos.com.br/cursos/online"], "ancoragem_de_valor": "A autonomia de estudar no seu horário e poder repetir as aulas dentro do prazo", "foi_indicado_por_que": "Por ser uma opção online e flexível", "respeitou_prioridade_presencial_live": "Não se aplica"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "~joão", "quem_e_vendedor": "Equipe da Central de Concursos (Ariel, Vitória, Wanderley Oliveira)", "precisa_reparacao": false, "problemas_detectados": ["Falta de clareza em algumas respostas", "Não há uma estrutura clara de acompanhamento"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"melhorias": [{"melhoria": "Melhorar a clareza e a estrutura das respostas", "como_fazer": "Fornecer respostas mais detalhadas e estruturadas", "evidencia_do_gap": "Algumas respostas foram breves e não forneceram informações suficientes"}, {"melhoria": "Oferecer mais opções de produtos e serviços", "como_fazer": "Fornecer mais informações sobre os cursos e serviços oferecidos", "evidencia_do_gap": "O lead solicitou informações sobre os cursos, mas não recebeu muitas opções"}, {"melhoria": "Aumentar a interação com o lead", "como_fazer": "Fazer mais perguntas e solicitar feedback do lead", "evidencia_do_gap": "A interação foi limitada e não houve muitas perguntas ou solicitações de feedback"}], "pontos_fortes": [{"ponto": "A equipe de vendas foi atenciosa e respondeu às dúvidas do lead", "evidencia": "As respostas fornecidas foram claras e objetivas"}, {"ponto": "A equipe forneceu informações sobre os cursos e o processo de inscrição", "evidencia": "O lead recebeu informações sobre os cursos e o processo de inscrição"}, {"ponto": "A equipe ofereceu ajuda para iniciar a preparação", "evidencia": "O lead foi encorajado a reativar o chat para dar sequência ao atendimento"}], "nota_final_0_100": 70, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 6, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 15, "investigacao_spin_0_30": 20, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["O lead ~joão entrou em contato com a Central de Concursos para obter informações sobre cursos online para o concurso da PM SP.", "A equipe de vendas (Ariel, Vitória, Wanderley Oliveira) interagiu com o lead, fornecendo informações sobre os cursos e respondendo a suas dúvidas.", "O lead expressou interesse em se preparar para o concurso e solicitou ajuda para iniciar a preparação."]}",NULL,70,NULL,"Wanderley Oliveira",whatsapp,closed,"Central,online","CC - Geral",+551130178800,~joão,NULL,"Fluxo CENTRAL",2026-01-19T13:07:06.385Z,,not_sent,"2026-03-24 22:05:16","2026-03-24 22:05:16"
+15,c9bd6c5f-279c-4f71-a380-f4df697af3a4,1445003,af904e8f-cae7-41c3-b535-d23844cc9461,sem_interacao,"Chat vazio ou muito curto",,NULL,NULL,NULL,NULL,NULL,whatsapp,hidden,NULL,NULL,+551130178800,Raiane,NULL,NULL,2026-03-20T21:05:08.683Z,,not_sent,"2026-03-24 22:05:21","2026-03-24 22:05:21"
+16,7db89e35-78b4-4f30-8837-51cd0c49c96f,1445000,3bd9648f-edaa-4e09-bc65-9cf30c24df95,venda,"O lead está perguntando sobre cursos e condições de matrícula","Ariel: Oi, Lucas! 🎯
+
+Que ótimo ter você aqui!
+
+✅ Seu cadastro foi confirmado com sucesso.
+
+Você está a um passo de começar sua jornada rumo à aprovação!
+
+A Degrau Cultural tem mais de 40 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆
+Agora é a SUA vez! 💪
+
+Vamos continuar por aqui?📲
+Lucas Souza Silva: Oi
+OctaBot: Oi, Lucas Souza Silva.
+Sou Ariel, seu agente virtual 🤖 da Degrau Cultural!
+Seja bem-vindo(a) à nossa central de atendimento. 🏆
+
+Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅
+
+⚠️ IMPORTANTE: apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+Para começar, você já é nosso aluno 🧑‍🎓?
+Lucas Souza Silva: Não sou aluno
+OctaBot: Por qual modalidade você quer se preparar?
+Lucas Souza Silva: Presencial
+OctaBot: Qual a melhor unidade pra você?
+Lucas Souza Silva: Campo Grande
+OctaBot: Qual turno quer estudar?
+Lucas Souza Silva: Noite
+OctaBot: Qual área do concurso de seu interesse?
+Lucas Souza Silva: Segurança
+OctaBot: Qual Concurso?
+Lucas Souza Silva: PMERJ - Soldado
+OctaBot: Posso te ligar?
+Lucas Souza Silva: Seguir no WhatsApp
+OctaBot: OK, Lucas Souza Silva! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨
+Luana Fernandes: Oi Lucas, tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+Lucas Souza Silva: Oi
+Lucas Souza Silva: Bom dia
+Lucas Souza Silva: Quero saber sobre o curso da pmerj
+Luana Fernandes: minha turma começu ontem
+Luana Fernandes: 22/1
+Luana Fernandes: aulas sao terças e quintas
+Luana Fernandes: 18?30 as 21:45
+Lucas Souza Silva: Qual valor
+Lucas Souza Silva: Da mensalidade
+Luana Fernandes: o investimento do curso são 12x de 172. Esse é o único investimento. Não há taxa de matrícula, e nele estão inclusos 100% da carga horária mais o material do curso digital.
+Luana Fernandes: Detalhando melhor pra você, o material é personalizado e produzido pelos nossos professores em parceria com nosso pedagógico.
+Luana Fernandes: Voltando um pouco, as vagas são limitadas. Temos condições especiais para matrículas feitas hoje
+Luana Fernandes: Só me confirma uma coisa, você trabalha com cartão de crédito para garantir essa condição especial hoje?
+Lucas Souza Silva: Não não tenho cartão
+Luana Fernandes: .Temos a possibilidade de boleto pra te ajudar a viabilizar a matrícula. Ela é feita através da nossa parceira PRINCÍPIA.
+Luana Fernandes: As condições são diferentes do que negociamos até agora, mas além de pagar mês a mês, você consegue parcelar em até 24x. Vou enviar o link de acesso pra você consultar as condições. Lá o passo a passo vai ser o seguinte:
+Luana Fernandes: 1 – Realizar cadastro;
+2 - A partir da aprovação escolher um plano de pagamento;
+3 - Dar uma ENTRADA;
+4 - E pagar a PRIMEIRA PARCELA APARTIR DE 17 DIAS.
+Luana Fernandes: Link de financiamento com a Principia:
+
+https://pay.principia.net/checkout/degrau-cultural?classes=63423
+Luana Fernandes: Boa tarde. Começamos a conversar com você, mas não houve continuidade. As condições continuam exclusivas. Ainda deseja receber os detalhes ou posso encerrar o atendimento?
+Lucas Souza Silva: Vou fazer o cadastro já
+Luana Fernandes: ta bom","{"canal": "whatsapp", "extracao": {"restricoes": ["Não tem cartão de crédito"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Segurança", "tomador_decisao": "Lucas Souza Silva", "dores_principais": ["Preparação para concurso"], "produtos_citados": [{"produto": "Presencial", "evidencias": ["Mensagem de Luana Fernandes sobre o valor do curso"], "ancoragem_de_valor": "R$ 172,00 por mês, em 12x, sem taxa de matrícula", "foi_indicado_por_que": "Escolha do lead", "respeitou_prioridade_presencial_live": "Sim"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Lucas Souza Silva", "quem_e_vendedor": "Luana Fernandes (e Ariel, agente virtual)", "precisa_reparacao": false, "problemas_detectados": ["Conversa um pouco longa e com alguns trechos de apresentação"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": ["Lead pode desistir se não encontrar opção de pagamento adequada"], "melhorias": [{"melhoria": "Poderia ter oferecido mais opções de pagamento", "como_fazer": "Pesquisar outras opções de financiamento", "evidencia_do_gap": "Lead mencionou não ter cartão de crédito"}, {"melhoria": "Deveria ter feito mais perguntas SPIN", "como_fazer": "Treinar para fazer mais perguntas abertas", "evidencia_do_gap": "Conversa foi um pouco direta"}, {"melhoria": "Poderia ter enviado mais informações sobre o curso", "como_fazer": "Preparar materiais de apoio", "evidencia_do_gap": "Lead pediu mais informações sobre o curso"}], "pontos_fortes": [{"ponto": "Boa apresentação e explicação do curso", "evidencia": "Mensagem de Luana Fernandes sobre o curso"}, {"ponto": "Ofereceu opções de pagamento", "evidencia": "Mensagem de Luana Fernandes sobre financiamento com a Principia"}, {"ponto": "Manteve o lead engajado", "evidencia": "Conversa contínua e respostas do lead"}], "erro_mais_caro": {"descricao": "Não ofereceu opções de pagamento suficientes", "evidencia": "Lead mencionou não ter cartão de crédito"}, "nota_final_0_100": 85, "notas_por_categoria": {"objecoes_0_10": 9, "persuasao_etica_0_10": 8, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 18, "investigacao_spin_0_30": 25, "compromisso_prox_passos_0_15": 12, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Lucas Souza Silva iniciou conversa com Ariel, agente virtual, sobre interesse em curso para concurso PMERJ - Soldado", "Luana Fernandes, especialista em concursos públicos, deu sequência ao atendimento", "Discutiram sobre curso presencial, valor e condições de pagamento"]}",NULL,85,NULL,"Luana Fernandes",whatsapp,closed,"Degrau,vendas_receptivo,campo_grande","DC - Vendas Receptivo",+552139701015,"Lucas Souza Silva",NULL,"Qualificação de Contato",2025-12-26T16:46:05.504Z,,not_sent,"2026-03-24 22:05:30","2026-03-24 22:05:30"
+17,eb2f9b71-0da8-4c7e-a3cd-c9fd544a7172,1427629,c73767d4-f14e-47cd-ac89-4d0eb1b33e12,venda,"O representante está tentando contatar o cliente para falar sobre um concurso de seu interesse e oferecer ajuda para conquistar a aprovação.","Ariel: 📢 Oi, Janaina! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇
+Ariel: Olá, Janaina, Aqui é Ariel, da Degrau de Cultural. 🏛
+Você nos procurou através do formulário em nosso site, e tentei retornar por telefone, mas não consegui. 😕
+Ta livre agora? ⏱
+Ariel: 📢 Oi, Janaina! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Janaina", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 0, "orientacao_valor_0_20": 0, "abertura_personalizacao_0_10": 0, "intencao_micro_momentos_0_30": 0, "restricoes_barreiras_0_10_invertido": 10}, "sinais_frio": [{"sinal": "Não respondeu às mensagens", "evidencia": "Falta de interação"}], "classificacao": "D", "sinais_quente": [], "lead_score_0_100": 10, "perguntas_faltantes_spin": ["Qual é o seu objetivo?", "Qual é o seu maior desafio?", "O que você espera alcançar?"]}, "qualidade_entrada": {"nivel": "Baixa", "iqh_0_100": 40, "quem_e_lead": "Janaina", "quem_e_vendedor": "Ariel", "precisa_reparacao": true, "problemas_detectados": ["Falta de interação do lead", "Mensagem repetida"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": ["Falta de interação do lead"], "melhorias": [{"melhoria": "Personalizar a mensagem", "como_fazer": "Usar o nome do lead e mencionar o concurso específico", "evidencia_do_gap": "Mensagem genérica"}, {"melhoria": "Oferecer valor", "como_fazer": "Mencionar os benefícios do curso", "evidencia_do_gap": "Falta de valor mencionado"}, {"melhoria": "Investigar as necessidades do lead", "como_fazer": "Fazer perguntas sobre as dores e objetivos do lead", "evidencia_do_gap": "Falta de investigação"}], "pontos_fortes": [{"ponto": "Ariel tentou contatar o lead", "evidencia": "Mensagem de WhatsApp"}, {"ponto": "Ariel ofereceu ajuda", "evidencia": "Mensagem de WhatsApp"}, {"ponto": "Ariel forneceu opção para prosseguir com o atendimento", "evidencia": "Mensagem de WhatsApp"}], "erro_mais_caro": {"descricao": "Não personalizar a mensagem", "evidencia": "Mensagem genérica"}, "nota_final_0_100": 20, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 0, "abertura_rapport_0_10": 2, "valor_capacidade_0_20": 0, "investigacao_spin_0_30": 0, "compromisso_prox_passos_0_15": 5, "clareza_compliance_whatsapp_0_5": 3}}, "resumo_da_conversa": ["Ariel tentou contatar Janaina sobre um concurso, mas não conseguiu. Enviou mensagem no WhatsApp para prosseguir com o atendimento."]}",10,20,NULL,NULL,whatsapp,hidden,NULL,NULL,+552139701015,Janaina,NULL,NULL,2026-01-06T20:28:04.964Z,,not_sent,"2026-03-24 22:14:39","2026-03-24 22:14:39"
+18,1f6af93f-ce93-4d76-b9d3-0360f356d613,1427627,c7b8f6c1-b721-469d-ad5e-e13492486142,venda,"O atendente está oferecendo ajuda para conquistar aprovação em um concurso e tirar dúvidas, o que indica uma tentativa de venda de serviços ou cursos.","Ariel: 📢 Oi, Stefani!
+
+Aqui é Ariel, da Central de Concursos. 🏛
+Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇
+Stefani: Sim, quero continuar!
+Ariel: Aguarde um momento enquanto te transfiro para um de nossos especialistas!
+Stefani: Om
+Stefani: Om
+Stefani: Ok
+Bruno Furiotto: Olá Stefani, tudo bem?
+
+Sou o Bruno da Central de Concursos, vou seguir com o seu atendimento e quero saber como posso lhe ajudar?","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Stefani", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 5, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 10, "restricoes_barreiras_0_10_invertido": 10}, "classificacao": "C", "sinais_quente": [{"sinal": "Interesse em prosseguir", "evidencia": "Stefani disse 'Sim, quero continuar!'"}], "lead_score_0_100": 40}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Stefani", "quem_e_vendedor": "Bruno Furiotto", "precisa_reparacao": false, "problemas_detectados": ["Falta de informações detalhadas sobre o concurso"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": ["Falta de informações sobre o concurso"], "melhorias": [{"melhoria": "Investigar mais sobre as necessidades de Stefani", "como_fazer": "Perguntar sobre o que Stefani busca no concurso", "evidencia_do_gap": "Falta de perguntas específicas sobre as necessidades de Stefani"}, {"melhoria": "Oferecer valor claro", "como_fazer": "Explicar os benefícios do curso", "evidencia_do_gap": "Não mencionou claramente o valor do curso"}, {"melhoria": "Persuadir eticamente", "como_fazer": "Usar provas sociais ou autoridade", "evidencia_do_gap": "Não usou técnicas de persuasão ética"}], "pontos_fortes": [{"ponto": "Abertura eficaz", "evidencia": "Ariel inicialmente entrou em contato de forma amigável"}, {"ponto": "Transferência suave", "evidencia": "Ariel transferiu o atendimento para Bruno de forma eficiente"}, {"ponto": "Bruno mostrou interesse em ajudar", "evidencia": "Bruno perguntou como poderia ajudar Stefani"}], "erro_mais_caro": {"descricao": "Não investigar as necessidades do lead", "evidencia": "Bruno não perguntou sobre as necessidades específicas de Stefani"}, "nota_final_0_100": 60, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Ariel inicialmente entrou em contato com Stefani sobre um concurso", "Stefani expressou interesse em prosseguir", "Bruno Furiotto assumiu o atendimento"]}",40,60,NULL,"Bruno Furiotto",whatsapp,closed,"Central,2ª_tentativa_ligação","CC - Geral",+551130178800,Stefani,NULL,"Fluxo CENTRAL",2026-01-15T16:15:46.423Z,,not_sent,"2026-03-24 22:14:47","2026-03-24 22:14:47"
+19,cff119c6-3956-4e4a-a596-1172dd229d40,1427625,771c6b75-b191-41c8-b0c2-563417e73296,venda,"A conversa iniciou com uma oferta de curso para concurso público e o especialista foi conectado para dar sequência no atendimento.","Ariel: 📢 Oi, Deborah ! Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato. 😕
+
+📆 Nossas turmas estão começando! Queremos te ajudar a conquistar sua aprovação, e tirar suas dúvidas rapidamente.
+
+Gostaria de prosseguir com o seu atendimento?
+
+Clique no botão abaixo 👇
+Deborah: Sim, quero continuar!
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+OctaBot: Desculpe, eu não entendi a sua resposta. 😢.
+Vou selecionar um dos nossos especialistas para ajudá-lo.
+OctaBot: Prontinho! Já conectei você a um de nossos especialistas! 😉
+Thiago Luiz: Oi Deborah, tudo bem? 
+Sou especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Deborah", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 20, "orientacao_valor_0_20": 10, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 20, "restricoes_barreiras_0_10_invertido": 5}, "classificacao": "C", "lead_score_0_100": 60}, "qualidade_entrada": {"nivel": "Baixa", "iqh_0_100": 60, "quem_e_lead": "Deborah", "quem_e_vendedor": "Thiago Luiz", "precisa_reparacao": true, "problemas_detectados": ["Conversa inicial não clara", "Respostas repetidas do bot"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": ["Falta de clareza na mensagem inicial", "Respostas repetidas do bot"], "melhorias": [{"melhoria": "Melhorar a clareza da mensagem inicial", "como_fazer": "Ser mais direto e claro na mensagem inicial", "evidencia_do_gap": "Mensagem inicial confusa"}, {"melhoria": "Reduzir a repetição de respostas do bot", "como_fazer": "Implementar um sistema para evitar respostas repetidas", "evidencia_do_gap": "Respostas repetidas do bot"}, {"melhoria": "Fornecer mais informações sobre o concurso", "como_fazer": "Fornecer mais detalhes sobre o concurso e como pode ajudar Deborah", "evidencia_do_gap": "Falta de informações sobre o concurso"}], "pontos_fortes": [{"ponto": "Thiago Luiz se apresentou como especialista em concursos públicos", "evidencia": "Sou especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp"}, {"ponto": "Ariel tentou contato telefônico sem sucesso", "evidencia": "Tentamos te ligar para falar sobre o concurso do seu interesse, mas não conseguimos contato"}, {"ponto": "Deborah respondeu positivamente ao prosseguir com o atendimento", "evidencia": "Sim, quero continuar!"}], "erro_mais_caro": {"descricao": "Perda de oportunidade de venda devido à falta de clareza na mensagem inicial", "evidencia": "Mensagem inicial confusa"}, "nota_final_0_100": 40, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Ariel tentou contato telefônico sem sucesso", "Deborah respondeu positivamente ao prosseguir com o atendimento", "Thiago Luiz se apresentou como especialista em concursos públicos"]}",60,40,NULL,"Wagner Santos de Araujo",whatsapp,closed,NULL,"DC - Geral",+552139701015,Deborah,NULL,"Qualificação de Contato",2026-01-06T12:48:00.261Z,,not_sent,"2026-03-24 22:14:55","2026-03-24 22:14:55"
+26,9550dd49-9a69-4aed-826b-e27d4bda8c69,NULL,35d4f9bb-9010-47c3-a6ce-4072d238cec0,erro,NULL,"2026-03-03 02:06:52 - Jonathan: Boa
+2026-03-03 02:06:55 - Jonathan: Noite
+2026-03-03 02:06:57 - OctaBot: <p>Olá, sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong><strong></strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+</p>
+2026-03-03 02:07:00 - OctaBot: <p>Legal, Eloclimatizacao! Por favor, digite seu email 📨 para continuarmos a conversa, caso a conexão caia.</p>
+2026-03-03 02:07:10 - Jonathan: Eloclimatizacao269@gmail.com
+2026-03-03 02:07:14 - OctaBot: <p>Qual seu Nome?</p>
+2026-03-03 02:07:18 - Jonathan: Jonathan
+2026-03-03 02:07:22 - OctaBot: <p>Oi, Jonathan,Você já é nosso aluno?</p>
+2026-03-03 02:07:27 - Jonathan: Não sou aluno
+2026-03-03 02:07:31 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-03 02:07:35 - Jonathan: Presencial
+2026-03-03 02:07:39 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-03 02:07:47 - Jonathan: Madureira
+2026-03-03 02:07:50 - OctaBot: <p>Qual turno quer estudar?</p>
+2026-03-03 02:07:55 - Jonathan: Noite
+2026-03-03 02:07:59 - OctaBot: <p>Qual área do concurso de seu interesse?</p>
+2026-03-03 02:08:07 - Jonathan: Segurança
+2026-03-03 02:08:11 - OctaBot: <p>Qual Concurso?</p>
+2026-03-03 02:08:18 - Jonathan: PMERJ - Soldado
+2026-03-03 02:08:22 - OctaBot: <p>Posso te ligar?</p>
+2026-03-03 02:08:26 - Jonathan: Seguir no WhatsApp
+2026-03-03 02:08:34 - OctaBot: <p>OK, Jonathan! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨</p>
+2026-03-03 12:05:15 - Luana Fernandes: Oi Jonathan, tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+2026-03-03 12:06:14 - Jonathan: Sim
+2026-03-03 12:10:05 - Luana Fernandes: turma começa 5/3,
+2026-03-03 12:10:14 - Luana Fernandes: aulas sao seg, qua e sex
+2026-03-03 12:10:17 - Luana Fernandes: 18:
+2026-03-03 12:10:19 - Luana Fernandes: 0 as 21:45
+2026-03-03 12:10:23 - Luana Fernandes: 18:30*
+2026-03-03 12:11:12 - Jonathan: Qual e valor
+2026-03-03 12:11:15 - Jonathan: Do curso
+2026-03-03 12:12:48 - Luana Fernandes: o investimento do curso são 12x de172. Esse é o único investimento. Não há taxa de matrícula, e nele estão inclusos 100% da carga horária mais o material do curso digital.
+2026-03-03 12:12:53 - Luana Fernandes: Detalhando melhor pra você, o material é personalizado e produzido pelos nossos professores em parceria com nosso pedagógico.
+2026-03-03 12:12:57 - Luana Fernandes: Voltando um pouco, as vagas são limitadas. Temos condições especiais para matrículas feitas hoje.
+2026-03-03 12:13:03 - Luana Fernandes: Só me confirma uma coisa, você trabalha com cartão de crédito para garantir essa condição especial hoje?",NULL,NULL,70,NULL,"Luana Fernandes",whatsapp,closed,"['Degrau', 'vendas_receptivo', 'madureira']","DC - Vendas Receptivo","Whats Degrau",Jonathan,+5521992461681,"Qualificação de Contato","2026-03-02 23:06:53.756000-03:00",NULL,NULL,"2026-03-25 19:38:52","2026-03-25 19:38:52"
+27,1e9c7bc3-4204-4f6d-9a12-9044548b273c,NULL,e0e3cf7e-d0d5-4d73-848c-dd4ad4328786,erro,NULL,"2026-03-03 02:05:50 - Sofya: Olá
+2026-03-03 02:05:52 - Sofya: Boa noite
+2026-03-03 02:05:54 - Sofya: Td bem?
+2026-03-03 02:05:55 - OctaBot: <p>Olá, sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong><strong></strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+</p>
+2026-03-03 02:05:57 - OctaBot: <p>Legal, Sofya Lorena! Por favor, digite seu email 📨 para continuarmos a conversa, caso a conexão caia.</p>
+2026-03-03 02:06:12 - Sofya: sofyalorena180@gmail.com
+2026-03-03 02:06:16 - OctaBot: <p>Qual seu Nome?</p>
+2026-03-03 02:06:22 - Sofya: Sofya
+2026-03-03 02:06:26 - OctaBot: <p>Oi, Sofya,Você já é nosso aluno?</p>
+2026-03-03 02:11:11 - Sofya: Não sou aluno
+2026-03-03 02:11:15 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-03 02:11:34 - Sofya: Presencial
+2026-03-03 02:11:37 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-03 02:11:45 - Sofya: on-line n daria pq trabalho 24x48
+2026-03-03 02:11:49 - OctaBot: <p>Opção inválida. Escolha uma das opções disponíveis</p>
+2026-03-03 02:11:49 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-03 02:11:55 - Sofya: ai meu Deus falei errado
+2026-03-03 02:11:56 - Sofya: KKKKK
+2026-03-03 02:11:58 - OctaBot: <p>Opção inválida. Escolha uma das opções disponíveis</p>
+2026-03-03 02:11:58 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-03 02:12:41 - Sofya: Cliquei errado
+2026-03-03 02:12:45 - OctaBot: <p>Opção inválida. Escolha uma das opções disponíveis</p>
+2026-03-03 02:12:56 - Sofya: .
+2026-03-03 02:12:59 - Sofya: Niterói
+2026-03-03 12:08:35 - Luana Fernandes: Oi Sofya, tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+2026-03-03 13:01:54 - Sofya: Bom dia
+2026-03-03 13:01:55 - Sofya: Sim
+2026-03-03 13:21:15 - Luana Fernandes: qual curso deseja?
+2026-03-03 16:43:47 - Sofya: Quais tem?
+2026-03-03 16:43:50 - Sofya: 😂😂😂
+2026-03-03 16:44:03 - Sofya: Eu queria fazer pra oficial do bombeiro
+2026-03-03 16:44:45 - Sofya: 
+2026-03-03 17:06:02 - Luana Fernandes: esse nao temos
+2026-03-03 17:06:24 - Luana Fernandes: tenho esses aqui
+2026-03-03 20:07:25 - Sofya: Policial rodoviário tem q ter faculdade?
+2026-03-03 20:07:28 - Sofya: Como funciona?
+2026-03-03 20:13:01 - Elton Caetano: Sim
+2026-03-03 20:13:28 - Elton Caetano: Turma presenciais com foco especifico para cada concurso.
+2026-03-03 20:14:07 - Sofya: Não quero presencial
+2026-03-03 20:14:11 - Sofya: Quero on-line
+2026-03-03 20:14:31 - Sofya: Eu respondi errado esse robô de vocês ai, n consegui voltar na opção
+2026-03-03 20:25:56 - Elton Caetano: Online para qual concurso?
+2026-03-03 20:27:15 - Sofya: 
+2026-03-03 20:33:30 - Elton Caetano: Posso mandar áudio?
+2026-03-03 20:46:59 - Sofya: Sim
+2026-03-03 21:16:27 - Elton Caetano: 
+2026-03-03 21:26:14 - Sofya: 
+2026-03-03 21:30:44 - Elton Caetano: Na modalidade Online também?
+2026-03-04 00:49:41 - Sofya: Isso
+2026-03-04 12:06:35 - Luana Fernandes: bom dia
+2026-03-04 12:06:43 - Luana Fernandes: banco do brasil exigencia é só nivel medio
+2026-03-04 12:55:09 - Sofya: eu acabei a escola
+2026-03-04 12:55:11 - Sofya: Bom dia
+2026-03-04 12:58:15 - Luana Fernandes: ok
+2026-03-04 12:58:25 - Luana Fernandes: ja sabe como funciona nossa modalidade online?
+2026-03-04 13:00:17 - Sofya: não
+2026-03-04 13:00:29 - Sofya: 
+2026-03-04 13:07:43 - Luana Fernandes: isso
+2026-03-04 13:07:58 - Luana Fernandes: O curso online contém vídeo aulas gravado com aulas teóricas e exercícios, cada vídeo possui um material em PDF anexado, esse material trata-se de um roteiro de aula que o professor segue, e que o aluno tem acesso, caso deseje você pode baixar esse material em PDF ou imprimir.
+2026-03-04 13:08:09 - Luana Fernandes: Seu acesso será sempre através da plataforma da Degrau através na sala virtual, com o uso da internet, você consegue visualizar as videoaulas através do computador, tablet e celular com visualizações ilimitadas.
+2026-03-04 13:08:31 - Luana Fernandes: O acesso é 100% online sendo assim não será possível baixar os vídeos para o computador do usuário a utilização será sempre através da plataforma da Degrau através do uso da  internet. Acesso por 1 ano, sendo assim, pode ver e rever as aulas em qualquer dia e horário.
+2026-03-04 13:22:44 - Sofya: 
+2026-03-04 13:31:01 - Luana Fernandes: sim, avisamos quando sai o edital
+2026-03-04 20:23:34 - Sofya: 
+2026-03-04 20:23:43 - Sofya: 
+2026-03-04 20:25:09 - Luana Fernandes: 
+2026-03-04 20:26:17 - Sofya: Qual valor?
+2026-03-04 20:34:42 - Luana Fernandes: bb online é 12x 37,20 no cartao",NULL,NULL,70,NULL,"Luana Fernandes",whatsapp,closed,"['Degrau', 'vendas_receptivo']","DC - Vendas Receptivo","Whats Degrau",Sofya,+5521974934619,"Qualificação de Contato","2026-03-02 23:05:51.635000-03:00",NULL,NULL,"2026-03-25 19:39:01","2026-03-25 19:39:01"
+28,f146b991-47d9-470a-98c5-1329b3de2975,NULL,c194847b-8139-4991-a101-ebe7f777bc54,erro,NULL,"2026-03-03 01:55:59 - Maria: Ola
+2026-03-03 01:56:07 - Ariel: <p>Olá, Maria!</p><br><p>Já vou te passar para um especialista em concursos públicos da *Central de Concursos* que vai esclarecer todas as suas dúvidas. </p>
+2026-03-03 01:56:09 - Ariel: <p>Você já é nosso aluno?</p>
+2026-03-03 01:56:18 - Maria: Não sou aluno
+2026-03-03 01:56:21 - Ariel: <p>Qual  a modalidade de estudo está buscando?</p>
+2026-03-03 01:56:27 - Maria: Presencial
+2026-03-03 01:56:31 - Ariel: <p>Qual o turno da sua preferência?</p>
+2026-03-03 01:56:37 - Maria: Noite
+2026-03-03 01:56:41 - Ariel: <p>Ok</p><p>Para te direcionar melhor, você ja estudou com a gente?</p>
+2026-03-03 01:56:50 - Maria: Ainda não Estudei
+2026-03-03 01:56:56 - Ariel: <p>O horário de atendimento dos nossos especialistas é de segunda a sexta das 8h às 20h e de sábados das 9h às 13h. </p><p>Mas não se preocupe, deixe sua mensagem que assim que possível te responderemos!</p>
+2026-03-03 01:58:13 - Maria: Gostaria de obter informações  referente aos  cursos presenciais para Tecnico Do TJSP e técnico do INSS
+2026-03-03 13:19:15 - Cintia Margareth: Olá,  Meu nome é Cíntia, sou consultora da Central de Concursos, darei continuidade ao seu atendimento. Para qual concurso deseja se preparar conosco?
+2026-03-03 13:19:31 - Cintia Margareth: INSS e TJ, certo?
+2026-03-03 13:19:40 - Cintia Margareth: Temos cursos presenciais e à distância, qual a forma de estudo tem interesse?
+2026-03-04 12:52:10 - Maria: Bom dia
+2026-03-04 12:52:21 - Maria: Presencial noturno
+2026-03-04 13:30:42 - Cintia Margareth: Oi Maria as aulas de TJ  são de terças e quintas e de INSS são de segundas e quartas
+2026-03-04 13:30:52 - Cintia Margareth: a noite seria das 19 às 22
+2026-03-04 13:38:44 - Cintia Margareth: Consegue vir em uma aula como convidada?",NULL,NULL,70,NULL,"Cintia Margareth",whatsapp,closed,"['Central', 'ainda não é aluno']","CC - Metrô República","Whats Central",Maria,+5511986615090,"Fluxo CENTRAL","2026-03-02 22:56:02.766000-03:00",NULL,NULL,"2026-03-25 19:39:09","2026-03-25 19:39:09"
+29,4f6818c5-83f0-4452-a697-8f0e26357fe2,NULL,450dc02c-1a6a-447b-b0e6-2e2a79e00949,venda,"O cliente está recebendo informações sobre cursos e preços.","2026-03-04 00:51:28 - Ariel: <p>Oi, <span variable="Helena" class="p-1 rounded bg-blue-300 border-solid">Helena</span>! 🎯 </p><p>
+Que ótimo ter você aqui! 
+
+✅ Seu cadastro foi confirmado com sucesso. 
+
+ Você está a um passo de começar sua jornada rumo à aprovação! 
+
+A Degrau Cultural tem mais de 40 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆 
+ Agora é a SUA vez! 💪 </p><p><br />Vamos continuar por aqui?📲</p> 
+2026-03-04 00:51:38 - null: Olá! Gostaria de mais informações.
+2026-03-04 00:51:43 - OctaBot: <p>Oi, null.</p><p>Sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀</p><br><p>Para começar, você já é nosso aluno 🧑‍🎓? 
+</p><br>
+2026-03-04 00:51:47 - null: Não sou aluno
+2026-03-04 00:51:51 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-04 00:52:00 - null: Curso Online
+2026-03-04 00:52:03 - OctaBot: <p>OK, null! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨</p>
+2026-03-04 11:26:25 - João Vitor Souza: Bom dia! Tudo bom? Como posso te ajudar?
+2026-03-04 11:26:55 - null: Pm.turmas
+2026-03-04 11:27:04 - null: Bom dia
+2026-03-04 11:27:12 - João Vitor Souza: Ta certo, vamos la
+2026-03-04 11:27:30 - João Vitor Souza: Curso Online Pmerj
+Teoria + Degrau Questões
+12x deR$29,00 OU R$348,00 à vista
+2026-03-04 11:27:43 - João Vitor Souza: Aqui você tem acesso a vídeo aulas, materiais de apoio em PDF para baixar e a plataforma Degrau Questões!
+2026-03-04 11:27:51 - João Vitor Souza: Onde você pode exercitar fazendo questões do edital e simulados de forma ilimitada, uma preparação completa
+2026-03-04 11:27:57 - João Vitor Souza: Fazemos sua matrícula por aqui mesmo e seu acesso é liberado de forma imediata","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Não mencionado", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "EAD", "evidencias": ["Curso Online Pmerj Teoria + Degrau Questões"], "ancoragem_de_valor": "Acesso a vídeo aulas, materiais de apoio em PDF e plataforma Degrau Questões", "foi_indicado_por_que": "Lead solicitou informações sobre curso online", "respeitou_prioridade_presencial_live": "Não"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "null", "quem_e_vendedor": "João Vitor Souza", "precisa_reparacao": false, "problemas_detectados": ["Mensagens automáticas do WhatsApp", "Respostas curtas do lead"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Investigar mais sobre as necessidades do lead", "como_fazer": "Perguntar mais sobre o que o lead está procurando", "evidencia_do_gap": "Lead não fornece muitas informações sobre suas necessidades"}, {"melhoria": "Apresentar opções de cursos presenciais ou live", "como_fazer": "Perguntar se o lead está interessado em cursos presenciais ou live", "evidencia_do_gap": "Vendedor não apresentou opções de cursos presenciais ou live"}, {"melhoria": "Forneceu mais informações sobre a plataforma Degrau Questões", "como_fazer": "Perguntar se o lead tem alguma dúvida sobre a plataforma", "evidencia_do_gap": "Lead não perguntou sobre a plataforma"}], "pontos_fortes": [{"ponto": "Apresentou opções de curso online", "evidencia": "Curso Online Pmerj Teoria + Degrau Questões"}, {"ponto": "Forneceu informações sobre o produto", "evidencia": "Acesso a vídeo aulas, materiais de apoio em PDF e plataforma Degrau Questões"}, {"ponto": "Ofereceu opção de matrícula imediata", "evidencia": "Fazemos sua matrícula por aqui mesmo e seu acesso é liberado de forma imediata"}], "erro_mais_caro": {"descricao": "Não investigou mais sobre as necessidades do lead", "evidencia": "Lead não fornece muitas informações sobre suas necessidades"}, "nota_final_0_100": 60, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 15, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Lead busca informações sobre curso online", "Vendedor apresenta opções de curso online", "Lead não fornece muitas informações sobre suas necessidades"]}",NULL,60,EAD,"João Vitor Souza",whatsapp,closed,"Degrau, vendas_receptivo","DC - Vendas EAD","Whats Degrau",null,+5521987012844,"Qualificação de Contato","2026-03-03 21:51:28.645000-03:00",NULL,NULL,"2026-03-25 19:55:07","2026-03-25 19:55:07"
+30,12c8bf24-f403-4e72-b160-f2ab7403cae4,NULL,8832edae-43f2-4374-8256-b2568c016505,venda,"O cliente está sendo atendido por um especialista para obter informações sobre cursos.","2026-03-04 00:48:09 - Ariel: <p>Oi, <span variable="Hugo" class="p-1 rounded bg-blue-300 border-solid">Hugo</span>! 🎯 </p><p>
+Que ótimo ter você aqui! 
+
+✅ Seu cadastro foi confirmado com sucesso. 
+
+ Você está a um passo de começar sua jornada rumo à aprovação! 
+
+A Degrau Cultural tem mais de 40 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆 
+ Agora é a SUA vez! 💪 </p><p><br />Vamos continuar por aqui?📲</p> 
+2026-03-04 00:48:37 - Ariel: <p>Oi, <span variable="Hugo" class="p-1 rounded bg-blue-300 border-solid">Hugo</span>! 🎯 </p><p>
+Que ótimo ter você aqui! 
+
+✅ Seu cadastro foi confirmado com sucesso. 
+
+ Você está a um passo de começar sua jornada rumo à aprovação! 
+
+A Degrau Cultural tem mais de 40 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆 
+ Agora é a SUA vez! 💪 </p><p><br />Vamos continuar por aqui?📲</p> 
+2026-03-04 00:48:56 - Hugo Freitas: Sim! Vamos continuar
+2026-03-04 00:49:03 - OctaBot: <p>Perfeito! </p><p>Nosso horário de atendimento é de 9 às 20h, assim que um especialista estiver online ele irá lhe atender prioritariamente.</p>
+2026-03-04 12:18:26 - Jessica Siqueira: Olá, bom dia! Tudo bem? Me chamo Jéssica e irei lhe passar as informações que precisa. Me diz, sobre qual curso você quer saber?","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Não mencionado", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": ["Não mencionado"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 0, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 5, "restricoes_barreiras_0_10_invertido": 0}, "sinais_frio": [{"sinal": "Falta de interação sobre cursos", "evidencia": "Não há perguntas ou menções a cursos"}], "classificacao": "D", "sinais_quente": [], "lead_score_0_100": 20, "perguntas_faltantes_spin": ["Qual é o seu objetivo?", "Qual é o seu maior desafio?", "O que você espera de um curso?"]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 60, "quem_e_lead": "Hugo Freitas", "quem_e_vendedor": "Ariel e Jessica Siqueira", "precisa_reparacao": false, "problemas_detectados": ["Mensagens automáticas repetidas", "Falta de rotulagem clara em todas as mensagens"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Investigar necessidades do lead", "como_fazer": "Perguntar sobre objetivos e dores do lead", "evidencia_do_gap": "Não há perguntas sobre necessidades do lead"}, {"melhoria": "Oferecer opções de cursos", "como_fazer": "Apresentar os cursos disponíveis", "evidencia_do_gap": "Não há menção a cursos específicos"}, {"melhoria": "Estabelecer próximo passo claro", "como_fazer": "Definir um próximo passo concreto", "evidencia_do_gap": "Não há definição de próximo passo"}], "pontos_fortes": [{"ponto": "Boas-vindas personalizadas", "evidencia": "Oi, Hugo!"}, {"ponto": "Informação sobre a instituição", "evidencia": "A Degrau Cultural tem mais de 40 anos"}, {"ponto": "Disponibilidade para atendimento", "evidencia": "Nosso horário de atendimento é de 9 às 20h"}], "erro_mais_caro": {"descricao": "Não investigar necessidades do lead", "evidencia": "Não há perguntas sobre objetivos e dores do lead"}, "nota_final_0_100": 40, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 5, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Boas-vindas e confirmação de cadastro", "Início da conversa sobre cursos"]}",20,40,"Não mencionado","Jessica Siqueira",whatsapp,closed,"Degrau, dc_automação_ctu_ead","DC - Geral","Whats Degrau","Hugo Freitas",+5521970668298,"Qualificação de Contato","2026-03-03 21:48:09.895000-03:00",NULL,NULL,"2026-03-25 19:55:15","2026-03-25 19:55:15"
+31,fa1cb117-300f-4e18-8612-8d8d3a2b8f69,NULL,fbb2de56-ff6b-45f6-a89e-d94335ec6b0c,venda,"Conversa sobre cursos e matrículas","2026-03-04 00:30:29 - Priscila: Oi
+2026-03-04 00:30:35 - OctaBot: <p>Olá, sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong><strong></strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+</p>
+2026-03-04 00:30:37 - OctaBot: <p>Legal, Pricila! Por favor, digite seu email 📨 para continuarmos a conversa, caso a conexão caia.</p>
+2026-03-04 00:31:04 - Priscila: Prisbelinha1@gmail.com
+2026-03-04 00:31:07 - OctaBot: <p>Qual seu Nome?</p>
+2026-03-04 00:31:16 - Priscila: Priscila
+2026-03-04 00:31:19 - OctaBot: <p>Oi, Priscila,Você já é nosso aluno?</p>
+2026-03-04 00:31:25 - Priscila: Não sou aluno
+2026-03-04 00:31:29 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-04 00:31:36 - Priscila: Presencial
+2026-03-04 00:31:39 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-04 00:31:47 - Priscila: Campo Grande
+2026-03-04 00:31:50 - OctaBot: <p>Qual turno quer estudar?</p>
+2026-03-04 00:32:00 - Priscila: Manhã
+2026-03-04 00:32:03 - OctaBot: <p>Qual área do concurso de seu interesse?</p>
+2026-03-04 00:32:32 - Priscila: Administrativa
+2026-03-04 00:32:36 - OctaBot: <p>Qual Concurso?</p>
+2026-03-04 00:32:52 - Priscila: Outros - Adm
+2026-03-04 00:32:55 - OctaBot: <p>Posso te ligar?</p>
+2026-03-04 00:33:05 - Priscila: Seguir no WhatsApp
+2026-03-04 00:33:13 - OctaBot: <p>OK, Priscila! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨</p>
+2026-03-04 12:04:57 - Luana Fernandes: Oi PRiscila, tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+2026-03-04 14:01:38 - Priscila: Sim
+2026-03-04 14:01:56 - Luana Fernandes: qual curso deseja?
+2026-03-04 14:05:40 - Priscila: 
+2026-03-04 14:06:21 - Luana Fernandes: enem nao trabalhamos
+2026-03-04 14:06:30 - Luana Fernandes: cursos tenho esses aqui:
+2026-03-04 14:06:31 - Luana Fernandes: 
+2026-03-04 14:07:15 - Priscila: Ta bom
+2026-03-04 14:07:23 - Priscila: Vou ver com minha filha
+2026-03-04 14:07:28 - Priscila: E já te falo
+2026-03-04 14:07:41 - Priscila: De bombeiros ta quanto o valor?
+2026-03-04 14:08:05 - Luana Fernandes: 4x 186 no cartao de credito.
+2026-03-04 14:08:28 - Priscila: Duração de quanto tempo
+2026-03-04 14:09:07 - Luana Fernandes: aprox 4 meses
+2026-03-04 14:09:14 - Luana Fernandes: aulas sao seg e qua
+2026-03-04 14:09:19 - Luana Fernandes: 08:00 as 11:15
+2026-03-04 14:10:23 - Priscila: Ta bom obg
+2026-03-04 14:11:40 - Luana Fernandes: vamos dar inicio a matricula?
+2026-03-04 18:43:08 - Luana Fernandes: Conseguiu dar uma olhada na proposta que te enviei?
+2026-03-04 20:19:43 - Priscila: Ainda não porque estou no trabalho
+2026-03-04 20:19:51 - Priscila: Amanhã te dou a resposta
+2026-03-04 20:19:58 - Luana Fernandes: ta bom","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Administrativa", "tomador_decisao": "Priscila", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Presencial", "evidencias": ["Priscila: Presencial"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Interesse do lead", "respeitou_prioridade_presencial_live": "Sim"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 20, "orientacao_valor_0_20": 10, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 20, "restricoes_barreiras_0_10_invertido": 5}, "classificacao": "B", "sinais_quente": [{"sinal": "Interesse em curso presencial", "evidencia": "Priscila: Presencial"}], "lead_score_0_100": 60}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Priscila", "quem_e_vendedor": "Luana Fernandes", "precisa_reparacao": false, "problemas_detectados": ["Mensagens automáticas do WhatsApp", "Respostas curtas do lead"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Investigar mais sobre as dores do lead", "como_fazer": "Perguntar mais sobre as necessidades e objetivos de Priscila", "evidencia_do_gap": "Não foram exploradas as dores principais de Priscila"}, {"melhoria": "Oferecer opções de pagamento", "como_fazer": "Informar sobre diferentes opções de pagamento", "evidencia_do_gap": "Apenas uma opção de pagamento foi mencionada"}, {"melhoria": "Encerrar a conversa com um resumo", "como_fazer": "Resumir os principais pontos discutidos", "evidencia_do_gap": "A conversa terminou sem um resumo claro"}], "pontos_fortes": [{"ponto": "Respostas rápidas", "evidencia": "Luana Fernandes respondeu prontamente às perguntas de Priscila"}, {"ponto": "Ofereceu informações detalhadas", "evidencia": "Luana Fernandes forneceu detalhes sobre o curso presencial"}, {"ponto": "Manteve a conversa no WhatsApp", "evidencia": "Luana Fernandes respeitou a preferência de Priscila por continuar a conversa no WhatsApp"}], "erro_mais_caro": {"descricao": "Não explorar as dores do lead", "evidencia": "Não foram exploradas as dores principais de Priscila"}, "nota_final_0_100": 70, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 8, "abertura_rapport_0_10": 6, "valor_capacidade_0_20": 10, "investigacao_spin_0_30": 15, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["Priscila iniciou a conversa", "Forneceu informações básicas", "Mostrou interesse em curso presencial", "Luana Fernandes deu sequência ao atendimento", "Discutiram detalhes do curso"]}",60,70,Presencial,"Luana Fernandes",whatsapp,closed,"Degrau, vendas_receptivo, campo_grande","DC - Vendas Receptivo","Whats Degrau",Priscila,+5521988236220,"Qualificação de Contato","2026-03-03 21:30:31.258000-03:00",NULL,NULL,"2026-03-25 19:55:23","2026-03-25 19:55:23"
+32,e20f2499-b558-416a-9324-9021b01fff1c,NULL,d048ebff-59da-4785-81f1-f6bf77f1f795,venda,"O cliente está interessado em um curso e recebeu informações sobre o Passaporte para Aprovação","2026-03-04 00:27:09 - Ariel: <p>Oi, <span variable="DANIEL" class="p-1 rounded bg-blue-300 border-solid">DANIEL</span>! 🎯 </p><p>
+Que ótimo ter você aqui! 
+
+✅ Seu cadastro foi confirmado com sucesso. 
+
+ Você está a um passo de começar sua jornada rumo à aprovação! 
+
+A Degrau Cultural tem mais de 40 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆 
+ Agora é a SUA vez! 💪 </p><p><br />Vamos continuar por aqui?📲</p> 
+2026-03-04 00:27:24 - DANIEL VERISSIMO: Sim! Vamos continuar
+2026-03-04 00:27:31 - OctaBot: <p>Perfeito! </p><p>Nosso horário de atendimento é de 9 às 20h, assim que um especialista estiver online ele irá lhe atender prioritariamente.</p>
+2026-03-04 12:18:21 - Jessica Siqueira: Olá, bom dia! Tudo bem? Me chamo Jéssica e irei lhe passar as informações que precisa. Me diz, sobre qual curso você quer saber?
+2026-03-04 15:14:12 - DANIEL VERISSIMO: Boa tarde
+2026-03-04 15:15:09 - DANIEL VERISSIMO: Vi o curso que ajuda nos concursos e me interessei
+2026-03-04 15:24:55 - Jessica Siqueira: Oi Daniel
+2026-03-04 15:25:17 - Jessica Siqueira: Acredito que você esteja falando sobre o Passaporte para a aprovação, certo?
+2026-03-04 15:27:14 - DANIEL VERISSIMO: Isso
+2026-03-04 15:27:32 - DANIEL VERISSIMO: 
+2026-03-04 15:27:37 - DANIEL VERISSIMO: Eu vi por esse site
+2026-03-04 15:30:29 - Jessica Siqueira: Perfeito
+2026-03-04 15:30:36 - Jessica Siqueira: Vou te passar as informações, Daniel!
+2026-03-04 16:40:50 - DANIEL VERISSIMO: Ta bom
+2026-03-04 17:42:43 - Jessica Siqueira: Oi Daniel, desculpe a demora. Estávamos no almoço e acabamos de retornar
+2026-03-04 17:42:57 - Jessica Siqueira: O Passaporte é um projeto que entrega uma assinatura de acesso completo e ilimitado.
+2026-03-04 17:43:05 - Jessica Siqueira: Existem 2 tipos: Passaporte para Aprovação e o Passaporte Anual.
+2026-03-04 17:43:10 - Jessica Siqueira: 🎯 *Ambos incluem*
+✅ Cursos presenciais (qualquer unidade)
+✅ Online e aulas ao vivo (LIVE)
+✅ Plataforma Degrau Questões
+✅ Simulados e projetos especiais
+
+🔵 *PASSAPORTE PARA APROVAÇÃO*
+✔️ Foco na aprovação em 18 meses
+✔️ Período de estudo *ILIMITADO* (cumprindo metas)
+✔️ Acompanhamento com mentor
+✔️ Plano de estudos + metas
+👉 Ideal pra quem tá começando e quer segurança até passar
+
+🟢 *PASSAPORTE ANUAL*
+✔️ 12 meses de acesso total
+✔️ Estude no seu ritmo, sem metas
+❌ Sem orientação individual
+👉 Perfeito pra quem já tem noção e quer liberdade
+2026-03-04 17:43:18 - Jessica Siqueira: Não tem carência, se tornando servidor público não precisa completar o investimento, só paga o que foi cursado.
+2026-03-04 17:43:25 - Jessica Siqueira: São projetos bem completos, e ao mesmo tempo distintos. Baseado no seu perfil, qual faz mais sentido pra você?
+2026-03-04 21:24:35 - DANIEL VERISSIMO: Passaporte pata aprovação","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "DANIEL VERISSIMO", "dores_principais": ["Dificuldade em encontrar um curso de concursos confiável"], "produtos_citados": [{"produto": "Passaporte para Aprovação", "evidencias": ["✅ Cursos presenciais (qualquer unidade)", "✅ Online e aulas ao vivo (LIVE)"], "ancoragem_de_valor": "Inclui cursos presenciais, online e aulas ao vivo, plataforma Degrau Questões, simulados e projetos especiais", "foi_indicado_por_que": "Porque é um projeto que entrega uma assinatura de acesso completo e ilimitado", "respeitou_prioridade_presencial_live": "Sim"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "DANIEL VERISSIMO", "quem_e_vendedor": "Jessica Siqueira", "precisa_reparacao": false, "problemas_detectados": ["Falta de informações sobre o concurso/área-alvo do lead", "Falta de informações sobre o prazo/prova"], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Perguntar mais sobre as necessidades do lead", "como_fazer": "Perguntar sobre o concurso/área-alvo e prazo/prova", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Oferecer mais opções de produtos", "como_fazer": "Mencionar o Passaporte Anual e outros produtos", "evidencia_do_gap": "Apenas o Passaporte para Aprovação foi mencionado"}, {"melhoria": "Fornecer mais informações sobre o valor do produto", "como_fazer": "Mencionar o preço e os benefícios do Passaporte para Aprovação", "evidencia_do_gap": "Não mencionado"}], "pontos_fortes": [{"ponto": "Forneceu informações claras sobre os produtos", "evidencia": "✅ Cursos presenciais (qualquer unidade)"}, {"ponto": "Respeitou a prioridade do lead", "evidencia": "Passaporte para Aprovação"}, {"ponto": "Manteve a conversa organizada", "evidencia": "Não houve mensagens fora de ordem"}], "erro_mais_caro": {"descricao": "Não perguntar sobre as necessidades do lead", "evidencia": "Não mencionado"}, "nota_final_0_100": 70, "notas_por_categoria": {"objecoes_0_10": 5, "persuasao_etica_0_10": 6, "abertura_rapport_0_10": 8, "valor_capacidade_0_20": 18, "investigacao_spin_0_30": 15, "compromisso_prox_passos_0_15": 10, "clareza_compliance_whatsapp_0_5": 4}}, "resumo_da_conversa": ["O lead DANIEL VERISSIMO se interessou pelo curso de concursos da Degrau Cultural", "A vendedora Jessica Siqueira forneceu informações sobre o Passaporte para Aprovação e o Passaporte Anual", "O lead escolheu o Passaporte para Aprovação"]}",NULL,70,"Passaporte para Aprovação","Jessica Siqueira",whatsapp,closed,"Degrau, dc_automação_ctu_ead","DC - Geral","Whats Degrau","DANIEL VERISSIMO",+5521975540963,"Qualificação de Contato","2026-03-03 21:27:09.528000-03:00",NULL,NULL,"2026-03-25 19:55:53","2026-03-25 19:55:53"
+33,e5544acc-08ee-4a30-987d-758423561972,NULL,5dd6534e-7341-4593-bae8-41cbcbad0f7e,venda,"Conversa sobre cursos e concursos","2026-03-03 23:37:55 - Ariel: <p>Oi! 🎯
+
+Que ótimo ter você aqui! ✅ Seu cadastro foi confirmado com sucesso.
+
+Você está a um passo de começar sua jornada rumo à aprovação! 
+A Central de Concursos tem mais de 35 anos ajudando milhares de aprovados a conquistarem seus sonhos. 🏆
+
+Agora é a SUA vez! 💪
+
+Como você prefere que a gente continue essa conversa? 📲</p> 
+2026-03-05 19:13:10 - Ariel: <p>Olá,&nbsp;<span variable="Thamiris Kelly Sousa de Santana" class="p-1 rounded bg-blue-300 border-solid">Thamiris Kelly Sousa de Santana</span>, aqui é da Central de Concursos.<br>Podemos falar por aqui?</p> 
+2026-03-05 19:15:44 - Thamiris Kelly Sousa de Santana Santana: Sim, podemos!
+2026-03-05 19:15:48 - Ariel: <p>Tá bem,</p><p>Vou te passar para um especialista.</p><p>Só um minuto.</p>
+2026-03-05 19:16:19 - Thamiris Kelly Sousa de Santana Santana: Ok
+2026-03-05 19:40:25 - Wanderley Oliveira: <p><br></p><p>Oferecemos aulas presenciais à noite, além de curso online para quem prefere estudar à distância.</p><p><br></p><p>Qual é a sua disponibilidade de horário para estudar?</p><p><br></p>
+2026-03-05 19:41:40 - Thamiris Kelly Sousa de Santana Santana: 20 hrs
+2026-03-05 19:42:54 - Wanderley Oliveira: <p><span>Qual concurso você deseja se preparar conosco?
+
+</span> </p>","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "20 horas", "concurso_area": "Não mencionado", "tomador_decisao": "Não mencionado", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Presencial", "evidencias": ["Oferecemos aulas presenciais à noite"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Oferecimento de aulas à noite", "respeitou_prioridade_presencial_live": "Sim"}, {"produto": "EAD", "evidencias": ["curso online para quem prefere estudar à distância"], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Opção para quem prefere estudar à distância", "respeitou_prioridade_presencial_live": "Não se aplica"}]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 60, "quem_e_lead": "Thamiris Kelly Sousa de Santana", "quem_e_vendedor": "Ariel e Wanderley Oliveira", "precisa_reparacao": false, "problemas_detectados": ["Falta de rotulagem clara em todas as mensagens", "Ordem das mensagens não é cronológica"], "confianca_identificacao_papeis_0_1": 0.8}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Investigar mais sobre o concurso desejado", "como_fazer": "Perguntar sobre o concurso específico", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Oferecer valor agregado", "como_fazer": "Destacar benefícios do curso", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Tratar objeções potenciais", "como_fazer": "Antecipar e responder a possíveis objeções", "evidencia_do_gap": "Não mencionado"}], "pontos_fortes": [{"ponto": "Apresentação inicial", "evidencia": "Oi! Seu cadastro foi confirmado com sucesso."}, {"ponto": "Transferência para especialista", "evidencia": "Vou te passar para um especialista."}, {"ponto": "Pergunta sobre disponibilidade de horário", "evidencia": "Qual é a sua disponibilidade de horário para estudar?"}], "erro_mais_caro": {"descricao": "Não investigar sobre o concurso desejado", "evidencia": "Qual concurso você deseja se preparar conosco?"}, "nota_final_0_100": 40, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 5, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Ariel inicialmente se apresenta e comemora o cadastro do lead", "Ariel transfere o lead para Wanderley Oliveira", "Wanderley Oliveira pergunta sobre a disponibilidade de horário do lead para estudar", "Thamiris Kelly Sousa de Santana responde com sua disponibilidade de horário"]}",NULL,40,Presencial,"Wanderley Oliveira",whatsapp,closed,Central,"CC - Geral","Whats Central","Thamiris Kelly Sousa de Santana Santana",+5511947897656,"Fluxo CENTRAL","2026-03-03 20:37:55.633000-03:00",NULL,NULL,"2026-03-25 21:53:23","2026-03-25 21:53:23"
+34,6173929e-a52c-4850-9fb5-70f31081f190,NULL,b7b1d78b-47b2-49d9-98e3-1e06e2b66b7e,venda,"O cliente iniciou conversa e está sendo atendido por um especialista em concursos públicos","2026-03-03 23:36:33 - Pedro Antonio Casemiro Benevenuto da Silva: Boa noite
+2026-03-03 23:36:39 - OctaBot: <p>Olá, sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong><strong></strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+</p>
+2026-03-03 23:36:41 - OctaBot: <p>Legal, Pedro! Por favor, digite seu email 📨 para continuarmos a conversa, caso a conexão caia.</p>
+2026-03-03 23:37:12 - Pedro Antonio Casemiro Benevenuto da Silva: Pedro.antonio.casemiro@gmail.com
+2026-03-03 23:37:15 - OctaBot: <p>Qual seu Nome?</p>
+2026-03-03 23:37:28 - Pedro Antonio Casemiro Benevenuto da Silva: Pedro Antonio Casemiro Benevenuto da Silva
+2026-03-03 23:37:32 - OctaBot: <p>Oi, Pedro Antonio Casemiro Benevenuto da Silva,Você já é nosso aluno?</p>
+2026-03-03 23:37:39 - Pedro Antonio Casemiro Benevenuto da Silva: Não sou aluno
+2026-03-03 23:37:43 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-04 18:38:38 - Thiago Luiz: Oi Pedro, tudo bem? 
+Sou especialista em concursos públicos e vou dar sequência ao seu atendimento. Se preferir pode usar audio. Podemos começar?","{"canal": "whatsapp", "extracao": {"restricoes": ["Não mencionado"], "nivel_atual": "Não mencionado", "prazo_prova": "Não mencionado", "tempo_estudo": "Não mencionado", "concurso_area": "Não mencionado", "tomador_decisao": "Não mencionado", "dores_principais": ["Não mencionado"], "produtos_citados": [{"produto": "Não mencionado", "evidencias": [], "ancoragem_de_valor": "Não mencionado", "foi_indicado_por_que": "Não mencionado", "respeitou_prioridade_presencial_live": "Não mencionado"}]}, "avaliacao_lead": {"dimensoes": {"fit_0_30": 10, "orientacao_valor_0_20": 0, "abertura_personalizacao_0_10": 5, "intencao_micro_momentos_0_30": 5, "restricoes_barreiras_0_10_invertido": 0}, "sinais_frio": [{"sinal": "Não mencionou o concurso de interesse", "evidencia": "Não mencionado"}], "classificacao": "D", "sinais_quente": [], "lead_score_0_100": 20, "perguntas_faltantes_spin": ["Qual é o seu objetivo?", "Qual é o seu nível atual de conhecimento?", "Qual é o seu prazo para o concurso?"]}, "qualidade_entrada": {"nivel": "Média", "iqh_0_100": 80, "quem_e_lead": "Pedro Antonio Casemiro Benevenuto da Silva", "quem_e_vendedor": "Thiago Luiz", "precisa_reparacao": false, "problemas_detectados": [], "confianca_identificacao_papeis_0_1": 0.9}, "avaliacao_vendedor": {"alertas": [], "melhorias": [{"melhoria": "Investigar mais sobre o lead", "como_fazer": "Perguntar sobre o concurso de interesse", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Oferecer opções de produtos", "como_fazer": "Perguntar sobre a modalidade de preparo", "evidencia_do_gap": "Não mencionado"}, {"melhoria": "Fornecer informações sobre os produtos", "como_fazer": "Enviar informações sobre os cursos", "evidencia_do_gap": "Não mencionado"}], "pontos_fortes": [{"ponto": "Apresentação amigável", "evidencia": "Oi Pedro, tudo bem?"}], "erro_mais_caro": {"descricao": "Não investigar sobre o lead", "evidencia": "Não mencionado"}, "nota_final_0_100": 40, "notas_por_categoria": {"objecoes_0_10": 0, "persuasao_etica_0_10": 5, "abertura_rapport_0_10": 5, "valor_capacidade_0_20": 5, "investigacao_spin_0_30": 10, "compromisso_prox_passos_0_15": 5, "clareza_compliance_whatsapp_0_5": 5}}, "resumo_da_conversa": ["Boa noite", "Apresentação do agente virtual", "Solicitação de e-mail", "Solicitação de nome", "Pergunta sobre ser aluno", "Pergunta sobre modalidade de preparo"]}",20,40,"Não mencionado","Victor Oliveira",whatsapp,closed,"Degrau, vendas_receptivo","DC - Vendas Receptivo","Whats Degrau","Pedro Antonio Casemiro Benevenuto da Silva",+5521966933303,"Qualificação de Contato","2026-03-03 20:36:35.213000-03:00",NULL,NULL,"2026-03-25 21:53:32","2026-03-25 21:53:32"
+35,d778a8ce-7635-400d-b631-02e84b8e44b9,NULL,4dcd3631-5525-4692-ab1d-7d9e5bd8ff93,duvida_geral,"Cliente tem dúvida sobre o acesso ao qconcurso e às plataformas de questões","2026-03-03 23:33:37 - Maria Clara  Silva Ramos dos Santos: Olá
+2026-03-03 23:33:42 - OctaBot: <p>Oi, Maria Clara  Silva Ramos dos Santos.</p><p>Sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀</p><br><p>Para começar, você já é nosso aluno 🧑‍🎓? 
+</p><br>
+2026-03-03 23:33:45 - Maria Clara  Silva Ramos dos Santos: Sim, sou aluno
+2026-03-03 23:33:49 - OctaBot: <p>Quer reportar algum problema, ou adquirir um novo curso?</p>
+2026-03-03 23:34:02 - Maria Clara  Silva Ramos dos Santos: Novo produto
+2026-03-03 23:34:05 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-03 23:34:12 - Maria Clara  Silva Ramos dos Santos: Curso Online
+2026-03-03 23:34:15 - OctaBot: <p>OK, Maria Clara  Silva Ramos dos Santos! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨</p>
+2026-03-04 11:26:16 - João Vitor Souza: Bom dia! Tudo bom? Como posso te ajudar?
+2026-03-04 12:56:40 - Maria Clara  Silva Ramos dos Santos: Bom dia! Só queria perguntar se quem tem o curso online, tem acesso direto ao qconcurso? O professor falou isso em uma das aulas que estou assistindo, não sei se ainda é válido ainda!
+2026-03-04 13:00:44 - João Vitor Souza: Qconcurso é um site público onde você pode fazer o cadastro e utilizar dele, a degrau fornece videoaulas, materiais em pdf e a plataforma de questões, tudo pela própria degrau
+2026-03-04 13:02:50 - Maria Clara  Silva Ramos dos Santos: Ah, então tem plataformas de questões? Tá bom, vou procurar
+2026-03-04 13:09:47 - João Vitor Souza: Ta certo",NULL,NULL,NULL,NULL,"João Vitor Souza",whatsapp,closed,"Degrau, vendas_receptivo","DC - Vendas EAD","Whats Degrau","Maria Clara  Silva Ramos dos Santos",+5521969476124,"Qualificação de Contato","2026-03-03 20:33:38.170000-03:00",NULL,NULL,"2026-03-25 21:53:38","2026-03-25 21:53:38"
+47,98fc5bdd-8294-4877-84da-fad0bbc5fa11,NULL,5869435e-3562-418f-9ab6-31e052c03449,outros,"Falha na classificação: Expecting value: line 1 column 1 (char 0)","2026-03-05 23:37:58 - 0.7⚡: Boa noite
+2026-03-05 23:38:04 - OctaBot: <p>Olá, sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong><strong></strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀
+
+</p>
+2026-03-05 23:38:06 - OctaBot: <p>Legal, 0.7⚡! Por favor, digite seu email 📨 para continuarmos a conversa, caso a conexão caia.</p>
+2026-03-05 23:38:32 - 0.7⚡: Qual valor do curso para PM
+2026-03-05 23:38:36 - OctaBot: <p>Esse email não parece ser válido. Você pode digitar novamente?</p>
+2026-03-06 12:26:44 - Luana Fernandes: Oi , tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+2026-03-06 12:30:08 - 0.7⚡: Sim
+2026-03-06 12:44:52 - Luana Fernandes: seria presencial ou online?
+2026-03-06 12:45:57 - 0.7⚡: Presencial
+2026-03-06 12:46:11 - Luana Fernandes: o investimento do curso são 12x de [172]. Esse é o único investimento. Não há taxa de matrícula, e nele estão inclusos 100% da carga horária mais o material do curso digital.
+2026-03-06 12:46:16 - Luana Fernandes: Detalhando melhor pra você, o material é personalizado e produzido pelos nossos professores em parceria com nosso pedagógico.
+2026-03-06 12:46:22 - Luana Fernandes: Voltando um pouco, as vagas são limitadas. Temos condições especiais para matrículas feitas hoje
+2026-03-06 12:46:29 - Luana Fernandes: Só me confirma uma coisa, você trabalha com cartão de crédito para garantir essa condição especial hoje?
+2026-03-06 12:46:45 - 0.7⚡: Não teria outra forma sem ser cartão de crédito?
+2026-03-06 12:47:23 - Luana Fernandes: Temos a possibilidade de boleto pra te ajudar a viabilizar a matrícula. Ela é feita através da nossa parceira PRINCÍPIA.
+2026-03-06 12:47:28 - Luana Fernandes: As condições são diferentes do que negociamos até agora, mas além de pagar mês a mês, você consegue parcelar em até 24x. Vou enviar o link de acesso pra você consultar as condições. Lá o passo a passo vai ser o seguinte:
+2026-03-06 12:47:34 - Luana Fernandes: 1 – Realizar cadastro;
+2 - A partir da aprovação escolher um plano de pagamento;
+3 - Dar uma ENTRADA;
+2026-03-06 12:47:44 - Luana Fernandes: Link de financiamento com a Principia:
+
+https://pay.principia.net/checkout/degrau-cultural?classes=63423
+2026-03-06 18:08:32 - Luana Fernandes: Conseguiu dar uma olhada na proposta que te enviei?",NULL,NULL,NULL,NULL,"Luana Fernandes",whatsapp,closed,Degrau,"DC - Vendas Receptivo","Whats Degrau",0.7⚡,+5521979856518,"Qualificação de Contato","2026-03-05 20:38:00.298000-03:00",NULL,NULL,"2026-03-26 14:56:13","2026-03-26 14:56:13"
+48,47e394bb-8c60-4635-ba76-30af82f53358,NULL,76a0ead3-0edd-43b5-b608-3672ba61949b,outros,"Falha na classificação: Expecting value: line 1 column 1 (char 0)","2026-03-05 23:36:05 - Null: Ok
+2026-03-05 23:36:10 - OctaBot: <p>Oi, Null.</p><p>Sou Ariel, seu agente virtual 🤖 da Degrau Cultural!</p><p>Seja bem-vindo(a) à nossa central de atendimento. 🏆</p><br><p>Para começarmos, apresentarei uma sequência de perguntas.📝
+É fundamental que você escolha as respostas clicando nos botões que irão aparecer. 👇✅</p><br><p>⚠️ <strong>IMPORTANTE:</strong> apenas as opções clicadas serão válidas. Mensagens de texto não serão consideradas! Vamos lá? 🚀</p><br><p>Para começar, você já é nosso aluno 🧑‍🎓? 
+</p><br>
+2026-03-05 23:49:57 - Null: Não sou aluno
+2026-03-05 23:50:02 - OctaBot: <p>Por qual modalidade você quer se preparar?</p>
+2026-03-05 23:50:05 - Null: Presencial
+2026-03-05 23:50:08 - OctaBot: <p>Qual a melhor unidade pra você?</p>
+2026-03-05 23:50:15 - Null: Campo Grande
+2026-03-05 23:50:19 - OctaBot: <p>Qual turno quer estudar?</p>
+2026-03-05 23:50:21 - Null: Manhã
+2026-03-05 23:50:25 - OctaBot: <p>Qual área do concurso de seu interesse?</p>
+2026-03-05 23:50:31 - Null: Militar
+2026-03-05 23:50:35 - OctaBot: <p>Qual Concurso?</p>
+2026-03-05 23:50:38 - Null: PMERJ - Soldado
+2026-03-05 23:50:42 - OctaBot: <p>Posso te ligar?</p>
+2026-03-05 23:50:46 - Null: Seguir no WhatsApp
+2026-03-05 23:50:51 - OctaBot: <p>OK, Null! 🙌 Estou direcionando essa conversa para o nosso time de especialistas. 🧠✨</p>
+2026-03-06 12:09:14 - Luana Fernandes: Oi , tudo bem? 
+Me chamo Luana, especialista em concursos públicos e vou dar sequência no seu atendimento pelo whatsapp. Podemos começar?
+2026-03-06 12:09:40 - Null: Sim
+2026-03-06 12:19:55 - Luana Fernandes: previsao de inicio dia 12/3
+2026-03-06 12:20:10 - Null: Ok
+2026-03-06 12:20:25 - Luana Fernandes: aulas sao terças e quintas
+2026-03-06 12:20:38 - Null: Muito obrigado
+2026-03-06 12:20:38 - Luana Fernandes: 08:00 as 11:15
+2026-03-06 12:23:17 - Luana Fernandes: o investimento do curso são 12x de [172. Esse é o único investimento. Não há taxa de matrícula, e nele estão inclusos 100% da carga horária mais o material do curso digital.
+2026-03-06 12:23:22 - Luana Fernandes: Detalhando melhor pra você, o material é personalizado e produzido pelos nossos professores em parceria com nosso pedagógico.
+2026-03-06 12:23:28 - Luana Fernandes: Voltando um pouco, as vagas são limitadas. Temos condições especiais para matrículas feitas hoje
+2026-03-06 12:23:34 - Luana Fernandes: Só me confirma uma coisa, você trabalha com cartão de crédito para garantir essa condição especial hoje?
+2026-03-06 14:40:57 - Luana Fernandes: Começamos a conversar com você, mas não houve continuidade. As condições continuam exclusivas. Ainda deseja receber os detalhes ou posso encerrar o atendimento?
+2026-03-06 15:55:15 - Null: Pode sim e pq eu tô no trabalho
+2026-03-06 15:59:01 - Luana Fernandes: você trabalha com cartão de crédito ?
+2026-03-06 15:59:48 - Null: Me desculpe mais eu vi aqui mais barato não quero mais não",NULL,NULL,NULL,NULL,"Luana Fernandes",whatsapp,closed,"Degrau, vendas_receptivo, campo_grande","DC - Vendas Receptivo","Whats Degrau",Null,+5521978725492,"Qualificação de Contato","2026-03-05 20:36:06.012000-03:00",NULL,NULL,"2026-03-26 14:56:22","2026-03-26 14:56:22"
+49,98a77183-0438-41f5-9329-521bd1588290,NULL,3ed73d5a-6077-4c6f-9de5-faf9a7cbf48a,outros,"Falha na classificação: Expecting value: line 1 column 1 (char 0)","2026-03-05 23:32:20 - cristina_lary22: Boa noite
+2026-03-05 23:32:42 - cristina_lary22: São quantas aulas por semana?
+2026-03-05 23:33:01 - cristina_lary22: Queria me informar mais, pq devo me increver amanhã
+2026-03-06 12:12:32 - Luana Fernandes: bom dia
+2026-03-06 12:12:36 - Luana Fernandes: qual concurso se refere?
+2026-03-06 15:09:39 - cristina_lary22: Bom dia
+2026-03-06 15:09:44 - cristina_lary22: Auxiliar de necropsia
+2026-03-06 15:15:37 - Luana Fernandes: tenho ele só online
+2026-03-06 15:15:39 - Luana Fernandes: pode ser?
+2026-03-06 15:15:53 - cristina_lary22: Sim
+2026-03-06 15:16:05 - cristina_lary22: Quais são os dias?
+2026-03-06 15:16:53 - Luana Fernandes: O curso online contém vídeo aulas gravado com aulas teóricas e exercícios, cada vídeo possui um material em PDF anexado, esse material trata-se de um roteiro de aula que o professor segue, e que o aluno tem acesso, caso deseje você pode baixar esse material em PDF ou imprimir.
+2026-03-06 15:16:58 - Luana Fernandes: Seu acesso será sempre através da plataforma da Degrau através na sala virtual, com o uso da internet, você consegue visualizar as videoaulas através do computador, tablet e celular com visualizações ilimitadas.
+2026-03-06 15:17:08 - Luana Fernandes: O acesso é 100% online sendo assim não será possível baixar os vídeos para o computador do usuário a utilização será sempre através da plataforma da Degrau através do uso da  internet. Acesso por 1 ano, sendo assim, pode ver e rever as aulas em qualquer dia e horário.
+2026-03-06 15:18:02 - cristina_lary22: Ok
+2026-03-06 15:25:33 - Luana Fernandes: 12x deR$24,19 no cartao
+2026-03-06 15:25:35 - Luana Fernandes: fechamos?
+2026-03-06 15:25:52 - cristina_lary22: Eu vou pagar no dinheiro
+2026-03-06 15:26:55 - Luana Fernandes: 261 avista
+2026-03-06 15:27:09 - Luana Fernandes: voce pagaria  dinheiro em especie ou pix?
+2026-03-06 15:29:44 - cristina_lary22: Pix
+2026-03-06 15:29:54 - Luana Fernandes: ok.
+2026-03-06 15:29:59 - Luana Fernandes: vou precisar de alguns dados
+2026-03-06 15:30:06 - Luana Fernandes: FICHA DE MATRICULA 📝
+Nome completo
+E-mail
+RG
+CPF
+nº Telefone:
+CEP
+endereço
+Nascimento
+2026-03-06 15:30:39 - cristina_lary22: Ta ,ok
+2026-03-06 15:31:02 - cristina_lary22: Se eu n receber hoje amanhã eu envio , e te mando
+2026-03-06 15:31:29 - Luana Fernandes: ta. mas pode mandar os dados que ai eu ja adianto
+2026-03-06 15:55:09 - cristina_lary22: FICHA DE MATRICULA 📝<br />Nome completo:laryssa Cristina da Silva <br />E-mail: joaoadavictor@gmail.com <br />RG:<br />CPF:06344578748<br />nº Telefone: 21985926277<br />CEP:20551255<br />endereço: rua petrocochino 73<br />Nascimento:22/01/2002
+2026-03-06 15:58:50 - Luana Fernandes: cpf esta dando invalido
+2026-03-06 15:58:53 - Luana Fernandes: está correto?
+2026-03-06 15:59:06 - cristina_lary22: 064.335.787-48
+2026-03-06 16:00:33 - Luana Fernandes: Link da proposta, vai estar ativo até amanha tá
+2026-03-06 16:00:33 - Luana Fernandes: https://app.vindi.com.br/customer/bills/478070106?token=b5979504-5b02-4e98-81bd-7c19b43b58a8
+2026-03-06 16:01:17 - cristina_lary22: Ok
+2026-03-06 17:04:01 - Luana Fernandes: 😉
+2026-03-06 19:22:42 - cristina_lary22: Queria tirar uma duvida
+2026-03-06 19:22:59 - cristina_lary22: O curso , não vou ter contato com nenhum professor?
+2026-03-06 19:23:03 - cristina_lary22: Pra tirar duvidas..
+2026-03-06 19:23:22 - Luana Fernandes: Você poderá encaminhar as dúvidas para o professor através do email unidadevirtual@degraucultural.com.br , o professor irá respondê-las através de seu e-mailcom o prazo máximo de 05 dias
+2026-03-06 23:37:27 - cristina_lary22: Ok
+2026-03-07 12:05:07 - Luana Fernandes: Bom dia
+2026-03-07 12:05:19 - Luana Fernandes: Conseguiu visualizar a proposta?
+2026-03-07 15:25:07 - cristina_lary22: Boa tarde
+2026-03-07 15:25:08 - cristina_lary22: Pode me enviar dnv
+2026-03-07 15:27:08 - Luana Fernandes: https://app.vindi.com.br/customer/bills/478070106?token=b5979504-5b02-4e98-81bd-7c19b43b58a8
+2026-03-07 15:30:06 - cristina_lary22: 
+2026-03-07 15:30:27 - Luana Fernandes: perfeito
+2026-03-07 15:30:33 - Luana Fernandes: vou fazer a liberação
+2026-03-07 15:30:37 - Luana Fernandes: ja t retorno
+2026-03-07 16:12:32 - Luana Fernandes: Acesse o site https://degraucultural.com.br/
+Clique em entrar, após insira o CPF cadastrado e senha.
+Senha provisória: 123456
+2026-03-07 19:16:11 - cristina_lary22: Oi
+2026-03-07 19:16:14 - cristina_lary22: Boa tarde
+2026-03-07 19:16:16 - cristina_lary22: Essa mensagem foi apagada
+2026-03-07 19:17:55 - cristina_lary22: A senha ta errada
+2026-03-07 19:18:58 - cristina_lary22: 
+2026-03-09 13:08:47 - cristina_lary22: Bom dia.
+2026-03-09 13:10:57 - João Vitor Souza: Bom dia! pode me falar seu cpf? Irei verificar
+2026-03-09 13:15:37 - cristina_lary22: 064.335.787-48
+2026-03-09 13:19:40 - João Vitor Souza: Correção feita
+2026-03-09 13:19:43 - João Vitor Souza: Pode tentar novamente",NULL,NULL,NULL,NULL,"João Vitor Souza",instagram,closed,instagram,"DC - Atendimento EAD","Insta Degrau",cristina_lary22,,"Reservar time Degrau","2026-03-05 20:32:25.262000-03:00",NULL,NULL,"2026-03-26 14:56:30","2026-03-26 14:56:30"

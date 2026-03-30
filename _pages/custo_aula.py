@@ -456,3 +456,4 @@ def run_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="download_consolidado_turma"
     )
+
