@@ -58,7 +58,7 @@ def _calcular_ch(df_base, df_grade, hoje):
 def _gerar_pdf(df_exib, empresa, filtros_desc):
     """Gera PDF da lista de alunos em retrato."""
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
@@ -67,7 +67,7 @@ def _gerar_pdf(df_exib, empresa, filtros_desc):
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=A4,
+        buf, pagesize=landscape(A4),
         topMargin=1*cm, bottomMargin=1*cm,
         leftMargin=1*cm, rightMargin=1*cm
     )
@@ -101,9 +101,9 @@ def _gerar_pdf(df_exib, empresa, filtros_desc):
     elements.append(Paragraph(f"Total de alunos: {len(df_exib)}", style_info))
     elements.append(Spacer(1, 0.4*cm))
 
-    cols = ['Aluno', 'CPF', 'Turma', 'Status', 'Pagamento', 'Valor (R$)',
+    cols = ['Aluno', 'CPF', 'Celular', 'E-mail', 'Turma', 'Status', 'Pagamento', 'Valor (R$)',
             'Data Mat.', 'CH Turma', 'CH Conc.', 'CH Cont.', 'CH Rest.']
-    data_keys = ['nome_cliente', 'cpf', 'turma_nome', 'status',
+    data_keys = ['nome_cliente', 'cpf', 'celular_cliente', 'email_cliente', 'turma_nome', 'status',
                  'metodo_pagamento', 'total_pedido', 'data_pagamento',
                  'ch_turma', 'ch_concluida', 'ch_contratada', 'ch_restante']
 
@@ -127,10 +127,10 @@ def _gerar_pdf(df_exib, empresa, filtros_desc):
             linha.append(Paragraph(val, style_cell))
         table_data.append(linha)
 
-    # Larguras em retrato A4 (~19 cm utilizável — soma exata = 19.0 cm)
-    # Aluno  CPF    Turma  Status  Pgto   Valor  Data   CHt    CHc    CHco   CHr
-    col_widths = [3.5*cm, 2.0*cm, 2.8*cm, 1.6*cm, 1.6*cm, 1.6*cm,
-                  1.5*cm, 1.1*cm, 1.1*cm, 1.1*cm, 1.1*cm]
+    # Larguras em landscape A4 (~27 cm utilizável — soma = 27.0 cm)
+    # Aluno  CPF    Celular Email  Turma  Status  Pgto   Valor  Data   CHt    CHc    CHco   CHr
+    col_widths = [3.8*cm, 2.0*cm, 2.2*cm, 3.5*cm, 3.0*cm, 1.8*cm, 1.8*cm, 1.8*cm,
+                  1.5*cm, 1.4*cm, 1.4*cm, 1.4*cm, 1.4*cm]
 
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
@@ -270,6 +270,7 @@ def run_page():
     # -------------------------------------------------------------------------
     colunas_exib = [
         'curso_venda', 'turma_nome', 'cpf', 'nome_cliente',
+        'celular_cliente', 'email_cliente',
         'metodo_pagamento', 'status', 'unidade', 'total_pedido', 'data_pagamento',
         'ch_turma', 'ch_concluida', 'ch_contratada', 'ch_restante'
     ]
@@ -284,6 +285,8 @@ def run_page():
             "turma_nome": st.column_config.TextColumn("Turma"),
             "cpf": st.column_config.TextColumn("CPF"),
             "nome_cliente": st.column_config.TextColumn("Aluno"),
+            "celular_cliente": st.column_config.TextColumn("Celular"),
+            "email_cliente": st.column_config.TextColumn("E-mail"),
             "metodo_pagamento": st.column_config.TextColumn("Pagamento"),
             "status": st.column_config.TextColumn("Status"),
             "unidade": st.column_config.TextColumn("Unidade"),

@@ -633,6 +633,53 @@ def run_page():
                 allow_unsafe_jscode=True,
                 enable_enterprise_modules=True
             )
+            # --- SEÇÃO: EVENTOS REGISTRADOS NO GA4 ---
+            st.header("🏷️ Eventos Registrados no GA4")
+            st.info("Selecione os eventos que deseja analisar para identificar disparos de tags específicas (ex: purchase, add_to_cart, etc.).")
+
+            with st.spinner("Buscando eventos do GA4..."):
+                events_response = run_ga_report(
+                    client, PROPERTY_ID,
+                    dimensions=[Dimension(name="eventName")],
+                    metrics=[Metric(name="eventCount")],
+                    start_date=start_date, end_date=end_date,
+                    limit=200,
+                    order_bys=[{'metric': {'metric_name': 'eventCount'}, 'desc': True}]
+                )
+
+            if events_response and events_response.rows:
+                df_events = pd.DataFrame([
+                    {
+                        'Evento': r.dimension_values[0].value,
+                        'Disparos': int(r.metric_values[0].value)
+                    }
+                    for r in events_response.rows
+                ])
+
+                todos_eventos = sorted(df_events['Evento'].tolist())
+
+                eventos_selecionados = st.multiselect(
+                    "Filtrar eventos:",
+                    options=todos_eventos,
+                    default=[],
+                    placeholder="Selecione um ou mais eventos (ex: purchase, add_to_cart...)",
+                    key="ga4_event_filter"
+                )
+
+                df_eventos_filtrado = df_events[df_events['Evento'].isin(eventos_selecionados)] if eventos_selecionados else df_events
+
+                st.dataframe(
+                    df_eventos_filtrado,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Evento": st.column_config.TextColumn("Nome do Evento"),
+                        "Disparos": st.column_config.NumberColumn("Disparos", format="%d"),
+                    }
+                )
+            else:
+                st.info("Não foi possível carregar os eventos do GA4 para o período selecionado.")
+
             # Adiciona uma exibição de dados brutos das campanhas
             st.header("📊 Performance de Campanhas (Dados Brutos do Google Ads)")
             st.info("Esta tabela mostra os dados de custo e conversão diretamente do Google Ads, sem agrupamentos.")
