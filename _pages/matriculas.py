@@ -875,6 +875,15 @@ def run_page():
     
     # Cria a tabela base para cursos online
     tabela_base_online = df_filtrado[df_filtrado["categoria"] == "Curso Online"].copy()
+
+    # Substitui uuid (da orders) pelo uuid da transação (orders_transactions)
+    df_transacoes = carregar_dados("consultas/orders/orders_trasactions.sql")
+    if not df_transacoes.empty:
+        uuid_por_pedido = df_transacoes.drop_duplicates(subset='pedido')[['pedido', 'transacao']]
+        tabela_base_online = tabela_base_online.merge(uuid_por_pedido, left_on='ordem_id', right_on='pedido', how='left')
+        tabela_base_online['uuid'] = tabela_base_online['transacao']
+        tabela_base_online = tabela_base_online.drop(columns=['pedido', 'transacao'], errors='ignore')
+
     if not tabela_base_online.empty:
         tabela_base_online = tabela_base_online[colunas_selecionadas_online]
         
