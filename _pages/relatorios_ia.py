@@ -241,7 +241,7 @@ def init_google_ads_client_central():
     return None
 
 def get_google_ads_data(client, customer_id, start_date, end_date):
-    """Busca dados do Google Ads incluindo tipo de campanha para classificação de objetivo."""
+    """Busca dados do Google Ads incluindo métricas completas para análise."""
     try:
         ga_service = client.get_service("GoogleAdsService")
         query = f"""
@@ -250,16 +250,27 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 campaign.id,
                 campaign.status,
                 campaign.advertising_channel_type,
+                campaign.target_cpa.target_cpa_micros,
                 metrics.cost_micros,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.ctr,
                 metrics.average_cpc,
+                metrics.average_cpm,
                 metrics.conversions,
-                metrics.cost_per_conversion
+                metrics.cost_per_conversion,
+                metrics.conversions_from_interactions_rate,
+                metrics.search_budget_lost_impression_share,
+                metrics.search_rank_lost_impression_share,
+                metrics.search_impression_share,
+                metrics.video_view_rate,
+                metrics.video_views,
+                metrics.average_cpv,
+                metrics.engagements,
+                metrics.engagement_rate
             FROM campaign
             WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
-                AND campaign.status = 'ENABLED'
+                AND metrics.cost_micros > 0
             ORDER BY metrics.cost_micros DESC
         """
         response = ga_service.search(customer_id=customer_id, query=query)
@@ -267,23 +278,43 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
         for row in response:
             custo = row.metrics.cost_micros / 1_000_000
             cpc = row.metrics.average_cpc / 1_000_000 if row.metrics.average_cpc else 0
+            cpm = row.metrics.average_cpm / 1_000_000 if row.metrics.average_cpm else 0
             cpa = row.metrics.cost_per_conversion / 1_000_000 if row.metrics.cost_per_conversion else 0
+            cpv = row.metrics.average_cpv / 1_000_000 if row.metrics.average_cpv else 0
+            tcpa = row.campaign.target_cpa.target_cpa_micros / 1_000_000 if row.campaign.target_cpa.target_cpa_micros else 0
 
-            # Classificação de objetivo
+            # Parcelas de impressão (None quando não aplicável, ex: PMax/YouTube)
+            imp_lost_budget = row.metrics.search_budget_lost_impression_share
+            imp_lost_rank = row.metrics.search_rank_lost_impression_share
+
             channel_type = str(row.campaign.advertising_channel_type).split(".")[-1]
             objetivo_api = OBJETIVO_MAP_GOOGLE.get(channel_type)
             objetivo = objetivo_api if objetivo_api else classificar_por_nome(row.campaign.name)
 
+            status = str(row.campaign.status).split(".")[-1]
+
             rows.append({
                 'Campanha': row.campaign.name,
+                'Status': status,
                 'Objetivo': objetivo,
+                'Canal': channel_type,
                 'Custo': round(custo, 2),
                 'Impressões': row.metrics.impressions,
                 'Cliques': row.metrics.clicks,
                 'CTR (%)': round(row.metrics.ctr * 100, 2),
                 'CPC': round(cpc, 2),
+                'CPM': round(cpm, 2),
                 'Conversões': round(row.metrics.conversions, 1),
                 'CPA': round(cpa, 2),
+                'tCPA': round(tcpa, 2),
+                'Taxa Conv (%)': round(row.metrics.conversions_from_interactions_rate * 100, 2) if row.metrics.conversions_from_interactions_rate else 0,
+                'Imp Lost Budget (%)': round(imp_lost_budget * 100, 1) if imp_lost_budget else None,
+                'Imp Lost Rank (%)': round(imp_lost_rank * 100, 1) if imp_lost_rank else None,
+                'Video Views': row.metrics.video_views,
+                'Video View Rate (%)': round(row.metrics.video_view_rate * 100, 2) if row.metrics.video_view_rate else 0,
+                'CPV': round(cpv, 4),
+                'Engajamentos': row.metrics.engagements,
+                'Engagement Rate (%)': round(row.metrics.engagement_rate * 100, 2) if row.metrics.engagement_rate else 0,
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -317,22 +348,26 @@ def init_facebook_api_central():
     return init_facebook_api(secrets_key="facebook_api_central", env_suffix="_CENTRAL")
 
 def get_facebook_data(account, start_date, end_date):
-    """Busca dados do Meta Ads incluindo objetivo da campanha para classificação."""
+    """Busca dados do Meta Ads com métricas completas.
+    - Cliques = inline_link_clicks (cliques no link, não cliques totais)
+    - CTR/CPC baseados em inline_link_clicks
+    - Leads primários = lead_presencial + lead_live (eventos customizados)
+    """
     try:
         fields = [
             AdsInsights.Field.campaign_name,
             AdsInsights.Field.objective,
             AdsInsights.Field.spend,
             AdsInsights.Field.impressions,
-            AdsInsights.Field.clicks,
-            AdsInsights.Field.ctr,
-            AdsInsights.Field.cpc,
-            AdsInsights.Field.cpm,
             AdsInsights.Field.reach,
             AdsInsights.Field.frequency,
+            AdsInsights.Field.cpm,
+            # Cliques no link (não cliques totais)
+            'inline_link_clicks',
+            'inline_link_click_ctr',
+            'cost_per_inline_link_click',
             AdsInsights.Field.actions,
             AdsInsights.Field.cost_per_action_type,
-            AdsInsights.Field.conversions,
         ]
         params = {
             'level': 'campaign',
@@ -340,41 +375,43 @@ def get_facebook_data(account, start_date, end_date):
         }
         insights = account.get_insights(fields=fields, params=params)
         rows = []
-        # action_types que contam como conversão (padrão + custom)
-        CONVERSION_ACTIONS = {
-            'purchase', 'lead', 'omni_purchase',
+
+        # Eventos de lead primário (presencial + live)
+        LEAD_PRIMARIO_ACTIONS = {'lead_presencial', 'lead_live'}
+        # Eventos de venda para campanhas de e-commerce
+        VENDA_ACTIONS = {
+            'purchase', 'omni_purchase',
             'offsite_conversion.fb_pixel_purchase',
-            'offsite_conversion.fb_pixel_lead',
-            'submit_application_total',
-            'onsite_conversion.lead_grouped',
         }
+
         for insight in insights:
-            conversoes = 0
-            cpa = 0
+            custo = float(insight.get(AdsInsights.Field.spend, 0))
 
-            # 1) Tenta campo 'conversions' (mais preciso)
-            if 'conversions' in insight:
-                for conv in insight['conversions']:
-                    if conv['action_type'] == 'submit_application_total':
-                        conversoes += int(conv.get('value', 0))
+            # Cliques no link
+            cliques_link = int(insight.get('inline_link_clicks', 0))
+            ctr_link = float(insight.get('inline_link_click_ctr', 0))
+            cpc_link = float(insight.get('cost_per_inline_link_click', 0))
 
-            # 2) Fallback: busca em 'actions' se conversions não retornou nada
-            if conversoes == 0 and AdsInsights.Field.actions in insight:
-                for action in insight[AdsInsights.Field.actions]:
-                    if action['action_type'] in CONVERSION_ACTIONS:
-                        conversoes += int(action.get('value', 0))
+            # Leads primários: Lead_Presencial + Lead_Live
+            lead_presencial = 0
+            lead_live = 0
+            vendas = 0
 
-            # Calcula CPA
-            if conversoes > 0:
-                custo = float(insight[AdsInsights.Field.spend])
-                cpa = custo / conversoes if conversoes > 0 else 0
-            elif AdsInsights.Field.cost_per_action_type in insight:
-                for cost_action in insight[AdsInsights.Field.cost_per_action_type]:
-                    if cost_action['action_type'] in CONVERSION_ACTIONS:
-                        cpa = float(cost_action.get('value', 0))
-                        break
+            actions = insight.get(AdsInsights.Field.actions, [])
+            for action in actions:
+                atype = action.get('action_type', '')
+                val = int(action.get('value', 0))
+                if atype == 'lead_presencial':
+                    lead_presencial += val
+                elif atype == 'lead_live':
+                    lead_live += val
+                elif atype in VENDA_ACTIONS:
+                    vendas += val
 
-            # Classificação de objetivo via API
+            leads_primarios = lead_presencial + lead_live
+            cpl_primario = custo / leads_primarios if leads_primarios > 0 else 0
+
+            # Classificação de objetivo
             obj_api = insight.get(AdsInsights.Field.objective, "")
             objetivo = OBJETIVO_MAP_META.get(obj_api)
             if not objetivo:
@@ -383,16 +420,19 @@ def get_facebook_data(account, start_date, end_date):
             rows.append({
                 'Campanha': insight[AdsInsights.Field.campaign_name],
                 'Objetivo': objetivo,
-                'Custo': float(insight[AdsInsights.Field.spend]),
+                'Custo': custo,
                 'Impressões': int(insight.get(AdsInsights.Field.impressions, 0)),
-                'Cliques': int(insight.get(AdsInsights.Field.clicks, 0)),
-                'CTR (%)': float(insight.get(AdsInsights.Field.ctr, 0)),
-                'CPC': float(insight.get(AdsInsights.Field.cpc, 0)),
-                'CPM': float(insight.get(AdsInsights.Field.cpm, 0)),
                 'Alcance': int(insight.get(AdsInsights.Field.reach, 0)),
                 'Frequência': float(insight.get(AdsInsights.Field.frequency, 0)),
-                'Conversões': conversoes,
-                'CPA': cpa,
+                'CPM': float(insight.get(AdsInsights.Field.cpm, 0)),
+                'Cliques Link': cliques_link,
+                'CTR Link (%)': round(ctr_link, 2),
+                'CPC Link': round(cpc_link, 2),
+                'lead_presencial': lead_presencial,
+                'lead_live': lead_live,
+                'Resultado Presencial + Live': leads_primarios,
+                'CPL Primário': round(cpl_primario, 2),
+                'Vendas': vendas,
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -403,18 +443,20 @@ def get_facebook_data(account, start_date, end_date):
 # FORMATAÇÃO DOS DADOS POR OBJETIVO (v2.0)
 # =====================================================
 
-def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias, df_facebook_central=None):
+def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, janela_dias, df_facebook_central=None, start_date=None, end_date=None):
     """Formata os dados organizados por MARCA (Central vs Degrau) e dentro de cada marca por
     plataforma, conforme exigido pelo system prompt v3.0."""
     hoje = datetime.now().date()
-    inicio = hoje - timedelta(days=janela_dias)
+    inicio = start_date if start_date is not None else hoje - timedelta(days=janela_dias)
+    fim = end_date if end_date is not None else hoje
     dia_semana = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"][hoje.weekday()]
+    janela_real = (fim - inicio).days + 1
 
     linhas = []
     linhas.append("=== METADADOS ===")
-    linhas.append(f"Período: {inicio.strftime('%d/%m/%Y')} a {hoje.strftime('%d/%m/%Y')}")
-    linhas.append(f"Janela: {janela_dias} dias")
-    linhas.append(f"Tipo de relatório: {'Alerta diário' if janela_dias == 1 else 'Análise completa'}")
+    linhas.append(f"Período: {inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}")
+    linhas.append(f"Janela: {janela_real} dias")
+    linhas.append(f"Tipo de relatório: {'Alerta diário' if janela_real == 1 else 'Análise completa'}")
     linhas.append(f"Data de hoje: {hoje.strftime('%d/%m/%Y')} ({dia_semana})")
     linhas.append("")
 
@@ -423,48 +465,97 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
         if df is None or df.empty:
             return [f"  [{origem_label}]: sem dados no período"]
 
+        eh_meta = "Meta" in origem_label
         custo_total = df['Custo'].sum()
-        conv_total = df['Conversões'].sum()
         bloco = []
         bloco.append(f"  [{origem_label}]")
-        bloco.append(f"  Total campanhas: {len(df)} | Custo: R${custo_total:.2f} | Conversões: {conv_total}")
-        if conv_total > 0:
-            cpa_medio = custo_total / conv_total
-            aviso = " ⚠️ ATENÇÃO: <30 conversões, dados insuficientes" if conv_total < 30 else ""
-            bloco.append(f"  CPA/CPL médio: R${cpa_medio:.2f}{aviso}")
+        bloco.append(f"  Total campanhas: {len(df)} | Custo total: R${custo_total:.2f}")
         bloco.append("")
 
         for _, r in df.iterrows():
             obj = r.get('Objetivo', 'LEADS')
-            cpm = r.get('CPM', 0)
-            freq = r.get('Frequência', 0)
-            alcance = r.get('Alcance', 0)
-            cpc = r.get('CPC', 0)
+            status = r.get('Status', '')
+            bloco.append(f"  Campanha: {r['Campanha']}" + (f" [{status}]" if status else ""))
+            bloco.append(f"  Objetivo: {obj} | Custo: R${r['Custo']:.2f} | Impressões: {r['Impressões']:,}")
 
-            bloco.append(f"  Campanha: {r['Campanha']}")
-            bloco.append(f"  Objetivo: {obj} | Custo: R${r['Custo']:.2f} | Impressões: {r['Impressões']:,} | Cliques: {r['Cliques']:,} | CTR: {r['CTR (%)']:.2f}%")
+            if eh_meta:
+                # Métricas Meta com cliques no link
+                cliques = r.get('Cliques Link', 0)
+                ctr = r.get('CTR Link (%)', 0)
+                cpc = r.get('CPC Link', 0)
+                cpm = r.get('CPM', 0)
+                alcance = r.get('Alcance', 0)
+                freq = r.get('Frequência', 0)
+                lead_p = r.get('lead_presencial', 0)
+                lead_l = r.get('lead_live', 0)
+                leads = r.get('Resultado Presencial + Live', 0)
+                cpl = r.get('CPL Primário', 0)
+                vendas = r.get('Vendas', 0)
 
-            if obj in ["LEADS", "VENDAS", "REMARKETING"]:
-                bloco.append(f"  Conversões: {r['Conversões']} | CPA: R${r['CPA']:.2f}")
-            if cpm > 0:
-                bloco.append(f"  CPM: R${cpm:.2f} | CPC: R${cpc:.2f}")
-            if alcance > 0:
+                bloco.append(f"  Cliques no link: {cliques:,} | CTR link: {ctr:.2f}% | CPC link: R${cpc:.2f} | CPM: R${cpm:.2f}")
                 bloco.append(f"  Alcance: {alcance:,} | Frequência: {freq:.1f}")
+                if leads > 0 or lead_p > 0 or lead_l > 0:
+                    aviso = " ⚠️ <30, dados insuficientes" if leads < 30 else ""
+                    bloco.append(f"  lead_presencial: {lead_p} | lead_live: {lead_l} | Resultado Presencial + Live: {leads} | CPL Primário: R${cpl:.2f}{aviso}")
+                if vendas > 0:
+                    bloco.append(f"  Vendas: {vendas}")
+            else:
+                # Métricas Google Ads
+                canal = r.get('Canal', '')
+                cliques = r.get('Cliques', 0)
+                ctr = r.get('CTR (%)', 0)
+                cpc = r.get('CPC', 0)
+                cpm = r.get('CPM', 0)
+                conv = r.get('Conversões', 0)
+                cpa = r.get('CPA', 0)
+                tcpa = r.get('tCPA', 0)
+                taxa_conv = r.get('Taxa Conv (%)', 0)
+                imp_budget = r.get('Imp Lost Budget (%)', None)
+                imp_rank = r.get('Imp Lost Rank (%)', None)
+                cpv = r.get('CPV', 0)
+                video_views = r.get('Video Views', 0)
+                view_rate = r.get('Video View Rate (%)', 0)
+                engajamentos = r.get('Engajamentos', 0)
+                eng_rate = r.get('Engagement Rate (%)', 0)
+
+                bloco.append(f"  Canal: {canal} | Cliques: {cliques:,} | CTR: {ctr:.2f}% | CPC: R${cpc:.2f} | CPM: R${cpm:.2f}")
+                bloco.append(f"  Conversões: {conv} | CPA: R${cpa:.2f}" + (f" | tCPA configurado: R${tcpa:.2f}" if tcpa > 0 else "") + f" | Taxa conv: {taxa_conv:.2f}%")
+
+                # Parcelas de impressão (Search e PMax)
+                if imp_budget is not None or imp_rank is not None:
+                    ib = f"{imp_budget:.1f}%" if imp_budget is not None else "N/A"
+                    ir = f"{imp_rank:.1f}%" if imp_rank is not None else "N/A"
+                    bloco.append(f"  Parc impr perd (orç): {ib} | Parc impr perd (class): {ir}")
+
+                # Métricas YouTube — apenas para campanhas de canal VIDEO
+                if canal == "VIDEO":
+                    bloco.append(f"  Video Views: {video_views:,} | View Rate: {view_rate:.2f}% | CPV: R${cpv:.4f}")
+                    bloco.append(f"  Engajamentos: {engajamentos:,} | Engagement Rate: {eng_rate:.2f}%")
+
+                if conv > 0 and conv < 30:
+                    bloco.append(f"  ⚠️ <30 conversões — CPA não é estatisticamente confiável")
+
             bloco.append("")
         return bloco
+
+    def _soma(df, col):
+        return df[col].sum() if df is not None and not df.empty and col in df.columns else 0
 
     # ─── CENTRAL DE CONCURSOS ───────────────────────────────────────────────
     linhas.append("=" * 60)
     linhas.append("MARCA: CENTRAL DE CONCURSOS (São Paulo)")
     linhas.append("=" * 60)
 
-    custo_gc = df_google_central['Custo'].sum() if not df_google_central.empty else 0
-    custo_fbc = df_facebook_central['Custo'].sum() if df_facebook_central is not None and not df_facebook_central.empty else 0
-    conv_gc = df_google_central['Conversões'].sum() if not df_google_central.empty else 0
-    conv_fbc = df_facebook_central['Conversões'].sum() if df_facebook_central is not None and not df_facebook_central.empty else 0
+    custo_gc  = _soma(df_google_central, 'Custo')
+    custo_fbc = _soma(df_facebook_central, 'Custo')
+    conv_gc   = _soma(df_google_central, 'Conversões')
+    leads_fbc = _soma(df_facebook_central, 'Resultado Presencial + Live')
+    cpl_fbc   = custo_fbc / leads_fbc if leads_fbc > 0 else 0
+
     linhas.append(f"Investimento total Central: R${(custo_gc + custo_fbc):.2f}")
-    linhas.append(f"  Google Ads (Central): R${custo_gc:.2f} | Conversões: {conv_gc}")
-    linhas.append(f"  Meta Ads (Central):   R${custo_fbc:.2f} | Conversões: {conv_fbc}")
+    linhas.append(f"  Google Ads (Central): R${custo_gc:.2f} | Conversões: {int(conv_gc)}")
+    linhas.append(f"  Meta Ads (Central):   R${custo_fbc:.2f} | Resultado Presencial + Live: {int(leads_fbc)}" +
+                  (f" | CPL: R${cpl_fbc:.2f}" if leads_fbc > 0 else ""))
     linhas.append("")
 
     linhas.extend(_bloco_campanhas(df_google_central, "Google Ads (Central)"))
@@ -475,13 +566,16 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
     linhas.append("MARCA: DEGRAU CULTURAL (Rio de Janeiro)")
     linhas.append("=" * 60)
 
-    custo_gd = df_google_degrau['Custo'].sum() if not df_google_degrau.empty else 0
-    custo_fb = df_facebook['Custo'].sum() if not df_facebook.empty else 0
-    conv_gd = df_google_degrau['Conversões'].sum() if not df_google_degrau.empty else 0
-    conv_fb = df_facebook['Conversões'].sum() if not df_facebook.empty else 0
+    custo_gd  = _soma(df_google_degrau, 'Custo')
+    custo_fb  = _soma(df_facebook, 'Custo')
+    conv_gd   = _soma(df_google_degrau, 'Conversões')
+    leads_fb  = _soma(df_facebook, 'Resultado Presencial + Live')
+    cpl_fb    = custo_fb / leads_fb if leads_fb > 0 else 0
+
     linhas.append(f"Investimento total Degrau: R${(custo_gd + custo_fb):.2f}")
-    linhas.append(f"  Google Ads (Degrau): R${custo_gd:.2f} | Conversões: {conv_gd}")
-    linhas.append(f"  Meta Ads (Degrau):   R${custo_fb:.2f} | Conversões: {conv_fb}")
+    linhas.append(f"  Google Ads (Degrau): R${custo_gd:.2f} | Conversões: {int(conv_gd)}")
+    linhas.append(f"  Meta Ads (Degrau):   R${custo_fb:.2f} | Resultado Presencial + Live: {int(leads_fb)}" +
+                  (f" | CPL: R${cpl_fb:.2f}" if leads_fb > 0 else ""))
     linhas.append("")
 
     linhas.extend(_bloco_campanhas(df_google_degrau, "Google Ads (Degrau)"))
@@ -489,22 +583,23 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
 
     # ─── TOTAIS CONSOLIDADOS ────────────────────────────────────────────────
     custo_all = custo_gc + custo_fbc + custo_gd + custo_fb
-    conv_all = conv_gc + conv_fbc + conv_gd + conv_fb
+    conv_all  = int(conv_gc + conv_gd)
+    leads_all = int(leads_fbc + leads_fb)
     linhas.append("=" * 60)
     linhas.append("TOTAIS CONSOLIDADOS (ambas as marcas)")
     linhas.append("=" * 60)
-    linhas.append(f"Custo total: R${custo_all:.2f} | Conversões totais: {conv_all}")
+    linhas.append(f"Custo total: R${custo_all:.2f} | Conversões Google: {conv_all} | Resultado Presencial + Live (Meta): {leads_all}")
 
     return "\n".join(linhas)
 
 # =====================================================
-# SYSTEM PROMPTS v3.0 (Março 2026)
+# SYSTEM PROMPTS v4.0 (Março 2026)
 # =====================================================
 
 SYSTEM_PROMPT_ADS_V2 = """
 SYSTEM PROMPT — SISTEMA DE INTELIGÊNCIA DE MARKETING
 Degrau Cultural / Central de Concursos
-Versão 3.0 — Março 2026
+Versão 2.1 — Março 2026
 
 1. IDENTIDADE E PAPEL
 
@@ -547,9 +642,9 @@ Estratégia Concursos e Gran Cursos Online. Modelo deles: venda de curso online 
 Competem nas mesmas palavras-chave no leilão do Google, mas o modelo de negócio é diferente.
 
 2.5 Concursos ativos
-Os concursos ativos mudam constantemente. O sistema deve identificar os concursos a partir dos
-nomes das campanhas recebidas. Exemplos recorrentes: INSS, TJ SP, Banco do Brasil, PM SP,
-PC SP, GCM SP, PM RJ, DETRAN RJ, MP SP, SEFAZ SP, entre outros.
+Os concursos ativos mudam constantemente. Identificar os concursos a partir dos nomes das
+campanhas. Exemplos recorrentes: INSS, TJ SP, Banco do Brasil, PM SP, PC SP, GCM SP, PM RJ,
+DETRAN RJ, MP SP, SEFAZ SP, entre outros.
 
 3. SEGMENTAÇÃO GEOGRÁFICA DAS CAMPANHAS
 
@@ -563,29 +658,39 @@ PC SP, GCM SP, PM RJ, DETRAN RJ, MP SP, SEFAZ SP, entre outros.
   Gonçalo, São João de Meriti.
 - Meta Ads: majoritariamente cidade do Rio de Janeiro com raio de 50 km + Niterói.
 
-REGRA OBRIGATÓRIA: as análises devem ser SEMPRE separadas por marca. Campanhas da Central de
-Concursos são analisadas em bloco separado das campanhas da Degrau Cultural. Nunca misturar
-campanhas das duas marcas na mesma seção de análise, mesmo que sigam a mesma estrutura e lógica.
+REGRA OBRIGATÓRIA: análises SEMPRE separadas por marca. Nunca misturar Central de Concursos
+com Degrau Cultural na mesma seção.
 
 4. MÉTRICAS POR PLATAFORMA
 
-4.1 Google Ads — Search e PMax
-Métricas obrigatórias: Orçamento, Status, Impressões, Cliques, CTR, Custo, Conversões
-(primárias: Lead Presencial + Lead Live), CPA real, tCPA configurado (se disponível), CPM médio,
-Taxa de conversão, Parcela de impressões perdida por orçamento, Parcela de impressões perdida
-por classificação.
+4.1 Google Ads — Campanhas de Search e PMax
+Métricas obrigatórias:
+- Impressões, Cliques, CTR, Custo, CPM médio, CPC médio
+- Conversões (primárias: Lead Presencial + Lead Live), CPA real
+- tCPA configurado (se disponível — comparar com CPA real)
+- Taxa de conversão
+- Parcela de impressões perdida por orçamento (campo: Imp Lost Budget %)
+- Parcela de impressões perdida por classificação (campo: Imp Lost Rank %)
+  Nos dados: "Parc impr perd (orç)" e "Parc impr perd (class)"
 
-4.2 Google Ads — YouTube
-CRÍTICO: distinguir por objetivo. Campanhas de CONVERSÃO → avaliar por CPA. Campanhas de
-VIDEO VIEW / VVC → avaliar por CPV, taxa de visualização e engajamento. NUNCA julgar campanha
-VVC por CPA.
+4.2 Google Ads — Campanhas de YouTube
+CRÍTICO: distinguir por objetivo.
+- Campanhas de CONVERSÃO → avaliar por CPA normalmente.
+- Campanhas VVC (Video View / Visualização / Engajamento) → avaliar por:
+  CPV (Custo por View), Taxa de visualização (Video View Rate %), Engajamentos,
+  Engagement Rate, Video Views. NUNCA julgar campanha VVC por CPA.
 
 4.3 Meta Ads — Campanhas de Lead
-Métricas obrigatórias: Orçamento, Impressões, Alcance, Valor usado, Resultados (Presencial +
-Lead), Custo por lead primário (valor usado / (lead_presencial + lead_live)), Frequência.
+Métricas obrigatórias:
+- Custo (Valor usado), Impressões, Alcance, Frequência, CPM
+- Cliques no link (campo: Cliques Link — inline_link_clicks, NÃO cliques totais)
+- CTR link (inline_link_click_ctr), CPC link (cost_per_inline_link_click)
+- Lead Presencial (evento lead_presencial), Lead Live (evento lead_live)
+- Leads Primários = Lead Presencial + Lead Live
+- CPL Primário = Custo / Leads Primários
 
 4.4 Meta Ads — Campanhas de Venda Online
-Analisar como e-commerce: ROAS, custo por compra, valor de conversão, volume de vendas.
+Analisar como e-commerce: ROAS, custo por compra, volume de vendas.
 NÃO misturar métricas de campanha de lead com campanha de venda online.
 
 4.5 Conversões — hierarquia
@@ -598,66 +703,87 @@ NÃO misturar métricas de campanha de lead com campanha de venda online.
 5.1 Fluxo obrigatório de análise
 
 PASSO 1 — Leitura fria dos números:
-Custo total, conversões primárias, CPA real, taxa de conversão, CPC médio.
-Comparar CPA real vs CPA desejado (tCPA). Se tCPA não foi informado, PERGUNTAR a meta antes de julgar.
+Custo total, conversões primárias, CPA real, taxa de conversão, CPC médio, CPM.
+Comparar CPA real vs tCPA. Se tCPA não informado, PERGUNTAR antes de julgar.
 
 PASSO 2 — Análise por tipo de campanha:
-- Search: Taxa de conversão e CPA. Parcela de impressões: perda por orçamento e por classificação.
-  Se perda por classificação é alta → problema é qualidade/relevância/lance, NÃO orçamento.
-  Se perda por orçamento é alta → há espaço para mais volume com o CPA atual.
-- PMax: CPA geral e distribuição por canal. Taxa de conversão em PMax é naturalmente menor que
-  Search — o que manda é CPA e volume.
-- YouTube VVC: avaliar por CPV, taxa de visualização, engajamento. Tratar como topo de funil.
-  NUNCA julgar por CPA.
+Search:
+- Taxa de conversão e CPA.
+- Parcela perdida por classificação alta → problema é qualidade/lance, NÃO orçamento.
+  Diagnosticar ANTES de recomendar aumento de budget.
+- Parcela perdida por orçamento alta → há espaço para mais volume com o CPA atual.
+
+PMax:
+- CPA geral e distribuição por canal (Pesquisa, Discover, YouTube, Gmail, Display).
+- Taxa de conversão em PMax é naturalmente menor que Search — o que manda é CPA e volume.
+- Quando PMax tiver CPA menor que Search do mesmo concurso: APONTAR a diferença percentual
+  mas NÃO recomendar realocação diretamente. Registrar como ponto de análise para o gestor.
+  Formato: "PMax CPA R$ X,XX vs. Search CPA R$ Y,YY (diferença de Z%). Ponto de análise:
+  gestor deve avaliar qualidade dos leads antes de realocar orçamento."
+
+YouTube VVC:
+- Avaliar por CPV, Video View Rate, Engajamentos, Engagement Rate. Tratar como awareness.
+- NUNCA julgar por CPA.
 
 PASSO 3 — Diagnóstico antes da solução:
-Sempre responder primeiro: "O maior problema aqui está em: [Lances/tCPA? Orçamento? Estrutura?
-Canais da PMax? Landing page? Segmentação? Criativos?]"
-Só depois sugerir ajustes.
+Sempre identificar primeiro: "O maior problema está em: [Lances/tCPA? Orçamento? Estrutura?
+Canais da PMax? Landing page? Segmentação? Criativos?]" — só depois sugerir ajustes.
 
 5.2 Filosofia de otimização — Google Ads
-Toda sugestão deve conter: (a) o que mudar, (b) por que mudar — com base nos dados,
-(c) o que se espera como resultado após aplicar.
+Toda sugestão: (a) o que mudar, (b) por que mudar com base nos dados, (c) resultado esperado.
+
+5.3 Campanhas z{} (genéricas / marca / topo de funil)
+Campanhas com prefixo z{} (ex: z{Concursos}, z{Institucional}, z{Branding}, z{DSA}) são topo
+de funil ou marca. CPA estruturalmente baixo — NÃO usar como benchmark para campanhas de
+concurso específico. NÃO listar como "destaque positivo" no Resumo Diretoria por CPA baixo.
+Na Análise do Gestor: analisar normalmente mas sempre contextualizar que o CPA baixo é
+estrutural da posição no funil, não mérito de otimização.
 
 6. REGRAS DE ANÁLISE — META ADS
 
 6.1 Fluxo obrigatório — campanhas de lead
 
 PASSO 1 — Leitura dos números:
-Valor investido, impressões, alcance, frequência. Leads primários e custo por lead primário.
-Se frequência > 3.0 em campanhas de prospecção → possível saturação de público.
+Custo, Impressões, Alcance, Frequência, CPM.
+Cliques no link, CTR link, CPC link.
+Leads Primários (Lead Presencial + Lead Live) e CPL Primário.
+Frequência > 3.0 em prospecção → possível saturação.
 
 PASSO 2 — Análise por posição no funil:
-- Topo de funil (prospecção): CPM, CTR, custo por lead primário.
-  Se CPM alto + CTR baixo → problema no criativo ou público saturado.
-  Se CTR bom + custo por lead alto → problema na LP ou no formulário.
-- Meio/fundo de funil (retargeting): CPL menor esperado. Frequência > 4-5 = público esgotando.
-- Campanhas de venda online: ROAS, custo por compra, volume. NÃO misturar com métricas de lead.
+- Topo de funil (prospecção): CPM, CTR link, CPL Primário.
+  CPM alto + CTR baixo → criativo fraco ou público saturado.
+  CTR bom + CPL alto → problema na LP ou no formulário.
+- Retargeting: CPL menor esperado. Frequência > 4-5 → público esgotando.
+- Venda online: ROAS, custo por compra, volume. Nunca misturar com métricas de lead.
 
-PASSO 3 — Criativos e aprendizado:
-Ao analisar criativos/copy, avaliar caso a caso com base no contexto (concurso, público, momento
-do edital, posição no funil). Apontar o que pode ser melhorado e por quê, sem regras genéricas.
+PASSO 3 — Criativos:
+Avaliar caso a caso: concurso, público, momento do edital, posição no funil.
+Apontar o que melhorar e por quê — sem regras genéricas para todas as campanhas.
 
-6.2 Métrica customizada — Custo por Lead Primário
-Fórmula: Valor usado / (lead_presencial + lead_live)
-Lead online é métrica secundária separada. Na análise, sempre priorizar o custo por lead primário.
+6.2 Métrica customizada — CPL Primário
+Fórmula: Custo / (lead_presencial + lead_live)
+Prioridade máxima. Lead Online é métrica secundária. Sempre diferenciar.
 
 7. REGRAS CRÍTICAS — APLICAR SEMPRE
 
-- NUNCA avaliar campanha de TRÁFEGO por CPA.
-- NUNCA concluir sobre CPA com menos de 30 conversões. Se menos de 30 conversões, sinalizar
-  explicitamente que o CPA não é estatisticamente confiável.
-- CPA target varia por concurso, marca e status do concurso. Se o target não foi informado,
-  PERGUNTAR antes de julgar performance. Nunca presumir.
-- Parcela perdida por classificação: sempre verificar ANTES de recomendar aumento de orçamento.
-- SEMPRE separar análise por marca. Central de Concursos e Degrau Cultural em blocos separados.
-- Campanhas YouTube VVC: NUNCA avaliar por CPA.
-- Campanhas Meta de venda online: analisar como e-commerce (ROAS, custo por compra).
+- NUNCA avaliar campanha de tráfego/awareness por CPA.
+- NUNCA concluir sobre CPA com menos de 30 conversões — sinalizar explicitamente.
+- NUNCA presumir CPA target. Se não informado, perguntar.
+- Parcela perdida por classificação: verificar ANTES de recomendar aumento de orçamento.
+- SEMPRE separar análise por marca. Blocos separados, nunca misturar.
+- YouTube VVC: NUNCA avaliar por CPA.
+- Meta venda online: e-commerce (ROAS, custo por compra). Nunca tratar como lead.
+- Campanhas z{}: NÃO listar como destaque por CPA baixo — é estrutural.
+- PMax vs Search: apontar diferença de CPA, não recomendar realocação diretamente.
 
 8. FORMATO DE SAÍDA
 
-A resposta DEVE seguir esta estrutura. A análise é SEMPRE separada por marca: primeiro Central de
-Concursos, depois Degrau Cultural.
+Análise SEMPRE separada por marca: primeiro Central de Concursos, depois Degrau Cultural.
+
+8.0 Período e comparativo WoW
+Relatório semanal cobre DOMINGO a SÁBADO. Confirmar que o período está correto.
+Quando houver dados da semana anterior: incluir comparativo WoW obrigatório.
+Métricas WoW: Custo (R$ e %), Conversões/Leads (qtd e %), CPA/CPL (R$ e %), Frequência Meta.
 
 ─────────────────────────────────────────────────────
 BLOCO 1 — RESUMO DIRETORIA
@@ -668,25 +794,26 @@ PERÍODO: [extrair dos dados]
 ═══ CENTRAL DE CONCURSOS ═══
 
 INVESTIMENTO TOTAL: R$ X.XXX,XX
-  Google Ads: R$ X.XXX,XX
-  Meta Ads: R$ X.XXX,XX
+  Google Ads: R$ X.XXX,XX | Meta Ads: R$ X.XXX,XX
 
 LEADS PRIMÁRIOS GERADOS: XXX
-  Google Ads: XXX (CPA médio: R$ XX,XX)
-  Meta Ads: XXX (CPL primário médio: R$ XX,XX)
+  Google Ads: XXX conversões (CPA médio: R$ XX,XX)
+  Meta Ads: XXX leads primários (CPL primário médio: R$ XX,XX)
+
+[Se houver dados WoW, incluir comparação aqui]
 
 DESTAQUES POSITIVOS:
-- [Campanha X com CPA abaixo da meta em X%]
+  Listar apenas campanhas de concurso específico acima da meta.
+  NÃO incluir campanhas z{} como destaque por CPA baixo.
 
 PONTOS DE ATENÇÃO:
-- [Campanha Z com CPA X% acima da meta]
+  [Campanha com CPA/CPL acima da meta, frequência alta, etc.]
 
 DECISÕES NECESSÁRIAS:
-- [Realocar R$ X de campanha A para campanha B?]
+  [Aumentar orçamento? Há perda por budget? Pausar campanha?]
 
 ═══ DEGRAU CULTURAL ═══
-
-[Mesma estrutura acima, com dados da Degrau]
+[Mesma estrutura]
 
 ─────────────────────────────────────────────────────
 BLOCO 2 — ANÁLISE COMPLETA PARA O GESTOR DE TRÁFEGO
@@ -698,24 +825,39 @@ CAMPANHA: [nome]
 PLATAFORMA: [Google Ads / Meta Ads]
 TIPO: [Search / PMax / YouTube Conversão / YouTube VVC / Meta Lead / Meta Venda Online]
 STATUS: [Ativa / Pausada / Limitada por orçamento]
-NÚMEROS:
-  Custo: R$ X.XXX,XX | Impressões: XX.XXX | Cliques: X.XXX | CTR: X,XX%
-  Conversões primárias: XX | CPA real: R$ XX,XX | tCPA configurado: R$ XX,XX
-  [Para Search]: Parcela perdida por orçamento: X% | Por classificação: X%
-  [Para Meta Lead]: Alcance: XX.XXX | Frequência: X,X | CPL primário: R$ XX,XX
-  [Para Meta Venda]: ROAS: X,XX | Custo por compra: R$ XX,XX | Vendas: XX
-  [Para YouTube VVC]: CPV: R$ X,XX | Taxa de visualização: X% | Engajamento: X%
-DIAGNÓSTICO:
-  O maior problema está em: [identificar gargalo principal]
-PLANO DE AÇÃO:
-  1. [O que fazer] → [Por que, com base nos dados] → [O que se espera após aplicar]
-  2. [Ação secundária] → [Justificativa] → [Resultado esperado]
-⚠️ [Alertas específicos: <30 conversões, classification loss alto, frequência crítica, etc.]
 
-[Repetir para cada campanha da Central]
+NÚMEROS (semana atual vs. anterior se disponível):
+  [Google Search/PMax]
+  Custo: R$ X.XXX,XX | Impressões: XX.XXX | Cliques: X.XXX | CTR: X,XX% | CPM: R$ X,XX
+  Conversões: XX | CPA: R$ XX,XX | tCPA: R$ XX,XX | Taxa conv: X,XX%
+  Parc impr perd (orç): X% | Parc impr perd (class): X%
+
+  [Meta Lead]
+  Custo: R$ X.XXX,XX | Impressões: XX.XXX | Alcance: XX.XXX | Frequência: X,X | CPM: R$ X,XX
+  Cliques link: X.XXX | CTR link: X,XX% | CPC link: R$ X,XX
+  Lead Presencial: XX | Lead Live: XX | Leads Primários: XX | CPL Primário: R$ XX,XX
+
+  [Meta Venda Online]
+  Custo: R$ X.XXX,XX | Vendas: XX | ROAS: X,XX | Custo por compra: R$ XX,XX
+
+  [YouTube VVC]
+  Custo: R$ X.XXX,XX | Video Views: XX.XXX | View Rate: X,XX% | CPV: R$ X,XXXX
+  Engajamentos: XX.XXX | Engagement Rate: X,XX%
+
+DIAGNÓSTICO:
+  O maior problema está em: [gargalo principal]
+  [Explicação concisa]
+
+PLANO DE AÇÃO:
+  1. [O que fazer] → [Por que] → [Resultado esperado]
+  2. [Ação secundária] → [Justificativa] → [Resultado esperado]
+
+⚠️ [Alertas: <30 conversões, parcela perdida por classificação alta, frequência crítica, etc.]
+
+[Para z{}: "CPA baixo é estrutural — posição de topo de funil/marca, não mérito de otimização."]
+[Para PMax vs Search: apontar diferença % de CPA como ponto de análise, não recomendação direta.]
 
 ═══ DEGRAU CULTURAL ═══
-
 [Mesma análise campanha a campanha]
 
 ─────────────────────────────────────────────────────
@@ -723,42 +865,49 @@ BLOCO 3 — ALOCAÇÃO DE BUDGET (quando necessário)
 ─────────────────────────────────────────────────────
 
 RECOMENDAÇÃO DE REDISTRIBUIÇÃO:
-  [De campanha X → para campanha Y: R$ XXX/dia]
-  [Justificativa: CPA X é 40% menor com qualidade similar]
+  [De campanha X → para campanha Y: R$ XXX/dia | Justificativa | Risco]
+
+NOTA: NÃO incluir sugestões de migração Search → PMax como recomendação direta.
+Diferenças de CPA entre Search e PMax do mesmo concurso: listar como "PONTOS PARA AVALIAÇÃO
+DO GESTOR", não como recomendações de redistribuição.
 
 9. PROCESSAMENTO DOS DADOS
 
-- Se os dados vierem com valores em micros (cost_micros), converter dividindo por 1.000.000.
-- Classificar YouTube VVC automaticamente: nome contém "VVC", "view", "visualização" ou
-  "engajamento" → tratar como VVC. Caso contrário → conversão.
-- Classificar Meta: objetivo é vendas ou nome contém "venda", "online", "e-commerce" → venda
-  online. Caso contrário → lead.
-- Se campos estiverem ausentes ou zerados, sinalizar ao invés de inventar dados.
-- Os dados chegam rotulados com a origem: "Google Ads (Central)", "Google Ads (Degrau)",
-  "Meta Ads (Central)", "Meta Ads (Degrau)". Usar essa informação para separar as marcas.
+- cost_micros: dividir por 1.000.000.
+- YouTube VVC: nome contém "VVC", "view", "visualização" ou "engajamento" → tratar como VVC.
+- Meta venda: objetivo vendas ou nome contém "venda"/"online"/"e-commerce" → venda online.
+- Incluir TODA campanha com custo > 0 OU impressões > 0, mesmo que pausada no período.
+  Para campanhas pausadas com gasto: "Pausada durante o período. Custo: R$ X,XX | Conv: X."
+- Campanhas com custo = R$0 e impressões = 0: listar em bloco resumido ao final da seção.
+- Campos ausentes ou zerados: sinalizar, nunca inventar dados.
+- Origem dos dados está rotulada: usar para separar marcas.
 
 10. O QUE NUNCA FAZER
 
-- Nunca dar recomendação genérica. Sempre dizer o que está errado, por que, e o que fazer.
-- Nunca presumir CPA target. Se não foi informado, perguntar.
-- Nunca avaliar campanha de tráfego/awareness por CPA.
-- Nunca concluir sobre CPA com menos de 30 conversões.
-- Nunca misturar análise de campanha de lead com campanha de venda online.
-- Nunca diagnosticar "o problema é LP" sem dados que comprovem.
-- Nunca recomendar aumento de orçamento sem antes verificar parcela perdida por classificação.
-- Nunca misturar campanhas da Central de Concursos com campanhas da Degrau Cultural.
+- Recomendação genérica. Sempre: o que está errado, por que, e o que fazer especificamente.
+- Presumir CPA target. Se não informado, perguntar.
+- Avaliar campanha de tráfego/awareness por CPA.
+- Concluir sobre CPA com menos de 30 conversões.
+- Misturar análise de lead com venda online.
+- Diagnosticar "problema é LP" sem dados que comprovem (taxa conv ruim + CPA alto).
+- Recomendar aumento de orçamento sem verificar parcela perdida por classificação.
+- Misturar campanhas da Central com campanhas da Degrau.
+- Listar campanhas z{} como destaques positivos por CPA baixo.
+- Recomendar diretamente realocação Search → PMax baseada só em CPA.
 
 11. COMPORTAMENTO QUANDO DADOS SÃO INSUFICIENTES
 
-Fazer a análise com o que tem. Listar explicitamente quais métricas estão faltando e indicar o
-impacto: "Sem parcela de impressões perdida, não consigo diagnosticar se o gargalo é orçamento
-ou classificação."
+Fazer a análise com o que tem. Listar métricas faltantes e impacto:
+"Sem parcela perdida por classificação, não consigo diagnosticar se o gargalo é orçamento ou
+qualidade/lance." Sugerir como obter a métrica faltante.
+Se dados WoW ausentes: solicitar para próxima rodada e realizar análise sem comparativo.
 
 12. TIKTOK ADS (SECUNDÁRIO — apenas Degrau Cultural)
 
-Analisar como campanha de tráfego/awareness. Métricas: impressões, cliques, CTR, CPC, custo
-total, visualizações de vídeo. NÃO esperar conversões rastreadas. Sinalizar limitações de
-rastreamento.
+Analisar como campanha de tráfego/awareness. Métricas: impressões, cliques, CTR, CPC, custo,
+visualizações de vídeo. NÃO esperar conversões rastreadas. Sinalizar limitações de rastreamento.
+
+Versão do prompt: 2.1 | Última atualização: Março 2026
 """
 
 SYSTEM_PROMPT_ALERTA_DIARIO = """
@@ -1070,10 +1219,14 @@ def _get_anthropic_client():
     if not api_key:
         return None, "❌ API Key do Claude não configurada. Defina ANTHROPIC_API_KEY no .env ou Streamlit Secrets."
 
-    return anthropic.Anthropic(api_key=api_key), None
+    # max_retries: o SDK faz retry automático com backoff exponencial para 529 (overloaded)
+    return anthropic.Anthropic(api_key=api_key, max_retries=5), None
 
 def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="completo_ads"):
     """Envia dados para o Claude e retorna a análise usando o prompt correto."""
+    import time
+    import anthropic as _anthropic
+
     client, erro = _get_anthropic_client()
     if erro:
         return erro
@@ -1086,23 +1239,38 @@ def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="
     else:
         user_msg = f"Segue o relatório de performance do período:\n\n{dados_consolidados}\n\nAnalise conforme a estrutura definida."
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=64000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_msg}]
-    ) as stream:
-        texto = stream.get_final_text()
-        final = stream.get_final_message()
+    max_tentativas = 4
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=64000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_msg}]
+            ) as stream:
+                texto = stream.get_final_text()
+                final = stream.get_final_message()
 
-    usage = final.usage
-    print(
-        f"[Claude API] input_tokens={usage.input_tokens} | "
-        f"output_tokens={usage.output_tokens} | "
-        f"stop_reason={final.stop_reason}"
-    )
+            usage = final.usage
+            print(
+                f"[Claude API] tentativa={tentativa} | input_tokens={usage.input_tokens} | "
+                f"output_tokens={usage.output_tokens} | stop_reason={final.stop_reason}"
+            )
+            return texto
 
-    return texto
+        except _anthropic.APIStatusError as e:
+            if e.status_code == 529:  # overloaded_error
+                espera = 2 ** tentativa  # 2s, 4s, 8s, 16s
+                print(f"[Claude API] Sobrecarga na tentativa {tentativa}. Aguardando {espera}s...")
+                if tentativa < max_tentativas:
+                    time.sleep(espera)
+                else:
+                    return f"❌ API do Claude sobrecarregada após {max_tentativas} tentativas. Tente novamente em alguns minutos."
+            else:
+                return f"❌ Erro na API do Claude ({e.status_code}): {e.message}"
+
+        except Exception as e:
+            return f"❌ Erro inesperado ao chamar o Claude: {e}"
 
 # =====================================================
 # HISTÓRICO DE RELATÓRIOS (MySQL)
@@ -1410,8 +1578,9 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
 
     # Formata e envia
     dados_consolidados = formatar_dados_para_claude(
-        df_google_degrau, df_google_central, df_facebook, data_ref, janela_dias,
-        df_facebook_central=df_facebook_central
+        df_google_degrau, df_google_central, df_facebook, janela_dias,
+        df_facebook_central=df_facebook_central,
+        start_date=start_date, end_date=end_date
     )
 
     with st.spinner("🤖 Analisando com Claude..."):

@@ -306,25 +306,22 @@ def run_page():
                 df_matriculas_tabela["concurso"].isna()
             ].copy()
 
-    # Filtro de responsável (Site vs Time)
-    st.sidebar.subheader("Canal de Venda")
-    col_site, col_time = st.sidebar.columns(2)
-    filtro_site = col_site.checkbox("Site", value=True, key="filtro_site")
-    filtro_time = col_time.checkbox("Time", value=True, key="filtro_time")
-
-    if not (filtro_site and filtro_time):
-        if filtro_site:
-            canais = ["Site"]
-        elif filtro_time:
-            canais = ["Time"]
-        else:
-            canais = []
-        df_matriculas_tabela = df_matriculas_tabela[
-            df_matriculas_tabela["canal_venda"].isin(canais)
-        ].copy()
-        df_orders_filtrado = df_orders_filtrado[
-            df_orders_filtrado["canal_venda"].isin(canais)
-        ].copy()
+    # Filtro de vendedor
+    st.sidebar.subheader("Vendedor")
+    vendedores_disponiveis = sorted(df_matriculas_tabela["vendedor"].dropna().unique().tolist())
+    if vendedores_disponiveis:
+        vendedores_selecionados = st.sidebar.multiselect(
+            "Vendedor:",
+            options=vendedores_disponiveis,
+            default=vendedores_disponiveis
+        )
+        if vendedores_selecionados:
+            df_matriculas_tabela = df_matriculas_tabela[
+                df_matriculas_tabela["vendedor"].isin(vendedores_selecionados)
+            ].copy()
+            df_orders_filtrado = df_orders_filtrado[
+                df_orders_filtrado["vendedor"].isin(vendedores_selecionados)
+            ].copy()
 
     # Filtros de presença de parâmetros (checkbox)
     st.sidebar.subheader("Parâmetros de Rastreamento")
