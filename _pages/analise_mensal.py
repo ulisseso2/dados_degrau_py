@@ -90,6 +90,21 @@ def run_page():
         key="data_fim_tabela"
     )
 
+    # Filtro de status de pagamento
+    st.sidebar.subheader("Status do Pedido")
+    _status_empresa = dfo[dfo["empresa"] == empresa_selecionada]
+    status_list = sorted(_status_empresa["status"].dropna().unique().tolist())
+    status_default = _status_empresa[
+        _status_empresa["status_id"].isin([2, 3, 14, 10, 15])
+    ]["status"].dropna().unique().tolist()
+    if not status_default:
+        status_default = status_list
+    status_selecionado = st.sidebar.multiselect(
+        "Status:",
+        options=status_list,
+        default=status_default
+    )
+
     # Filtro de origem (apenas para a tabela de matrículas)
     st.sidebar.subheader("Origem (Tabela de Matrículas)")
 
@@ -107,7 +122,7 @@ def run_page():
         (dfo["data_pagamento"] <= ultimo_dia) &
         (dfo["total_pedido"] != 0) &
         (~dfo["metodo_pagamento"].isin([5, 8, 13])) &
-        (dfo["status_id"].isin([2, 3, 14, 10, 15]))  # Status de pagamento confirmado
+        (dfo["status"].isin(status_selecionado))
     ].copy()
 
     # Filtrar Oportunidades
@@ -127,7 +142,7 @@ def run_page():
         (dfo["data_pagamento"] <= fim_tabela) &
         (dfo["total_pedido"] != 0) &
         (~dfo["metodo_pagamento"].isin([5, 8, 13])) &
-        (dfo["status_id"].isin([2, 3, 14, 10, 15]))
+        (dfo["status"].isin(status_selecionado))
     ].copy()
 
     oportunidades_periodo = dfi[
@@ -291,6 +306,26 @@ def run_page():
                 df_matriculas_tabela["concurso"].isna()
             ].copy()
 
+    # Filtro de responsável (Site vs Time)
+    st.sidebar.subheader("Canal de Venda")
+    col_site, col_time = st.sidebar.columns(2)
+    filtro_site = col_site.checkbox("Site", value=True, key="filtro_site")
+    filtro_time = col_time.checkbox("Time", value=True, key="filtro_time")
+
+    if not (filtro_site and filtro_time):
+        if filtro_site:
+            canais = ["Site"]
+        elif filtro_time:
+            canais = ["Time"]
+        else:
+            canais = []
+        df_matriculas_tabela = df_matriculas_tabela[
+            df_matriculas_tabela["canal_venda"].isin(canais)
+        ].copy()
+        df_orders_filtrado = df_orders_filtrado[
+            df_orders_filtrado["canal_venda"].isin(canais)
+        ].copy()
+
     # Filtros de presença de parâmetros (checkbox)
     st.sidebar.subheader("Parâmetros de Rastreamento")
     
@@ -323,6 +358,23 @@ def run_page():
         df_matriculas_tabela = df_matriculas_tabela[
             df_matriculas_tabela["utm_medium"].notna() & (df_matriculas_tabela["utm_medium"] != "")
         ].copy()
+
+    # Filtro de dono
+    st.sidebar.subheader("Dono")
+    donos_disponiveis = sorted(df_matriculas_tabela["dono"].dropna().unique().tolist())
+    if donos_disponiveis:
+        donos_selecionados = st.sidebar.multiselect(
+            "Dono:",
+            options=donos_disponiveis,
+            default=donos_disponiveis
+        )
+        if donos_selecionados:
+            df_matriculas_tabela = df_matriculas_tabela[
+                df_matriculas_tabela["dono"].isin(donos_selecionados)
+            ].copy()
+            df_orders_filtrado = df_orders_filtrado[
+                df_orders_filtrado["dono"].isin(donos_selecionados)
+            ].copy()
 
     # ========== PREPARAÇÃO DOS DADOS PARA A TABELA ==========
     

@@ -34,6 +34,7 @@ SELECT
     IFNULL(v.full_name, 'Indefinido') AS vendedor,
     IFNULL(ow.full_name, v.full_name) as dono,
     IFNULL(o.owner_id, o.user_id) AS owner_id,
+    CASE WHEN o.owner_id IS NULL THEN 'Site' ELSE 'Time' END AS canal_venda,
     pm.name AS metodo_pagamento,
     GROUP_CONCAT(DISTINCT t.name SEPARATOR ', ') AS turma,
     GROUP_CONCAT(DISTINCT t.id SEPARATOR ', ') AS turma_id,
