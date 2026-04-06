@@ -382,9 +382,13 @@ def run_page():
     st.markdown("##### Baixar lista de alunos por turma")
     turmas_disponiveis = df_turma_exib['turma_nome'].tolist()
     if turmas_disponiveis:
-        turmas_download = st.multiselect(
-            "Selecione as turmas:", turmas_disponiveis, key="ci_turma_download"
-        )
+        incluir_todas = st.checkbox("Incluir todas as turmas do filtro", key="ci_incluir_todas_turmas")
+        if incluir_todas:
+            turmas_download = turmas_disponiveis
+        else:
+            turmas_download = st.multiselect(
+                "Selecione as turmas:", turmas_disponiveis, key="ci_turma_download"
+            )
         if turmas_download:
             df_down = df_turma_base[df_turma_base['turma_nome'].isin(turmas_download)].copy()
 

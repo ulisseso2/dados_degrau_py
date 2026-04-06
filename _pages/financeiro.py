@@ -755,8 +755,8 @@ def run_page():
         # --- EXTRATO DETALHADO (como extrato bancário) ---
         st.subheader("Extrato Detalhado de Movimentações")
         
-        # Preparar dados para o extrato
-        df_extrato = df_movimento_filtrado.copy()
+        # Preparar dados para o extrato (excluindo pagamentos cancelados)
+        df_extrato = df_movimento_filtrado[df_movimento_filtrado['status_parcela'] != 'Cancelado'].copy()
         df_extrato = df_extrato.sort_values('data')
         
         # Criar colunas de entrada e saída
@@ -767,12 +767,15 @@ def run_page():
         df_extrato['Saldo'] = saldo_anterior + df_extrato['valor'].cumsum()
         
         # Selecionar e renomear colunas para exibição
-        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'Entrada', 'Saída', 'Saldo']].copy()
+        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'status_parcela', 'id_pagamento', 'Entrada', 'Saída', 'Saldo']].copy()
         
         # Calcular totais ANTES de formatar (valores numéricos)
         total_entradas_extrato = extrato_display['Entrada'].sum()
         total_saidas_extrato = extrato_display['Saída'].sum()
         saldo_final_extrato = extrato_display['Saldo'].iloc[-1] if len(extrato_display) > 0 else saldo_anterior
+        
+        # Formatar id_pagamento (converter para string, NaN vira vazio)
+        extrato_display['id_pagamento'] = extrato_display['id_pagamento'].apply(lambda x: str(int(x)) if pd.notna(x) else '')
         
         # Formatar data
         extrato_display['data'] = extrato_display['data'].dt.strftime('%d/%m/%Y')
@@ -788,7 +791,9 @@ def run_page():
             'tipo': 'Tipo',
             'descricao': 'Descrição',
             'fornecedor': 'Fornecedor',
-            'conta_bancaria': 'Conta Bancária'
+            'conta_bancaria': 'Conta Bancária',
+            'status_parcela': 'Status',
+            'id_pagamento': 'ID Pagamento'
         }, inplace=True)
         
         # Exibir tabela com linha de totais
@@ -799,6 +804,8 @@ def run_page():
             'Descrição': '',
             'Fornecedor': '',
             'Conta Bancária': '',
+            'Status': '',
+            'ID Pagamento': '',
             'Entrada': formatar_reais(total_entradas_extrato),
             'Saída': formatar_reais(total_saidas_extrato),
             'Saldo': formatar_reais(saldo_final_extrato)

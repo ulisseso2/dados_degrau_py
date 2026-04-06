@@ -9,11 +9,11 @@ st.set_page_config(layout="wide", page_title="Dashboard Seducar")
 # Importa os módulos de cada página da aplicação com tratamento de erro
 try:
     from _pages import (
-        oportunidades, financeiro, financeiro_sp, tendencias, cancelamentos, matriculas, 
-        vendedores, madureira, madureira_cancelamento, campogrande, 
-        campogrande_cancelamento, niteroi, niteroi_cancelamento, centro, 
-        centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado, 
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, analise_ligacoes_sp, chat_oportunidades, analise_chats, relatorios_ia, analise_consumo_individual, turmas #fbclid_dashboard, #diagnostico_facebook
+        oportunidades, financeiro, financeiro_sp, tendencias, cancelamentos, matriculas,
+        vendedores, madureira, madureira_cancelamento, campogrande,
+        campogrande_cancelamento, niteroi, niteroi_cancelamento, centro,
+        centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado,
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, analise_ligacoes_sp, chat_oportunidades, analise_chats, relatorios_ia, analise_consumo_individual, turmas, gerentes #fbclid_dashboard, #diagnostico_facebook
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'analise_ligacoes_sp', 'chat_oportunidades', 'analise_chats', 'relatorios_ia', 'analise_consumo_individual', 'turmas' #'fbclid_dashboard', #'diagnostico_facebook'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'analise_ligacoes_sp', 'chat_oportunidades', 'analise_chats', 'relatorios_ia', 'analise_consumo_individual', 'turmas', 'gerentes' #'fbclid_dashboard', #'diagnostico_facebook'
     ]
     
     for module_name in modules:
@@ -54,6 +54,7 @@ PAGES = {
     "🎓 Matriculas SP": matriculas_sp,
     "❌ Cancelamentos": cancelamentos,
     "❌ Cancelamentos SP": cancelamentos_sp,
+    "📊 Painel Gerencial": gerentes,
     "📄 Rel. Desempenho Mensal": analise_mensal,
     "💰 Financeiro": financeiro,
     "💰 Financeiro SP": financeiro_sp,

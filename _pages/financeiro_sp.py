@@ -33,7 +33,6 @@ def run_page():
     st.sidebar.header("Filtros da Análise")
 
     # Filtro de Empresa
-    empresas_list = df["empresa"].dropna().unique().tolist()
     empresa_selecionada = "Central"
     df_para_opcoes = df[df["empresa"] == empresa_selecionada]
 
@@ -116,6 +115,11 @@ def run_page():
         categoria_list = df_filtrado_cc["categoria_pedido_compra"].dropna().unique().tolist()
         categoria_selecionada = st.multiselect("Categoria do Pedido:", categoria_list, default=categoria_list)
 
+        # Nível 5: Status da Parcela (todas exceto "Cancelado" por padrão)
+        status_parcela_list = df_filtrado_cc["status_parcela"].dropna().unique().tolist()
+        status_parcela_default = [s for s in status_parcela_list if s != "Cancelado"]
+        status_parcela_selecionado = st.multiselect("Status da Parcela:", sorted(status_parcela_list), default=sorted(status_parcela_default))
+
     with tab_banco:
         st.markdown("#### Filtrar por Conta Bancária")
         
@@ -157,7 +161,8 @@ def run_page():
         (df["unidade_negocio"].isin(unidade_negocio_selecionada)) &
         (df["centro_custo"].isin(centro_custo_selecionado)) &
         (df["categoria_pedido_compra"].isin(categoria_selecionada)) &
-        (df["conta_bancaria"].isin(contas_selecionadas))
+        (df["conta_bancaria"].isin(contas_selecionadas)) &
+        (df["status_parcela"].isin(status_parcela_selecionado))
     ]
 
     # 2. Define um mapa de cores para dar sentido a cada status
@@ -490,14 +495,14 @@ def run_page():
         # --- NOVO FILTRO: Status da Parcela ---
         with col_filtro3:
             status_list = df_apagar['status_parcela'].dropna().unique().tolist()
-            # Garante que apenas valores existentes sejam usados como padrão
-            default_status = [s for s in ["A pagar", "Aprovado"] if s in status_list]
-            if not default_status:  # Se nenhum dos valores padrão existe, usa todos
+            # Padrão: todos exceto "Cancelado"
+            default_status = [s for s in status_list if s != "Cancelado"]
+            if not default_status:
                 default_status = status_list
             status_selecionado = st.multiselect(
                 "Status da Parcela:",
                 options=sorted(status_list),
-                default=default_status,
+                default=sorted(default_status),
                 key="filtro_status_apagar"
             )
             
@@ -729,6 +734,21 @@ def run_page():
             key="filtro_tipo_movimento"
         )
     
+    # Filtro de Status da Parcela (aplica-se apenas aos registros de Pagamento)
+    status_mov_list = df_movimento_base['status_parcela'].dropna().unique().tolist()
+    if status_mov_list:
+        status_mov_default = [s for s in status_mov_list if s != "Cancelado"]
+        if not status_mov_default:
+            status_mov_default = status_mov_list
+        status_mov_selecionado = st.multiselect(
+            "Status da Parcela (Pagamentos):",
+            options=sorted(status_mov_list),
+            default=sorted(status_mov_default),
+            key="filtro_status_movimento"
+        )
+    else:
+        status_mov_selecionado = []
+    
     # Aplicar filtros
     df_movimento_filtrado = pd.DataFrame()
     # Proteger o campo de data - verificar se foi selecionado um período válido
@@ -740,7 +760,8 @@ def run_page():
             (df_movimento_base['data'] >= data_inicio_mov) &
             (df_movimento_base['data'] < data_fim_mov) &
             (df_movimento_base['conta_bancaria'].isin(contas_movimento_selecionadas)) &
-            (df_movimento_base['tipo'].isin(tipos_movimento_selecionados))
+            (df_movimento_base['tipo'].isin(tipos_movimento_selecionados)) &
+            (df_movimento_base['status_parcela'].isin(status_mov_selecionado) | df_movimento_base['status_parcela'].isna())
         ]
     else:
         st.warning("⚠️ Por favor, selecione um período válido (data inicial e data final).")
@@ -798,8 +819,8 @@ def run_page():
         # --- EXTRATO DETALHADO (como extrato bancário) ---
         st.subheader("Extrato Detalhado de Movimentações")
         
-        # Preparar dados para o extrato
-        df_extrato = df_movimento_filtrado.copy()
+        # Preparar dados para o extrato (excluindo pagamentos cancelados)
+        df_extrato = df_movimento_filtrado[df_movimento_filtrado['status_parcela'] != 'Cancelado'].copy()
         df_extrato = df_extrato.sort_values('data')
         
         # Criar colunas de entrada e saída
@@ -810,12 +831,15 @@ def run_page():
         df_extrato['Saldo'] = saldo_anterior + df_extrato['valor'].cumsum()
         
         # Selecionar e renomear colunas para exibição
-        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'Entrada', 'Saída', 'Saldo']].copy()
+        extrato_display = df_extrato[['data', 'tipo', 'descricao', 'fornecedor', 'conta_bancaria', 'status_parcela', 'id_pagamento', 'Entrada', 'Saída', 'Saldo']].copy()
         
         # Calcular totais ANTES de formatar (valores numéricos)
         total_entradas_extrato = extrato_display['Entrada'].sum()
         total_saidas_extrato = extrato_display['Saída'].sum()
         saldo_final_extrato = extrato_display['Saldo'].iloc[-1] if len(extrato_display) > 0 else saldo_anterior
+        
+        # Formatar id_pagamento (converter para string, NaN vira vazio)
+        extrato_display['id_pagamento'] = extrato_display['id_pagamento'].apply(lambda x: str(int(x)) if pd.notna(x) else '')
         
         # Formatar data
         extrato_display['data'] = extrato_display['data'].dt.strftime('%d/%m/%Y')
@@ -831,7 +855,9 @@ def run_page():
             'tipo': 'Tipo',
             'descricao': 'Descrição',
             'fornecedor': 'Fornecedor',
-            'conta_bancaria': 'Conta Bancária'
+            'conta_bancaria': 'Conta Bancária',
+            'status_parcela': 'Status',
+            'id_pagamento': 'ID Pagamento'
         }, inplace=True)
         
         # Exibir tabela com linha de totais
@@ -842,6 +868,8 @@ def run_page():
             'Descrição': '',
             'Fornecedor': '',
             'Conta Bancária': '',
+            'Status': '',
+            'ID Pagamento': '',
             'Entrada': formatar_reais(total_entradas_extrato),
             'Saída': formatar_reais(total_saidas_extrato),
             'Saldo': formatar_reais(saldo_final_extrato)
@@ -1160,13 +1188,14 @@ def run_page():
         # --- Filtro de Status ---
         with col_desp3:
             status_list = base_df_despesas['status_parcela'].dropna().unique().tolist()
-            default_status = [s for s in ["A pagar"] if s in status_list]
+            # Padrão: todos exceto "Cancelado"
+            default_status = [s for s in status_list if s != "Cancelado"]
             if not default_status:
                 default_status = status_list
             status_selecionado_desp = st.multiselect(
                 "Status da Parcela:",
                 options=sorted(status_list),
-                default=default_status,
+                default=sorted(default_status),
                 key="filtro_status_despesas"
             )
 
