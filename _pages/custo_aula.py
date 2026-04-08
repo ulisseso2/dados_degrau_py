@@ -4,6 +4,8 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
+from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid.shared import JsCode
 
 # Adiciona o diretório raiz ao path para encontrar os módulos
 import sys
@@ -457,3 +459,171 @@ def run_page():
         key="download_consolidado_turma"
     )
 
+    st.divider()
+
+    # ==========================================================================
+    # 8. RELATÓRIO AGRUPADO DE TURMAS COMPARTILHADAS (AGGRID)
+    # ==========================================================================
+    st.header("🗂️ Visão Agrupada de Turmas Compartilhadas (Clusters)")
+    st.markdown("Cria agrupamentos dinâmicos das turmas com base no compartilhamento das grades.")
+    
+    # Montar grafo de compartilhamentos para criar os Clusters
+    adj = {}
+    todas_turmas_cons = df_cons_turma['turma_nome'].dropna().unique()
+    for t in todas_turmas_cons:
+        adj[t] = set()
+        
+    for index, row in merged.iterrows():
+        t1 = row['turma_nome']
+        t2 = row['turma_nome_comp']
+        if t1 in adj and t2 in adj:
+            adj[t1].add(t2)
+            adj[t2].add(t1)
+            
+    visited = set()
+    clusters = {}
+    cluster_idx = 1
+    
+    for t in sorted(adj.keys()): # Ordenado para garantir consistência dos índices
+        if t not in visited:
+            comp = set()
+            stack = [t]
+            while stack:
+                curr = stack.pop()
+                if curr not in visited:
+                    visited.add(curr)
+                    comp.add(curr)
+                    stack.extend(adj[curr] - visited)
+            
+            # Buscar cursos das turmas nesse componente
+            cursos_comp = df_cons_turma[df_cons_turma['turma_nome'].isin(comp)]['curso'].dropna().unique()
+            cursos_str = " / ".join(sorted(cursos_comp)) if len(cursos_comp) > 0 else "Sem Curso definido"
+            
+            if len(comp) > 1:
+                cluster_name = f"Grupo_{cluster_idx} - {cursos_str}"
+                cluster_idx += 1
+            else:
+                cluster_name = f"Isolada - {list(comp)[0]}"
+                
+            for member in comp:
+                clusters[member] = cluster_name
+                
+    df_aggrid = df_cons_turma.copy()
+    df_aggrid['cluster_agrupador'] = df_aggrid['turma_nome'].map(clusters)
+    
+    # Preparar as colunas a serem exibidas (adequando tipos numéricos pro grid usar as funções de agregação) 
+    df_aggrid['total_aulas'] = pd.to_numeric(df_aggrid['total_aulas'], errors='coerce').fillna(0)
+    df_aggrid['aulas_dadas'] = pd.to_numeric(df_aggrid['aulas_dadas'], errors='coerce').fillna(0)
+    df_aggrid['aulas_nao_compartilhadas'] = pd.to_numeric(df_aggrid['aulas_nao_compartilhadas'], errors='coerce').fillna(0)
+    df_aggrid['total_horas'] = pd.to_numeric(df_aggrid['total_horas'], errors='coerce').fillna(0)
+    df_aggrid['matriculas'] = pd.to_numeric(df_aggrid['matriculas'], errors='coerce').fillna(0)
+    
+    # Configuração da UI do AgGrid
+    gb = GridOptionsBuilder.from_dataframe(df_aggrid)
+    
+    # Configura o cluster_agrupador
+    gb.configure_column(
+        field="cluster_agrupador",
+        header_name="Grupo / Cluster",
+        rowGroup=True,
+        hide=True
+    )
+    
+    # Esconder turma_id e turma_compartilhada do grid
+    if 'turma_id' in df_aggrid.columns:
+        gb.configure_column(field="turma_id", hide=True)
+    if 'turma_compartilhada' in df_aggrid.columns:
+        gb.configure_column(field="turma_compartilhada", hide=True)
+        
+    gb.configure_column(field="turma_nome", header_name="Turma", minWidth=200)
+    gb.configure_column(field="curso", header_name="Curso")
+    gb.configure_column(field="tipo_turma", header_name="Tipo")
+    gb.configure_column(field="turno", header_name="Turno")
+    
+    gb.configure_column(
+        field="data_prevista", 
+        header_name="Data Prevista",
+        type=["dateColumnFilter", "customDateTimeFormat"],
+        custom_format_string='dd/MM/yyyy',
+        minWidth=150
+    )
+    gb.configure_column(
+        field="inicio_grade", 
+        header_name="Início Grade",
+        type=["dateColumnFilter", "customDateTimeFormat"],
+        custom_format_string='dd/MM/yyyy',
+        minWidth=150
+    )
+
+    # Métricas Quantitativas (Sum)
+    gb.configure_column(field="total_aulas", header_name="Tot. Aulas", type=["numericColumn"], aggFunc="sum")
+    gb.configure_column(field="aulas_dadas", header_name="Aulas Dadas", type=["numericColumn"], aggFunc="sum")
+    gb.configure_column(field="aulas_nao_compartilhadas", header_name="Aulas Não Comp.", type=["numericColumn"], aggFunc="sum")
+    gb.configure_column(field="total_horas", header_name="Tot. Horas", type=["numericColumn"], aggFunc="sum", valueFormatter=JsCode("function(params) { if(params.value == null) return ''; return params.value.toFixed(2); }"))
+    gb.configure_column(field="matriculas", header_name="Matrículas", type=["numericColumn"], aggFunc="sum")
+
+    # Métricas Financeiras
+    formata_moeda_js = JsCode("""
+        function(params) {
+            if (params.value === undefined || params.value === null) return '';
+            return 'R$ ' + params.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+    """)
+    
+    gb.configure_column(
+        field="valor_iniciar",
+        header_name="Valor Iniciar",
+        type=["numericColumn"],
+        aggFunc="max",  # usamos MAX porque somar valor do curso por turmas agrupadas pode gerar distorção.
+        valueFormatter=formata_moeda_js
+    )
+    
+    gb.configure_column(
+        field="custo_previsto",
+        header_name="Custo Previsto",
+        type=["numericColumn"],
+        aggFunc="sum",
+        valueFormatter=formata_moeda_js
+    )
+    
+    gb.configure_column(
+        field="faturado",
+        header_name="Faturado",
+        type=["numericColumn"],
+        aggFunc="sum",
+        valueFormatter=formata_moeda_js
+    )
+    
+    gb.configure_column(
+        field="resultado",
+        header_name="Resultado",
+        type=["numericColumn"],
+        aggFunc="sum",
+        valueFormatter=formata_moeda_js
+    )
+    
+    grid_options = gb.build()
+    
+    grid_options["autoGroupColumnDef"] = {
+        "headerName": "Clusters / Turmas",
+        "minWidth": 350,
+        "cellRendererParams": {
+            "suppressCount": False,
+        }
+    }
+    grid_options["groupDisplayType"] = "groupRow"
+    grid_options["groupDefaultExpanded"] = 0 # Recolhidos por padrão
+    grid_options["groupIncludeFooter"] = True
+    grid_options["groupIncludeTotalFooter"] = True
+    
+    AgGrid(
+        df_aggrid,
+        gridOptions=grid_options,
+        height=600,
+        width='100%',
+        theme='streamlit',
+        enable_enterprise_modules=True,
+        update_mode='MODEL_CHANGED',
+        allow_unsafe_jscode=True,
+        fit_columns_on_grid_load=False
+    )

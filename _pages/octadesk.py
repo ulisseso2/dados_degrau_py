@@ -1106,7 +1106,24 @@ def run_page():
         st.write("### 🤖 Avaliação em Lote via IA")
         st.info("Selecione abaixo os chats que deseja enviar para análise de qualidade. Chats sinalizados como inaptos serão ignorados ou reprovados automaticamente.")
 
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            filtro_aptidao = st.selectbox("Filtrar por Aptidão na Tabela", ["Todos", "Somente Aptos", "Somente Inaptos"], index=0)
+        with col_f2:
+            filtro_avaliacao = st.selectbox("Filtrar por Avaliação na Tabela", ["Todos", "Somente Não Avaliados", "Somente Já Avaliados"], index=0)
+
         df_show = df_detalhes.copy()
+        
+        if filtro_aptidao == "Somente Aptos":
+            df_show = df_show[df_show['Avaliável'] == True]
+        elif filtro_aptidao == "Somente Inaptos":
+            df_show = df_show[df_show['Avaliável'] == False]
+            
+        if filtro_avaliacao == "Somente Não Avaliados":
+            df_show = df_show[df_show['Já Avaliado'] == False]
+        elif filtro_avaliacao == "Somente Já Avaliados":
+            df_show = df_show[df_show['Já Avaliado'] == True]
+
         df_show.insert(0, "Selecionar", False)
         
         edited_df = st.data_editor(

@@ -1,14 +1,17 @@
 SELECT 
     i.id as oportunidade_id,
-    i.chat_id,
-    i.created_at as data_chat,
-    c.octa_created_at as data_octa,
-    i.created_at as data_criacao_sistema,
-    CASE WHEN i.school_id = 1 THEN 'Degrau' ELSE 'Central' END as empresa,
+    c.chat_id,
+    c.octa_created_at as data_chat,
+    c.created_at as data_criacao_sistema,
+    CASE 
+        WHEN i.school_id = 1 THEN 'Degrau' 
+        WHEN i.school_id IS NOT NULL THEN 'Central'
+        ELSE 'Degrau'
+    END as empresa,
     COALESCE(c.octa_agent, u.full_name) as agente,
     o.name as origem,
-    CASE WHEN c.uuid IS NOT NULL THEN 1 ELSE 0 END as avaliada,
-    1 as avaliavel,
+    CASE WHEN c.ai_evaluation IS NOT NULL AND c.ai_evaluation != '' THEN 1 ELSE 0 END as avaliada,
+    CASE WHEN c.classification = 'venda' THEN 1 ELSE 0 END as avaliavel,
     c.vendor_score as evaluation_ia,
     c.lead_score,
     c.main_product as produto_recomendado,
@@ -21,10 +24,8 @@ SELECT
     c.octa_status,
     c.octa_contact_name,
     c.octa_contact_phone
-FROM seducar.interesteds i
-LEFT JOIN seducar.chat_ai_evaluations c ON i.chat_id = c.chat_id
+FROM seducar.chat_ai_evaluations c
+LEFT JOIN seducar.interesteds i ON c.chat_id = i.chat_id
 LEFT JOIN seducar.users u ON i.owner_id = u.id
 LEFT JOIN seducar.opportunity_origins o ON i.opportunity_origin_id = o.id
-WHERE i.chat_id IS NOT NULL 
-  AND i.chat_id != ''
-ORDER BY i.created_at DESC
+ORDER BY c.octa_created_at DESC

@@ -3,7 +3,7 @@ import re
 import json
 import logging
 from typing import Dict, Optional
-from openai import OpenAI
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,16 +37,16 @@ REGRAS IMPORTANTES (obrigatórias):
 
 class ChatIAAnalyzer:
     def __init__(self):
-        """Inicializa cliente OpenAI"""
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
-        self.model = os.getenv("OPENAI_MODEL", "gpt-5.1")
-        self.model_classificacao = os.getenv("OPENAI_MODEL_CLASSIFICACAO", self.model)
-        self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
-        self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "8000"))
-        self.max_tokens_classificacao = int(os.getenv("OPENAI_MAX_TOKENS_CLASSIFICACAO", "2000"))
-        self.max_input_chars = int(os.getenv("OPENAI_MAX_INPUT_CHARS", "25000"))
-        self.max_input_chars_classificacao = int(os.getenv("OPENAI_MAX_INPUT_CHARS_CLASSIFICACAO", "4000"))
+        """Inicializa cliente Anthropic (Claude)"""
+        self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.client = anthropic.Anthropic(api_key=self.api_key) if self.api_key else None
+        self.model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")
+        self.model_classificacao = os.getenv("CLAUDE_MODEL_CLASSIFICACAO", "claude-haiku-4-5")
+        self.temperature = float(os.getenv("CLAUDE_TEMPERATURE", "0.2"))
+        self.max_tokens = int(os.getenv("CLAUDE_MAX_TOKENS", "8000"))
+        self.max_tokens_classificacao = int(os.getenv("CLAUDE_MAX_TOKENS_CLASSIFICACAO", "2000"))
+        self.max_input_chars = int(os.getenv("CLAUDE_MAX_INPUT_CHARS", "25000"))
+        self.max_input_chars_classificacao = int(os.getenv("CLAUDE_MAX_INPUT_CHARS_CLASSIFICACAO", "4000"))
 
     def _criar_prompt_classificacao(self, chat_text: str) -> str:
         return f"""
@@ -278,26 +278,26 @@ DADOS ADICIONAIS:
         if not chat_text or len(chat_text.strip()) < 10:
             return {'tipo': 'sem_interacao', 'motivo': 'Chat vazio ou muito curto', 'deve_avaliar': False}
         if not self.client:
-            return {'tipo': 'outros', 'motivo': 'OpenAI não inicializado (verifique OPENAI_API_KEY)', 'deve_avaliar': False}
+            return {'tipo': 'outros', 'motivo': 'Anthropic não inicializado (verifique ANTHROPIC_API_KEY)', 'deve_avaliar': False}
 
         prompt = self._criar_prompt_classificacao(chat_text)
         for tentativa in range(2):
             try:
-                response = self.client.chat.completions.create(
+                response = self.client.messages.create(
                     model=self.model_classificacao,
-                    messages=[{"role": "system", "content": "Retorne sempre JSON válido."},
-                              {"role": "user", "content": prompt}],
-                    max_completion_tokens=self.max_tokens_classificacao,
-                    response_format={"type": "json_object"},
+                    max_tokens=self.max_tokens_classificacao,
+                    temperature=self.temperature,
+                    system="Retorne sempre JSON válido.",
+                    messages=[{"role": "user", "content": prompt}],
                 )
-                finish_reason = getattr(response.choices[0], 'finish_reason', None)
-                content = (response.choices[0].message.content or "").strip()
+                stop_reason = response.stop_reason
+                content = (response.content[0].text if response.content else "").strip()
                 if not content:
-                    logger.warning("Classificação vazia (model=%s, finish_reason=%s, tentativa=%d)",
-                                   self.model_classificacao, finish_reason, tentativa + 1)
+                    logger.warning("Classificação vazia (model=%s, stop_reason=%s, tentativa=%d)",
+                                   self.model_classificacao, stop_reason, tentativa + 1)
                     if tentativa == 0:
                         continue
-                    return {'tipo': 'outros', 'motivo': f'Classificação retornou resposta vazia (finish_reason={finish_reason})', 'deve_avaliar': False}
+                    return {'tipo': 'outros', 'motivo': f'Classificação retornou resposta vazia (stop_reason={stop_reason})', 'deve_avaliar': False}
                 content = self._limpar_markdown(content)
                 return json.loads(content)
             except json.JSONDecodeError:
@@ -332,18 +332,17 @@ DADOS ADICIONAIS:
         # Retry: até 2 tentativas (mesma lógica da classificação)
         for tentativa in range(2):
             try:
-                response = self.client.chat.completions.create(
+                response = self.client.messages.create(
                     model=self.model,
-                    messages=[{"role": "system", "content": "Retorne sempre JSON válido."},
-                              {"role": "user", "content": prompt}],
+                    max_tokens=self.max_tokens,
                     temperature=self.temperature,
-                    max_completion_tokens=self.max_tokens,
-                    response_format={"type": "json_object"},
+                    system="Retorne sempre JSON válido.",
+                    messages=[{"role": "user", "content": prompt}],
                 )
 
                 # Verificar se a resposta foi truncada
-                finish_reason = getattr(response.choices[0], 'finish_reason', None)
-                content = (response.choices[0].message.content or "").strip()
+                stop_reason = response.stop_reason
+                content = (response.content[0].text if response.content else "").strip()
 
                 if not content:
                     logger.warning("Avaliação retornou conteúdo vazio (tentativa %d)", tentativa + 1)
@@ -353,8 +352,8 @@ DADOS ADICIONAIS:
                     resultado['classificacao'] = 'falha_avaliacao'
                     return resultado
 
-                if finish_reason == 'length':
-                    logger.warning("Resposta truncada por max_tokens (tentativa %d, finish_reason=length)", tentativa + 1)
+                if stop_reason == 'max_tokens':
+                    logger.warning("Resposta truncada por max_tokens (tentativa %d, stop_reason=max_tokens)", tentativa + 1)
                     if tentativa == 0:
                         continue
                     # Na 2ª tentativa, tenta parsear mesmo truncado
@@ -367,7 +366,7 @@ DADOS ADICIONAIS:
                 resultado['vendor_score'] = self._extrair_vendor_score(ai_eval)
                 resultado['main_product'] = self._extrair_main_product(ai_eval)
 
-                if finish_reason == 'length':
+                if stop_reason == 'max_tokens':
                     logger.warning("JSON parseado com sucesso apesar de truncamento. Seções podem estar faltando.")
 
                 return resultado

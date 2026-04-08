@@ -114,6 +114,25 @@ def _carregar_dados() -> pd.DataFrame:
         ) if isinstance(j, dict) else ''
     )
 
+    df['iqh'] = df['parsed_json'].apply(
+        lambda j: pd.to_numeric(j.get('qualidade_entrada', {}).get('iqh_0_100'), errors='coerce') if isinstance(j, dict) else float('nan')
+    )
+    df['alertas'] = df['parsed_json'].apply(
+        lambda j: _join_list(j.get('avaliacao_vendedor', {}).get('alertas', [])) if isinstance(j, dict) else ''
+    )
+    df['dores_principais'] = df['parsed_json'].apply(
+        lambda j: _join_list(j.get('extracao', {}).get('dores_principais', [])) if isinstance(j, dict) else ''
+    )
+    df['restricoes'] = df['parsed_json'].apply(
+        lambda j: _join_list(j.get('extracao', {}).get('restricoes', [])) if isinstance(j, dict) else ''
+    )
+    df['concurso_area'] = df['parsed_json'].apply(
+        lambda j: str(j.get('extracao', {}).get('concurso_area', '')).strip() if isinstance(j, dict) else ''
+    )
+    df['perguntas_faltantes_spin'] = df['parsed_json'].apply(
+        lambda j: _join_list(j.get('avaliacao_lead', {}).get('perguntas_faltantes_spin', [])) if isinstance(j, dict) else ''
+    )
+
     # ── Notas por categoria (normalizadas 0-100%) ────────────────────────────
     def _extract_notas_pct(j):
         if not isinstance(j, dict):
@@ -351,6 +370,15 @@ def run_page():
     if agente_sel:
         df_base = df_base[df_base['agente'].isin(agente_sel)]
 
+    if 'octa_group' in df_base.columns:
+        grupos_disp = sorted([str(g) for g in df_base['octa_group'].dropna().unique() if str(g).strip()])
+        if grupos_disp:
+            grupo_sel = st.sidebar.multiselect(
+                "Grupo / Unidade:", grupos_disp, default=grupos_disp, key="anl_chat_grupo"
+            )
+            if grupo_sel:
+                df_base = df_base[df_base['octa_group'].astype(str).isin(grupo_sel)]
+
     tipos_disp = sorted([t for t in df_base['tipo_ligacao'].dropna().unique() if str(t).strip()])
     tipo_sel   = st.sidebar.multiselect(
         "Tipo de Atendimento:", tipos_disp, default=tipos_disp, key="anl_chat_tipo"
@@ -381,20 +409,24 @@ def run_page():
     )
 
     st.markdown("### 📌 Resumo do Período")
-    k1, k2, k3, k4, k5 = st.columns(5)
+    k1, k2, k3 = st.columns(3)
     k1.metric("Total de Chats",        total)
     k2.metric("Avaliáveis",            avaliaveis)
     k3.metric("Avaliados via IA",      f"{avaliadas} ({taxa_aval:.1f}%)")
+    k4, k5, k6 = st.columns(3)
     k4.metric("Nota Vendedor (Média)", f"{nota_media:.1f}" if pd.notna(nota_media) else "—")
     k5.metric("Score Lead (Média)",    f"{lead_media:.1f}" if pd.notna(lead_media) else "—")
+    iqh_medio = df_av['iqh'].mean() if not df_av.empty else float('nan')
+    k6.metric("IQH (Qualidade)", f"{iqh_medio:.1f}" if pd.notna(iqh_medio) else "—")
 
     st.divider()
 
     # ════════════════════════════════════════════
     # ABAS
     # ════════════════════════════════════════════
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab_inteligencia, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Visão Geral",
+        "🧠 Inteligência Comercial",
         "🏆 Ranking de Agentes",
         "🔬 Análise SPIN",
         "👤 Relatório Individual",
@@ -523,6 +555,114 @@ def run_page():
             else:
                 st.info("Sem dados de produto.")
 
+        st.divider()
+
+        # ════════════════════════════════════════════
+        # ALERTAS DE RISCO / OPORTUNIDADES PERDIDAS
+        # ════════════════════════════════════════════
+        if not df_av.empty:
+            alertas_df = df_av[(df_av['alertas'].str.strip() != '') & (~df_av['alertas'].str.lower().isin(['não mencionado', 'não houve', 'nenhum']))]
+            op_perdidas_df = df_av[(df_av['lead_classification'].isin(['A', 'B'])) & (df_av['evaluation_ia'] < 50)]
+
+            if not alertas_df.empty or not op_perdidas_df.empty:
+                st.error("### 🚨 Painel de Atenção: Alertas e Oportunidades Perdidas")
+                cols_alerta = st.columns(2)
+                
+                with cols_alerta[0]:
+                    if not op_perdidas_df.empty:
+                        st.markdown(f"**📉 Oportunidades em Risco ({len(op_perdidas_df)} chats):**")
+                        st.caption("Leads Quentes (A ou B) mal atendidos (Nota < 50)")
+                        for _, row in op_perdidas_df.sort_values(by='evaluation_ia').head(5).iterrows():
+                            agente = row.get('agente', 'Desconhecido')
+                            chat_id = row.get('chat_id', '')
+                            lead_c = row.get('lead_classification', '-')
+                            nota_v = row.get('evaluation_ia', 0)
+                            st.write(f"- **{agente}** atendeu Lead {lead_c} (Nota: {nota_v:.0f}) - Chat `{chat_id}`")
+                        if len(op_perdidas_df) > 5:
+                            st.caption(f"+ {len(op_perdidas_df)-5} outros chats críticos...")
+                    else:
+                        st.success("✅ Nenhuma oportunidade crítica perdida (Leads A/B com Vendedor < 50).")
+
+                with cols_alerta[1]:
+                    if not alertas_df.empty:
+                        st.markdown(f"**⚠️ Risco de Compliance ({len(alertas_df)} chats):**")
+                        st.caption("Garantia irreal, quebra de regras, desrespeito, etc.")
+                        for _, row in alertas_df.head(5).iterrows():
+                            agente = row.get('agente', 'Desconhecido')
+                            chat_id = row.get('chat_id', '')
+                            alts = set([a.strip() for a in row['alertas'].split(';') if a.strip()])
+                            for alt in list(alts)[:2]:
+                                st.write(f"- **{agente}**: {alt} *(chat `{chat_id}`)*")
+                        if len(alertas_df) > 5:
+                            st.caption(f"+ {len(alertas_df)-5} outros chats com alertas...")
+                    else:
+                        st.success("✅ Nenhum alerta de compliance no período.")
+
+    # ────────────────────────────────────────────
+    # TAB INTELIGÊNCIA COMERCIAL
+    # ────────────────────────────────────────────
+    with tab_inteligencia:
+        if df_av.empty:
+            st.info("Sem dados para análise de Inteligência Comercial no período.")
+        else:
+            col_i1, col_i2 = st.columns(2)
+            
+            with col_i1:
+                st.markdown("#### 🎯 Concursos Mais Procurados")
+                concursos = df_av['concurso_area'].dropna()
+                concursos = concursos[(concursos.str.strip() != '') & (~concursos.str.lower().isin(['não mencionado', 'nao mencionado', 'incerto', 'não identificada']))]
+                if not concursos.empty:
+                    df_conc = concursos.value_counts().head(8).reset_index()
+                    df_conc.columns = ['Concurso', 'Qtd']
+                    fig_conc = px.bar(
+                        df_conc, x='Qtd', y='Concurso', orientation='h',
+                        color_discrete_sequence=['#FF9900'],
+                    )
+                    fig_conc.update_layout(height=280, margin=dict(t=10, b=10), yaxis=dict(categoryorder='total ascending'))
+                    st.plotly_chart(fig_conc, use_container_width=True)
+                else:
+                    st.info("Nenhum concurso/área explícito mapeado.")
+
+            with col_i2:
+                st.markdown("#### 🤔 Principais Dores dos Leads")
+                dores = _top_items(df_av['dores_principais'], n=10)
+                dores = [(d, n) for d, n in dores if str(d).lower() not in ['não mencionado', 'nao mencionado', 'não identificada', 'incerto']]
+                if dores:
+                    df_dores = pd.DataFrame(dores, columns=['Dor', 'Qtd'])
+                    fig_dores = px.funnel(df_dores.head(8), x='Qtd', y='Dor', color_discrete_sequence=['#EF553B'])
+                    fig_dores.update_layout(height=280, margin=dict(t=10, b=10))
+                    st.plotly_chart(fig_dores, use_container_width=True)
+                else:
+                    st.info("Nenhuma dor mapeada.")
+
+            st.divider()
+            col_i3, col_i4 = st.columns(2)
+            
+            with col_i3:
+                st.markdown("#### 🚧 Principais Restrições e Objeções")
+                restricoes = _top_items(df_av['restricoes'], n=10)
+                restricoes = [(r, n) for r, n in restricoes if str(r).lower() not in ['não mencionado', 'nao mencionado', 'não identificada', 'incerto', 'nenhuma']]
+                if restricoes:
+                    df_rest = pd.DataFrame(restricoes, columns=['Restrição', 'Qtd'])
+                    fig_rest = px.bar(
+                        df_rest.head(8), x='Qtd', y='Restrição', orientation='h',
+                        color_discrete_sequence=['#B6E880'],
+                    )
+                    fig_rest.update_layout(height=280, margin=dict(t=10, b=10), yaxis=dict(categoryorder='total ascending'))
+                    st.plotly_chart(fig_rest, use_container_width=True)
+                else:
+                    st.info("Nenhuma restrição mapeada.")
+            
+            with col_i4:
+                st.markdown("#### ❓ Principais Perguntas SPIN Faltantes")
+                perguntas = _top_items(df_av['perguntas_faltantes_spin'], n=10)
+                perguntas = [(p, n) for p, n in perguntas if str(p).lower() not in ['não mencionado', 'nao mencionado', 'incerto', 'nenhuma']]
+                if perguntas:
+                    for p, n in perguntas[:6]:
+                        st.write(f"- {p} `({n}x)`")
+                else:
+                    st.info("Não houve padrão forte de perguntas faltantes.")
+
     # ────────────────────────────────────────────
     # TAB 2 — RANKING DE AGENTES
     # ────────────────────────────────────────────
@@ -561,7 +701,8 @@ def run_page():
             df_rank = df_rank.sort_values('nota_media', ascending=False).reset_index(drop=True)
 
             max_lig = int(df_rank['ligacoes'].max())
-            min_lig = st.slider("Mínimo de chats avaliados:", 1, max(max_lig, 1), 1, key="min_chat_rank")
+            _slider_max = max(max_lig, 2)
+            min_lig = st.slider("Mínimo de chats avaliados:", 1, _slider_max, 1, key="min_chat_rank")
             df_rank = df_rank[df_rank['ligacoes'] >= min_lig].reset_index(drop=True)
             df_rank.index += 1
 
@@ -891,12 +1032,19 @@ def run_page():
                     mime="text/csv",
                 )
 
-            colunas_tela = [c for c in df_ag_tab.columns if c != 'Transcrição']
+            colunas_tela = [c for c in df_ag_tab.columns]
             st.dataframe(
                 df_ag_tab[colunas_tela],
                 use_container_width=True,
                 height=320,
                 hide_index=True,
+                column_config={
+                    'Transcrição': st.column_config.TextColumn(
+                        'Transcrição',
+                        help='Clique na célula para ver a transcrição completa',
+                        width='large',
+                    ),
+                },
             )
 
     # ────────────────────────────────────────────
@@ -904,92 +1052,115 @@ def run_page():
     # ────────────────────────────────────────────
     with tab5:
         st.markdown("#### 🔍 Feedback Detalhado por Chat")
-        if df_av.empty:
+        if df_base.empty:
             st.info("Sem dados.")
         else:
-            chats_c_ia = df_av[df_av['parsed_json'].apply(lambda x: bool(x))].copy()
-
-            if chats_c_ia.empty:
-                st.info("Nenhum JSON de avaliação encontrado.")
-            else:
-                opcoes = []
-                for _, row in chats_c_ia.iterrows():
-                    nota_s = f"{int(row['evaluation_ia'])}" if pd.notna(row['evaluation_ia']) else "—"
-                    lead_s = f"{int(row['lead_score'])}" if pd.notna(row.get('lead_score')) else "—"
-                    lbl = (
-                        f"{row['data_chat'].strftime('%d/%m %H:%M')}  |  "
-                        f"{row['agente']}  |  Class {row['lead_classification']}  |  "
-                        f"Vend {nota_s}  |  Lead {lead_s}  |  {row['chat_id']}"
-                    )
-                    opcoes.append((row['chat_id'], lbl))
-
-                sel_id = st.selectbox(
-                    "Selecione um chat avaliado:",
-                    [o[0] for o in opcoes],
-                    format_func=lambda x: next((o[1] for o in opcoes if o[0] == x), x),
+            opcoes = []
+            for _, row in df_base.iterrows():
+                tipo_c = row.get('tipo_ligacao', '—')
+                nota_s = f"{int(row['evaluation_ia'])}" if pd.notna(row.get('evaluation_ia')) else "—"
+                lbl = (
+                    f"{row['data_chat'].strftime('%d/%m %H:%M')}  |  "
+                    f"{row['agente']}  |  Tipo: {tipo_c}  |  "
+                    f"Nota: {nota_s}  |  {row['chat_id']}"
                 )
+                opcoes.append((row['chat_id'], lbl))
 
-                if sel_id:
-                    row_data   = chats_c_ia[chats_c_ia['chat_id'] == sel_id].iloc[0]
-                    j          = row_data['parsed_json']
-                    transcript = row_data.get('transcript', '')
+            sel_id = st.selectbox(
+                "Selecione um chat:",
+                [o[0] for o in opcoes],
+                format_func=lambda x: next((o[1] for o in opcoes if o[0] == x), x),
+            )
 
-                    st.write(f"### 📝 Chat ID: `{sel_id}`")
+            if sel_id:
+                row_data   = df_base[df_base['chat_id'] == sel_id].iloc[0]
+                j          = row_data.get('parsed_json', {})
+                transcript = row_data.get('transcript', '')
 
-                    t_feed, t_trans = st.tabs(["🤖 Feedback da IA", "💬 Transcrição RAW"])
+                st.write(f"### 📝 Chat ID: `{sel_id}`")
+                
+                nome_c = str(row_data.get('octa_contact_name', ''))
+                tel_c = str(row_data.get('octa_contact_phone', ''))
+                motivo = str(row_data.get('motivo_nao_avaliacao', ''))
+                
+                if nome_c != 'nan' and nome_c.strip():
+                    st.caption(f"**Cliente:** {nome_c} | **Tel:** {tel_c if tel_c != 'nan' else 'Não informado'}")
 
-                    with t_trans:
-                        if pd.notna(transcript) and str(transcript).strip():
-                            st.text_area(
-                                "Texto Integral do Chat",
-                                value=str(transcript), height=500, disabled=True,
-                            )
-                        else:
-                            st.warning("Transcrição não disponível para este chat.")
+                if row_data.get('avaliada') == False or not j:
+                    if motivo and motivo != 'nan' and motivo.strip():
+                        st.warning(f"**⚠️ Chat não avaliado comercialmente.** Motivo da Triagem: {motivo}")
+                    else:
+                        st.info("Chat sem avaliação da IA.")
 
-                    with t_feed:
-                        if isinstance(j, dict):
-                            val_vend = j.get('avaliacao_vendedor', {})
+                t_feed, t_trans = st.tabs(["🤖 Feedback da IA", "💬 Transcrição RAW"])
 
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.success("**✅ Pontos Fortes do Vendedor**")
-                                for p in val_vend.get('pontos_fortes', []):
-                                    if isinstance(p, dict):
-                                        st.write(f"- {p.get('ponto', p)}")
-                                        if p.get('evidencia'):
-                                            st.caption(f"  _{p['evidencia']}_")
-                                    else:
-                                        st.write(f"- {p}")
+                with t_trans:
+                    if pd.notna(transcript) and str(transcript).strip():
+                        st.text_area(
+                            "Texto Integral do Chat",
+                            value=str(transcript), height=500, disabled=True,
+                        )
+                    else:
+                        st.warning("Transcrição não disponível para este chat.")
 
-                                st.error("**❌ Erro Mais Caro**")
-                                erro = val_vend.get('erro_mais_caro', {})
-                                if isinstance(erro, dict):
-                                    st.write(erro.get('descricao', '—'))
-                                    if erro.get('evidencia'):
-                                        st.caption(f"_{erro['evidencia']}_")
+                with t_feed:
+                    if isinstance(j, dict) and bool(j):
+                        val_vend = j.get('avaliacao_vendedor', {})
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.success("**✅ Pontos Fortes do Vendedor**")
+                            for p in val_vend.get('pontos_fortes', []):
+                                if isinstance(p, dict):
+                                    st.write(f"- {p.get('ponto', p)}")
+                                    if p.get('evidencia'):
+                                        st.caption(f"  _{p['evidencia']}_")
                                 else:
-                                    st.write(str(erro) if erro else '—')
+                                    st.write(f"- {p}")
 
-                            with col2:
-                                st.warning("**🛠️ Sugestões de Melhoria**")
-                                for m in val_vend.get('melhorias', []):
-                                    if isinstance(m, dict):
-                                        st.write(f"▪ *{m.get('melhoria', '')}*")
-                                        if m.get('como_fazer'):
-                                            st.caption(f"💡 {m['como_fazer']}")
-                                    else:
-                                        st.write(f"▪ {m}")
+                            st.error("**❌ Erro Mais Caro**")
+                            erro = val_vend.get('erro_mais_caro', {})
+                            if isinstance(erro, dict):
+                                st.write(erro.get('descricao', '—'))
+                                if erro.get('evidencia'):
+                                    st.caption(f"_{erro['evidencia']}_")
+                            else:
+                                st.write(str(erro) if erro else '—')
 
-                            st.divider()
-                            st.markdown("#### 🔎 Análise da Situação (SPIN / Extração)")
-                            col_ext, col_rec = st.columns(2)
-                            with col_ext:
-                                st.markdown("**Extração**")
-                                st.json(j.get('extracao', {}), expanded=False)
-                            with col_rec:
-                                st.markdown("**Recomendação Final**")
-                                st.json(j.get('recomendacao_final', {}), expanded=False)
+                        with col2:
+                            st.warning("**🛠️ Sugestões de Melhoria**")
+                            for m in val_vend.get('melhorias', []):
+                                if isinstance(m, dict):
+                                    st.write(f"▪ *{m.get('melhoria', '')}*")
+                                    if m.get('como_fazer'):
+                                        st.caption(f"💡 {m['como_fazer']}")
+                                else:
+                                    st.write(f"▪ {m}")
+
+                        alertas_chat = val_vend.get('alertas', [])
+                        if alertas_chat and not (len(alertas_chat) == 1 and str(alertas_chat[0]).lower() in ['não mencionado', 'não houve', 'nenhum']):
+                            st.error("**🚨 Alertas de Compliance**")
+                            for a in alertas_chat:
+                                st.write(f"- {a}")
+
+                        msg_pronta = j.get('recomendacao_final', {}).get('mensagem_pronta_para_enviar_agora')
+                        if msg_pronta and str(msg_pronta).lower() not in ['não mencionado', 'none', '']:
+                            st.info(f"**✉️ Sugestão de Mensagem Pronta (Copy-Paste):**\n\n{msg_pronta}")
+
+                        iqh_val = j.get('qualidade_entrada', {}).get('iqh_0_100')
+                        st.caption(f"**Índice de Qualidade do Histórico (IQH):** {iqh_val}/100")
+
+                        st.divider()
+                        st.markdown("#### 🔎 Análise da Situação (SPIN / Extração)")
+                        col_ext, col_rec = st.columns(2)
+                        with col_ext:
+                            st.markdown("**Extração**")
+                            st.json(j.get('extracao', {}), expanded=False)
+                        with col_rec:
+                            st.markdown("**Recomendação Final**")
+                            st.json(j.get('recomendacao_final', {}), expanded=False)
+                    else:
+                        st.info("Sem dados de avaliação SPIN/comercial para este chat.")
 
 
 if __name__ == "__main__":

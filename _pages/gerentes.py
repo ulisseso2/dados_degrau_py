@@ -34,7 +34,8 @@ def run_page():
     empresa_selecionada = st.sidebar.radio("Selecione uma empresa:", empresas, index=default_index)
 
     hoje_aware = pd.Timestamp.now(tz=TIMEZONE).date()
-    periodo = st.sidebar.date_input("Período - Data Pagamento", [hoje_aware, hoje_aware])
+    primeiro_dia_mes = hoje_aware.replace(day=1)
+    periodo = st.sidebar.date_input("Período - Data Pagamento", [primeiro_dia_mes, hoje_aware])
     try:
         data_inicio_aware = pd.Timestamp(periodo[0], tz=TIMEZONE)
         data_fim_aware = pd.Timestamp(periodo[1], tz=TIMEZONE) + pd.Timedelta(days=1)
@@ -157,44 +158,31 @@ def run_page():
         (df_o['criacao'] < data_fim_aware)
     ].copy()
 
-    # Orders já filtrados em df_filtrado -> usar para contagem de matrículas
+    # Orders já filtrados em df_filtrado -> usar para contagem de matrículas e faturamento
     df_orders_filtrado = df_filtrado.copy()
 
     # Normalizar/classificar modalidade para orders
     def classificar_modalidade_order(row):
-        cat = row.get('categoria', '') or ''
-        uni = row.get('unidade', '') or ''
-        curso = row.get('curso_venda', '') or ''
-        s = ','.join([str(cat), str(uni), str(curso)]).lower()
+        cat = str(row.get('categoria', '') or '').lower()
+        uni = str(row.get('unidade', '') or '').lower()
+        curso = str(row.get('curso_venda', '') or '').lower()
+        s = f"{cat},{uni},{curso}"
         if 'passaporte' in s:
             return 'Passaporte'
-        if 'smart' in s:
-            return 'Smart'
         if 'live' in s:
             return 'Live'
-        if 'ead' in s or 'online' in s:
-            return 'Online'
-        if 'apostila' in s:
-            return 'Apostila'
         if 'presencial' in s or 'curso' in s or uni:
             return 'Presencial'
         return 'Outros'
 
-    # Normalizar/classificar modalidade para oportunidades (campo já existe em muitas queries)
+    # Normalizar/classificar modalidade para oportunidades
     def classificar_modalidade_oportunidade(row):
-        mod = row.get('modalidade', '') or ''
-        s = str(mod).lower()
-        if 'passaporte' in s:
+        mod = str(row.get('modalidade', '') or '').lower()
+        if 'passaporte' in mod:
             return 'Passaporte'
-        if 'smart' in s:
-            return 'Smart'
-        if 'live' in s:
+        if 'live' in mod:
             return 'Live'
-        if 'ead' in s or 'online' in s:
-            return 'Online'
-        if 'apostila' in s:
-            return 'Apostila'
-        if 'presencial' in s:
+        if 'presencial' in mod:
             return 'Presencial'
         return 'Outros'
 
@@ -206,52 +194,51 @@ def run_page():
     df_orders_filtrado['dia'] = df_orders_filtrado['data_pagamento'].dt.date
     df_oportunidades_filtrado['dia'] = df_oportunidades_filtrado['criacao'].dt.date
 
-    # Agregados por dia e modalidade - contagens
+    # Agregados por dia e modalidade
     matriculas_por_dia = (
-        df_orders_filtrado.groupby(['dia', 'tipo_modalidade']).size().reset_index(name='matriculas')
+        df_orders_filtrado.groupby(['dia', 'tipo_modalidade'])
+        .agg(matriculas=('ordem_id', 'count'), faturamento=('total_pedido', 'sum'))
+        .reset_index()
     )
 
     oportunidades_por_dia = (
         df_oportunidades_filtrado.groupby(['dia', 'tipo_modalidade']).size().reset_index(name='oportunidades')
     )
 
-    # Pivot para ter colunas por modalidade
-    matriculas_pivot = matriculas_por_dia.pivot(index='dia', columns='tipo_modalidade', values='matriculas').fillna(0)
-    oportunidades_pivot = oportunidades_por_dia.pivot(index='dia', columns='tipo_modalidade', values='oportunidades').fillna(0)
-
-    # Range de datas
+    # DataFrame base com todas as datas do período selecionado
     todas_datas = pd.date_range(start=data_inicio_aware.date(), end=(data_fim_aware - pd.Timedelta(seconds=1)).date(), freq='D')
-    df_completo = pd.DataFrame({'dia': todas_datas.date})
+    df_base_datas = pd.DataFrame({'Data': todas_datas.date})
 
-    df_completo = df_completo.merge(matriculas_pivot.reset_index(), left_on='dia', right_on='dia', how='left')
-    df_completo = df_completo.merge(oportunidades_pivot.reset_index(), left_on='dia', right_on='dia', how='left', suffixes=('_mat', '_opp'))
-    df_completo = df_completo.fillna(0)
+    # Função para gerar e exibir a tabela por modalidade
+    def exibir_tabela_modalidade(modalidade_nome, titulo):
+        df_mat = matriculas_por_dia[matriculas_por_dia['tipo_modalidade'] == modalidade_nome].copy()
+        df_opp = oportunidades_por_dia[oportunidades_por_dia['tipo_modalidade'] == modalidade_nome].copy()
+        
+        df_merged = df_base_datas.merge(df_opp[['dia', 'oportunidades']], left_on='Data', right_on='dia', how='left')
+        df_merged = df_merged.merge(df_mat[['dia', 'matriculas', 'faturamento']], left_on='Data', right_on='dia', how='left')
+        
+        df_res = pd.DataFrame()
+        df_res['Data'] = pd.to_datetime(df_merged['Data']).dt.strftime('%d/%m/%Y')
+        df_res['Oportunidades'] = df_merged['oportunidades'].fillna(0).astype(int)
+        df_res['Matrículas'] = df_merged['matriculas'].fillna(0).astype(int)
+        df_res['Taxa Conversão'] = (df_res['Matrículas'] / df_res['Oportunidades'] * 100).fillna(0).round(1).astype(str) + '%'
+        df_res.loc[df_res['Oportunidades'] == 0, 'Taxa Conversão'] = '0.0%'
+        df_res['Valor Faturado'] = df_merged['faturamento'].fillna(0).apply(formatar_reais)
+        
+        # Totais
+        total_opp = df_res['Oportunidades'].sum()
+        total_mat = df_res['Matrículas'].sum()
+        total_fat = df_merged['faturamento'].fillna(0).sum()
+        conv_total = f"{(total_mat / total_opp * 100):.1f}%" if total_opp > 0 else '0.0%'
+        
+        df_res.loc[len(df_res)] = ['TOTAL', total_opp, total_mat, conv_total, formatar_reais(total_fat)]
+        
+        st.subheader(titulo)
+        st.dataframe(df_res, use_container_width=True, hide_index=True)
 
-    # Modalidades padronizadas e ordem
-    modalidades = ['Presencial', 'Live', 'Online', 'Smart', 'Passaporte', 'Apostila', 'Outros']
-
-    # Monta DataFrame final com colunas intercaladas: Oportunidades X Matrículas
-    cols = ['Data']
-    df_final = pd.DataFrame()
-    df_final['Data'] = pd.to_datetime(df_completo['dia']).dt.strftime('%d/%m/%Y')
-
-    for m in modalidades:
-        col_opp = f'Oportunidades {m}'
-        col_mat = f'Matrículas {m}'
-        # col names in merged df may be present as modality or modality_mat/_opp
-        opp_val = df_completo.get(m, df_completo.get(f'{m}', 0))
-        mat_val = df_completo.get(m, df_completo.get(f'{m}', 0))
-        # prefer suffixed columns
-        opp_col_name = f'{m}_opp'
-        mat_col_name = f'{m}_mat'
-        if opp_col_name in df_completo.columns:
-            df_final[col_opp] = df_completo[opp_col_name].astype(int)
-        else:
-            df_final[col_opp] = df_completo.get(m, 0).astype(int) if m in df_completo.columns else 0
-        if mat_col_name in df_completo.columns:
-            df_final[col_mat] = df_completo[mat_col_name].astype(int)
-        else:
-            df_final[col_mat] = df_completo.get(m, 0).astype(int) if m in df_completo.columns else 0
-
-    st.subheader('Detalhamento Diário — Oportunidades x Matrículas (por Categoria)')
-    st.dataframe(df_final, use_container_width=True)
+    st.markdown("---")
+    st.markdown("### Detalhamento Diário")
+    
+    exibir_tabela_modalidade('Presencial', '1) Presencial — Oportunidades x Matrículas')
+    exibir_tabela_modalidade('Live', '2) Live — Oportunidades x Matrículas')
+    exibir_tabela_modalidade('Passaporte', '3) Passaporte — Oportunidades x Matrículas')
