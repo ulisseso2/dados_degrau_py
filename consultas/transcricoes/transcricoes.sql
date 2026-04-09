@@ -21,6 +21,8 @@ SELECT
     tais.main_product       AS produto_recomendado,
     tais.main_pain_points   AS principais_dores,
     tais.ai_insight         AS insight_ia,
+    tais.vendedor_disclaimer AS vendedor_disclaimer,
+    tais.lead_disclaimer     AS lead_disclaimer,
     JSON_UNQUOTE(JSON_EXTRACT(tais.ai_insight, '$.classificacao_ligacao'))  AS tipo_classificacao_ia,
     CAST(JSON_EXTRACT(tais.ai_insight, '$.confianca_classificacao') AS DECIMAL(4,2)) AS confianca_classificacao,
     COALESCE(ot.agent,    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.agente')))   AS agente,

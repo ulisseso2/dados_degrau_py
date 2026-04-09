@@ -6,11 +6,11 @@ from conexao.mysql_connector import conectar_mysql_writer
 _migration_nullable_done = False
 
 def _ensure_opportunity_id_nullable(engine) -> None:
-    """Garante que opportunity_id aceita NULL (executa apenas uma vez por processo)."""
+    """Garante que opportunity_id aceita NULL e que colunas de disclaimer existem."""
     global _migration_nullable_done
     if _migration_nullable_done:
         return
-    _migration_nullable_done = True  # Marcar antes para não repetir mesmo em falha
+    _migration_nullable_done = True
     try:
         with engine.begin() as conn:
             conn.execute(text(
@@ -18,7 +18,17 @@ def _ensure_opportunity_id_nullable(engine) -> None:
                 "MODIFY COLUMN opportunity_id INT NULL"
             ))
     except Exception:
-        pass  # Já nullable ou tabela ainda não existe
+        pass
+    # Migração: adicionar colunas de disclaimer se não existem
+    for col in ('vendedor_disclaimer', 'lead_disclaimer'):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    f"ALTER TABLE seducar.chat_ai_evaluations "
+                    f"ADD COLUMN {col} TEXT NULL"
+                ))
+        except Exception:
+            pass  # Coluna já existe
 
 def salvar_avaliacao_chat(
     opportunity_id: Optional[int],
@@ -30,7 +40,8 @@ def salvar_avaliacao_chat(
     lead_score: Optional[int] = None,
     vendor_score: Optional[int] = None,
     main_product: Optional[str] = None,
-    # --- NOVAS COLUNAS OCTADESK ---
+    vendedor_disclaimer: Optional[str] = None,
+    lead_disclaimer: Optional[str] = None,
     octa_agent: Optional[str] = None,
     octa_channel: Optional[str] = None,
     octa_status: Optional[str] = None,
@@ -51,7 +62,6 @@ def salvar_avaliacao_chat(
     if not chat_id:
         return False, "chat_id ausente"
 
-    # Sanitiza tipos numéricos
     import math
     def _sanitize(v):
         if v is None:
@@ -93,6 +103,8 @@ def salvar_avaliacao_chat(
             lead_score,
             vendor_score,
             main_product,
+            vendedor_disclaimer,
+            lead_disclaimer,
             octa_agent,
             octa_channel,
             octa_status,
@@ -118,6 +130,8 @@ def salvar_avaliacao_chat(
             :lead_score,
             :vendor_score,
             :main_product,
+            :vendedor_disclaimer,
+            :lead_disclaimer,
             :octa_agent,
             :octa_channel,
             :octa_status,
@@ -142,6 +156,8 @@ def salvar_avaliacao_chat(
             lead_score = VALUES(lead_score),
             vendor_score = VALUES(vendor_score),
             main_product = VALUES(main_product),
+            vendedor_disclaimer = VALUES(vendedor_disclaimer),
+            lead_disclaimer = VALUES(lead_disclaimer),
             octa_agent = VALUES(octa_agent),
             octa_channel = VALUES(octa_channel),
             octa_status = VALUES(octa_status),
@@ -173,6 +189,8 @@ def salvar_avaliacao_chat(
                     "lead_score": lead_score,
                     "vendor_score": vendor_score,
                     "main_product": main_product,
+                    "vendedor_disclaimer": vendedor_disclaimer,
+                    "lead_disclaimer": lead_disclaimer,
                     "octa_agent": octa_agent,
                     "octa_channel": octa_channel,
                     "octa_status": octa_status,
@@ -190,3 +208,4 @@ def salvar_avaliacao_chat(
         return True, None
     except Exception as e:
         return False, str(e)
+

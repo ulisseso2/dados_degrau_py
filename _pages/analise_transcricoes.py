@@ -18,12 +18,16 @@ _PAT_CAT = _re.compile(r'^\[([^\]]+)\]\s*')
 
 _CAT_LABELS = {
     'rapport':          '🤝 Rapport',
-    'investigacao_spin':'🔍 Investigação SPIN',
-    'valor_produto':    '💎 Valor do Produto',
-    'gatilho_mental':   '⚡ Gatilho Mental',
+    'qualificacao':     '🔎 Qualificação / Leitura',
+    'valor':            '💎 Construção de Valor',
+    'persuasao':        '⚡ Persuasão Ética',
     'objecao':          '🛡️ Objeção',
-    'fechamento':       '🤝 Fechamento',
+    'fechamento':       '🎯 Fechamento',
     'clareza':          '🗣️ Clareza',
+    # Retrocompatibilidade (avaliações antigas)
+    'investigacao_spin':'🔎 Qualificação / Leitura',
+    'valor_produto':    '💎 Construção de Valor',
+    'gatilho_mental':   '⚡ Persuasão Ética',
     'outros':           '❓ Outros',
 }
 
@@ -76,6 +80,20 @@ def _carregar_dados() -> pd.DataFrame:
     df['observacao_whatsapp'] = insight.apply(
         lambda x: "; ".join(x.get('observacoes', [])) if isinstance(x, dict) and isinstance(x.get('observacoes'), list) else ''
     )
+
+    # Disclaimers — da coluna do banco ou fallback do JSON
+    if 'vendedor_disclaimer' not in df.columns:
+        df['vendedor_disclaimer'] = ''
+    if 'lead_disclaimer' not in df.columns:
+        df['lead_disclaimer'] = ''
+    mask_vd = df['vendedor_disclaimer'].fillna('').str.strip() == ''
+    df.loc[mask_vd, 'vendedor_disclaimer'] = insight[mask_vd].apply(
+        lambda x: str(x.get('vendedor_disclaimer', '')).strip() if isinstance(x, dict) else ''
+    )
+    mask_ld = df['lead_disclaimer'].fillna('').str.strip() == ''
+    df.loc[mask_ld, 'lead_disclaimer'] = insight[mask_ld].apply(
+        lambda x: str(x.get('lead_disclaimer', '')).strip() if isinstance(x, dict) else ''
+    )
     lead_json = insight.apply(lambda x: x.get('lead_classificacao') if isinstance(x, dict) else None)
     df['lead_classification'] = lead_json.where(lead_json.notna(), df['lead_classification'])
 
@@ -118,7 +136,7 @@ def _top_items(series: pd.Series, n: int = 10) -> list:
 
 
 def _cat_counts(series: pd.Series) -> dict:
-    """Conta itens por categoria SPIN."""
+    """Conta itens por categoria de avaliação."""
     contagem: dict = {}
     for v in series.fillna(''):
         for item in [t.strip() for t in str(v).split(';') if t.strip()]:
@@ -376,18 +394,38 @@ def run_page():
     # ════════════════════════════════════════════
     # ABAS
     # ════════════════════════════════════════════
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 Visão Geral",
         "🏆 Ranking de Agentes",
         "🎯 Qualidade de Leads",
-        "🔍 Análise SPIN",
+        "🔬 Análise de Competências",
         "👤 Relatório Individual",
+        "🔍 Detalhes Qualitativos",
     ])
 
     # ────────────────────────────────────────────
     # TAB 1 — VISÃO GERAL
     # ────────────────────────────────────────────
     with tab1:
+        # ── Painel de Atenção ──────────────────────
+        op_perdidas_df = df_av[
+            (df_av['lead_classification'].isin(['A', 'B'])) & (df_av['evaluation_ia'] < 50)
+        ] if not df_av.empty else pd.DataFrame()
+
+        if not op_perdidas_df.empty:
+            st.error("### 🚨 Painel de Atenção: Oportunidades em Risco")
+            st.caption("Leads Quentes (A ou B) mal atendidos (Nota < 50)")
+            for _, row in op_perdidas_df.sort_values(by='evaluation_ia').head(5).iterrows():
+                agente = row.get('agente', 'Desconhecido')
+                lead_c = row.get('lead_classification', '-')
+                nota_v = row.get('evaluation_ia', 0)
+                vd_disc = str(row.get('vendedor_disclaimer', '')).strip()
+                st.write(f"- **{agente}** atendeu Lead {lead_c} (Nota: {nota_v:.0f})")
+                if vd_disc and vd_disc.lower() not in ('nan', 'none', ''):
+                    st.caption(f"  _{vd_disc}_")
+            if len(op_perdidas_df) > 5:
+                st.caption(f"+ {len(op_perdidas_df) - 5} outras ligações críticas...")
+
         # ── Linha do tempo ──────────────────────
         st.markdown("#### 📅 Evolução Diária de Ligações")
 
@@ -556,9 +594,12 @@ def run_page():
 
             # Filtro de quantidade mínima de ligações
             max_lig = int(df_rank['ligacoes'].max())
-            min_lig = st.slider(
-                "Mínimo de ligações avaliadas:", 1, max(max_lig, 1), 1, key="min_lig_rank"
-            )
+            if max_lig > 1:
+                min_lig = st.slider(
+                    "Mínimo de ligações avaliadas:", 1, max_lig, 1, key="min_lig_rank"
+                )
+            else:
+                min_lig = 1
             df_rank = df_rank[df_rank['ligacoes'] >= min_lig].reset_index(drop=True)
             df_rank.index += 1
 
@@ -766,11 +807,11 @@ def run_page():
             st.plotly_chart(fig_ld, use_container_width=True)
 
     # ────────────────────────────────────────────
-    # TAB 4 — ANÁLISE SPIN
+    # TAB 4 — ANÁLISE DE COMPETÊNCIAS
     # ────────────────────────────────────────────
     with tab4:
         if df_av.empty:
-            st.info("Sem avaliações para análise SPIN.")
+            st.info("Sem avaliações para análise de competências.")
         else:
             cat_fortes    = _cat_counts(df_av.get('strengths',   pd.Series(dtype=str)))
             cat_melhorias = _cat_counts(df_av.get('improvements', pd.Series(dtype=str)))
@@ -778,7 +819,7 @@ def run_page():
             col_s1, col_s2 = st.columns(2)
 
             with col_s1:
-                st.markdown("#### ✅ Pontos Fortes por Categoria SPIN")
+                st.markdown("#### ✅ Pontos Fortes por Categoria")
                 if cat_fortes:
                     df_cf = pd.DataFrame(list(cat_fortes.items()), columns=['cat', 'qtd'])
                     df_cf['Categoria'] = df_cf['cat'].map(
@@ -796,7 +837,7 @@ def run_page():
                     st.info("Sem dados de pontos fortes com categoria.")
 
             with col_s2:
-                st.markdown("#### 🛠️ Pontos de Melhoria por Categoria SPIN")
+                st.markdown("#### 🛠️ Pontos de Melhoria por Categoria")
                 if cat_melhorias:
                     df_cm = pd.DataFrame(list(cat_melhorias.items()), columns=['cat', 'qtd'])
                     df_cm['Categoria'] = df_cm['cat'].map(
@@ -813,23 +854,29 @@ def run_page():
                 else:
                     st.info("Sem dados de pontos de melhoria com categoria.")
 
-            # Radar SPIN por agente (todos)
-            st.markdown("#### 🕸️ Radar SPIN por Agente")
+            # Radar de Competências por agente (todos)
+            st.markdown("#### 🕸️ Radar de Competências por Agente")
             top5_ag = df_av['agente'].value_counts().index.tolist()
-            cats_spin = [
-                'rapport', 'investigacao_spin', 'valor_produto',
-                'gatilho_mental', 'objecao', 'fechamento', 'clareza',
+            cats_avaliacao = [
+                'rapport', 'qualificacao', 'valor',
+                'persuasao', 'objecao', 'fechamento', 'clareza',
             ]
-            cats_lbl = [_CAT_LABELS.get(c, c) for c in cats_spin]
+            cats_lbl = [_CAT_LABELS.get(c, c) for c in cats_avaliacao]
             fig_radar = go.Figure()
             for ag in top5_ag:
                 df_ag_r = df_av[df_av['agente'] == ag]
                 f_ag = _cat_counts(df_ag_r.get('strengths',   pd.Series(dtype=str)))
                 m_ag = _cat_counts(df_ag_r.get('improvements', pd.Series(dtype=str)))
                 scores = []
-                for cat in cats_spin:
-                    f      = f_ag.get(cat, 0)
-                    m      = m_ag.get(cat, 0)
+                for cat in cats_avaliacao:
+                    # Retrocompatibilidade: somar chave nova + antiga
+                    legacy_map = {
+                        'qualificacao': 'investigacao_spin',
+                        'valor': 'valor_produto',
+                        'persuasao': 'gatilho_mental',
+                    }
+                    f = f_ag.get(cat, 0) + f_ag.get(legacy_map.get(cat, ''), 0)
+                    m = m_ag.get(cat, 0) + m_ag.get(legacy_map.get(cat, ''), 0)
                     total_c = f + m
                     scores.append((f / total_c * 100) if total_c > 0 else 50)
                 fig_radar.add_trace(go.Scatterpolar(
@@ -1032,7 +1079,7 @@ def run_page():
             _cols_tab = [
                 'transcricao_id', 'data_ligacao', 'nome_lead',
                 'evaluation_ia', 'lead_score', 'lead_classification',
-                'etapa', 'transcricao',
+                'etapa', 'vendedor_disclaimer', 'lead_disclaimer', 'transcricao',
             ]
             # campos adicionais
             extras = []
@@ -1067,6 +1114,8 @@ def run_page():
                 'tipo_ligacao':             'Tipo IA',
                 'confianca_classificacao':  'Confiança IA',
                 'etapa':                    'Etapa',
+                'vendedor_disclaimer':      'Justificativa Vendedor',
+                'lead_disclaimer':          'Justificativa Lead',
                 'transcricao':              'Transcrição',
             }
             df_ag_tab = df_ag_tab.rename(columns=_rename_map).drop(columns=['evaluation_ia'])
@@ -1126,6 +1175,16 @@ def run_page():
                         help='Registro automático quando a conversa migra para WhatsApp.',
                         width='medium',
                     ),
+                    'Justificativa Vendedor': st.column_config.TextColumn(
+                        'Justificativa Vendedor',
+                        help='Por que o vendedor recebeu essa nota',
+                        width='large',
+                    ),
+                    'Justificativa Lead': st.column_config.TextColumn(
+                        'Justificativa Lead',
+                        help='Por que o lead recebeu essa classificação',
+                        width='large',
+                    ),
                     'Transcrição': st.column_config.TextColumn(
                         'Transcrição',
                         help='Clique na célula para ver a transcrição completa',
@@ -1134,3 +1193,153 @@ def run_page():
                 },
             )
             st.divider()
+
+    # ────────────────────────────────────────────
+    # TAB 6 — DETALHES QUALITATIVOS
+    # ────────────────────────────────────────────
+    with tab6:
+        st.markdown("#### 🔍 Feedback Detalhado por Ligação")
+        if df_base.empty:
+            st.info("Sem dados.")
+        else:
+            opcoes = []
+            for _, row in df_base.iterrows():
+                tipo_c = row.get('tipo_ligacao', '—')
+                nota_s = f"{int(row['evaluation_ia'])}" if pd.notna(row.get('evaluation_ia')) else "—"
+                lbl = (
+                    f"{row['data_ligacao'].strftime('%d/%m %H:%M')}  |  "
+                    f"{row['agente']}  |  Tipo: {tipo_c}  |  "
+                    f"Nota: {nota_s}  |  {row['transcricao_id']}"
+                )
+                opcoes.append((row['transcricao_id'], lbl))
+
+            sel_id = st.selectbox(
+                "Selecione uma ligação:",
+                [o[0] for o in opcoes],
+                format_func=lambda x: next((o[1] for o in opcoes if o[0] == x), x),
+            )
+
+            if sel_id:
+                row_data = df_base[df_base['transcricao_id'] == sel_id].iloc[0]
+                # Parse insight_ia JSON
+                _raw_insight = str(row_data.get('insight_ia', '')).strip()
+                try:
+                    j = json.loads(_raw_insight) if _raw_insight else {}
+                except (TypeError, ValueError):
+                    j = {}
+                transcript = row_data.get('transcricao', '')
+
+                st.write(f"### 📝 Ligação ID: `{sel_id}`")
+
+                nome_lead = str(row_data.get('nome_lead', ''))
+                tel_lead = str(row_data.get('telefone_lead', ''))
+                motivo = str(row_data.get('motivo_nao_avaliacao', ''))
+
+                if nome_lead and nome_lead not in ('nan', ''):
+                    st.caption(f"**Lead:** {nome_lead} | **Tel:** {tel_lead if tel_lead not in ('nan', '') else 'Não informado'}")
+
+                if not row_data.get('avaliada') or not j:
+                    if motivo and motivo not in ('nan', ''):
+                        st.warning(f"**⚠️ Ligação não avaliada comercialmente.** Motivo: {motivo}")
+                    else:
+                        st.info("Ligação sem avaliação da IA.")
+
+                t_resumo, t_feed, t_trans = st.tabs(["📊 Resumo Executivo", "🤖 Feedback Completo", "💬 Transcrição"])
+
+                # ── TAB RESUMO EXECUTIVO ─────────
+                with t_resumo:
+                    if isinstance(j, dict) and bool(j):
+                        nota_vend = row_data.get('evaluation_ia')
+                        lead_sc = row_data.get('lead_score')
+                        lead_cl = row_data.get('lead_classification', '—')
+                        vd_disclaimer = str(row_data.get('vendedor_disclaimer', '')).strip()
+                        ld_disclaimer = str(row_data.get('lead_disclaimer', '')).strip()
+
+                        # KPIs rápidos
+                        kr1, kr2, kr3 = st.columns(3)
+                        kr1.metric("Nota Vendedor", f"{_cor_nota(nota_vend)} {int(nota_vend)}" if pd.notna(nota_vend) else "—")
+                        kr2.metric("Score Lead", f"{int(lead_sc)}" if pd.notna(lead_sc) else "—")
+                        kr3.metric("Classe Lead", lead_cl)
+
+                        st.divider()
+
+                        # Disclaimers lado a lado
+                        col_dv, col_dl = st.columns(2)
+                        with col_dv:
+                            st.markdown("##### 🏷️ Por que essa nota pro vendedor?")
+                            if vd_disclaimer and vd_disclaimer.lower() not in ('nan', 'none', ''):
+                                st.info(vd_disclaimer)
+                            else:
+                                erro_txt = str(row_data.get('most_expensive_mistake', '')).strip()
+                                if erro_txt and erro_txt.lower() not in ('nan', 'none', ''):
+                                    st.warning(f"**Erro mais caro:** {erro_txt}")
+                                else:
+                                    st.caption("Disclaimer não disponível para esta ligação.")
+
+                        with col_dl:
+                            st.markdown("##### 🏷️ Por que essa classificação pro lead?")
+                            if ld_disclaimer and ld_disclaimer.lower() not in ('nan', 'none', ''):
+                                st.info(ld_disclaimer)
+                            else:
+                                st.caption("Disclaimer não disponível para esta ligação.")
+
+                        # Principais dores
+                        dores = str(row_data.get('principais_dores', '')).strip()
+                        if dores and dores.lower() not in ('nan', 'none', ''):
+                            st.divider()
+                            st.markdown("##### 🎯 Principais Dores do Lead")
+                            for d in dores.split(';'):
+                                d = d.strip()
+                                if d:
+                                    st.write(f"→ {d}")
+
+                    else:
+                        st.info("Sem dados de avaliação para esta ligação.")
+
+                # ── TAB FEEDBACK COMPLETO ─────────
+                with t_feed:
+                    if isinstance(j, dict) and bool(j):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.success("**✅ Pontos Fortes do Vendedor**")
+                            strengths_raw = str(row_data.get('strengths', '')).strip()
+                            if strengths_raw and strengths_raw.lower() not in ('nan', 'none', ''):
+                                for s in strengths_raw.split(';'):
+                                    s = s.strip()
+                                    if s:
+                                        st.write(f"- {_strip_cat(s)}")
+                            else:
+                                st.caption("Nenhum ponto forte registrado.")
+
+                            st.error("**❌ Erro Mais Caro**")
+                            erro_raw = str(row_data.get('most_expensive_mistake', '')).strip()
+                            if erro_raw and erro_raw.lower() not in ('nan', 'none', ''):
+                                st.write(_strip_cat(erro_raw))
+                            else:
+                                st.write("—")
+
+                        with col2:
+                            st.warning("**🛠️ Sugestões de Melhoria**")
+                            improvements_raw = str(row_data.get('improvements', '')).strip()
+                            if improvements_raw and improvements_raw.lower() not in ('nan', 'none', ''):
+                                for m in improvements_raw.split(';'):
+                                    m = m.strip()
+                                    if m:
+                                        st.write(f"▪ {_strip_cat(m)}")
+                            else:
+                                st.caption("Nenhuma melhoria registrada.")
+
+                        st.divider()
+                        st.markdown("##### 🔎 Dados Brutos (JSON)")
+                        st.json(j, expanded=False)
+                    else:
+                        st.info("Sem dados de avaliação comercial para esta ligação.")
+
+                with t_trans:
+                    if pd.notna(transcript) and str(transcript).strip():
+                        st.text_area(
+                            "Texto Integral da Ligação",
+                            value=str(transcript), height=500, disabled=True,
+                        )
+                    else:
+                        st.warning("Transcrição não disponível para esta ligação.")

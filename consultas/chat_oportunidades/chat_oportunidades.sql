@@ -12,7 +12,10 @@ SELECT
     o.name as origem,
     CASE WHEN eval.id IS NOT NULL THEN 'Sim' ELSE 'Não' END as analisado,
     eval.classification as classificacao_ia,
-    eval.lead_score as score_ia
+    eval.lead_score as score_ia,
+    eval.vendor_score as nota_vendedor,
+    eval.vendedor_disclaimer as vendedor_disclaimer,
+    eval.lead_disclaimer as lead_disclaimer
 FROM seducar.interesteds i
 LEFT JOIN seducar.opportunity_steps s ON i.opportunity_step_id = s.id
 LEFT JOIN seducar.users d ON i.owner_id = d.id

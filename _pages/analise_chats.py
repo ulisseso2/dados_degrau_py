@@ -18,15 +18,24 @@ _CORES_CLASS = {
     'C': '#FFA15A', 'D': '#EF553B', '—': '#AAAAAA',
 }
 
-# Categorias SPIN extraídas do JSON de avaliação (chave → (label, max_pontos))
-_CATS_SPIN = {
-    'abertura_rapport_0_10':           ('Abertura / Rapport',        10),
-    'investigacao_spin_0_30':          ('Investigação SPIN',         30),
-    'valor_capacidade_0_20':           ('Valor e Capacidade',        20),
-    'persuasao_etica_0_10':            ('Persuasão Ética',           10),
-    'objecoes_0_10':                   ('Tratamento de Objeções',    10),
-    'compromisso_prox_passos_0_15':    ('Compromisso / Próx. Passos',15),
-    'clareza_compliance_whatsapp_0_5': ('Clareza / Compliance',       5),
+# Categorias de avaliação do vendedor (chave JSON → (label, max_pontos))
+_CATS_VENDEDOR = {
+    'rapport_conexao_0_10':                ('Rapport e Conexão',              10),
+    'qualificacao_leitura_contexto_0_15':  ('Qualificação / Leitura',        15),
+    'construcao_valor_diferenciacao_0_30': ('Construção de Valor',           30),
+    'persuasao_etica_0_10':               ('Persuasão Ética',                10),
+    'objecoes_0_10':                       ('Tratamento de Objeções',        10),
+    'conducao_fechamento_0_20':            ('Condução ao Fechamento',        20),
+    'clareza_compliance_0_5':              ('Clareza / Compliance',           5),
+}
+
+# Retrocompatibilidade: mapeamento das chaves antigas → novas
+_CATS_LEGACY = {
+    'abertura_rapport_0_10':           'rapport_conexao_0_10',
+    'investigacao_spin_0_30':          'qualificacao_leitura_contexto_0_15',
+    'valor_capacidade_0_20':           'construcao_valor_diferenciacao_0_30',
+    'compromisso_prox_passos_0_15':    'conducao_fechamento_0_20',
+    'clareza_compliance_whatsapp_0_5': 'clareza_compliance_0_5',
 }
 
 # ──────────────────────────────────────────────
@@ -129,8 +138,34 @@ def _carregar_dados() -> pd.DataFrame:
     df['concurso_area'] = df['parsed_json'].apply(
         lambda j: str(j.get('extracao', {}).get('concurso_area', '')).strip() if isinstance(j, dict) else ''
     )
-    df['perguntas_faltantes_spin'] = df['parsed_json'].apply(
-        lambda j: _join_list(j.get('avaliacao_lead', {}).get('perguntas_faltantes_spin', [])) if isinstance(j, dict) else ''
+    df['perguntas_faltantes'] = df['parsed_json'].apply(
+        lambda j: _join_list(
+            j.get('avaliacao_lead', {}).get('perguntas_que_faltaram', []) or
+            j.get('avaliacao_lead', {}).get('perguntas_faltantes', [])
+        ) if isinstance(j, dict) else ''
+    )
+
+    # ── Disclaimers (resumos executivos das avaliações) ────────────────────
+    def _get_disclaimer(j, field):
+        if not isinstance(j, dict):
+            return ''
+        val = j.get(field, '')
+        return str(val).strip() if val and str(val).lower() not in ('none', 'null', 'não mencionado') else ''
+
+    # Tentar primeiro da coluna do banco (se existir), fallback pro JSON
+    if 'vendedor_disclaimer' not in df.columns:
+        df['vendedor_disclaimer'] = ''
+    if 'lead_disclaimer' not in df.columns:
+        df['lead_disclaimer'] = ''
+
+    # Preencher vazios com dados do JSON
+    mask_vd = df['vendedor_disclaimer'].fillna('').str.strip() == ''
+    df.loc[mask_vd, 'vendedor_disclaimer'] = df.loc[mask_vd, 'parsed_json'].apply(
+        lambda j: _get_disclaimer(j, 'vendedor_disclaimer')
+    )
+    mask_ld = df['lead_disclaimer'].fillna('').str.strip() == ''
+    df.loc[mask_ld, 'lead_disclaimer'] = df.loc[mask_ld, 'parsed_json'].apply(
+        lambda j: _get_disclaimer(j, 'lead_disclaimer')
     )
 
     # ── Notas por categoria (normalizadas 0-100%) ────────────────────────────
@@ -141,13 +176,34 @@ def _carregar_dados() -> pd.DataFrame:
         if not isinstance(notas, dict):
             return {}
         result = {}
-        for key, (_, max_val) in _CATS_SPIN.items():
+        # Tentar chaves novas primeiro
+        for key, (_, max_val) in _CATS_VENDEDOR.items():
             val = notas.get(key)
             if val is not None:
                 try:
                     result[key] = float(val) / max_val * 100
                 except (TypeError, ValueError):
                     pass
+        # Fallback: mapear chaves antigas pra novas (retrocompatibilidade)
+        if not result:
+            for old_key, new_key in _CATS_LEGACY.items():
+                val = notas.get(old_key)
+                if val is not None and new_key in _CATS_VENDEDOR:
+                    _, max_val = _CATS_VENDEDOR[new_key]
+                    try:
+                        result[new_key] = float(val) / max_val * 100
+                    except (TypeError, ValueError):
+                        pass
+            # Chaves que não mudaram (persuasao, objecoes)
+            for key in ('persuasao_etica_0_10', 'objecoes_0_10'):
+                if key not in result:
+                    val = notas.get(key)
+                    if val is not None and key in _CATS_VENDEDOR:
+                        _, max_val = _CATS_VENDEDOR[key]
+                        try:
+                            result[key] = float(val) / max_val * 100
+                        except (TypeError, ValueError):
+                            pass
         return result
 
     df['notas_pct'] = df['parsed_json'].apply(_extract_notas_pct)
@@ -428,7 +484,7 @@ def run_page():
         "📈 Visão Geral",
         "🧠 Inteligência Comercial",
         "🏆 Ranking de Agentes",
-        "🔬 Análise SPIN",
+        "🔬 Análise de Competências",
         "👤 Relatório Individual",
         "🔍 Detalhes Qualitativos",
     ])
@@ -577,7 +633,10 @@ def run_page():
                             chat_id = row.get('chat_id', '')
                             lead_c = row.get('lead_classification', '-')
                             nota_v = row.get('evaluation_ia', 0)
+                            vd_disc = str(row.get('vendedor_disclaimer', '')).strip()
                             st.write(f"- **{agente}** atendeu Lead {lead_c} (Nota: {nota_v:.0f}) - Chat `{chat_id}`")
+                            if vd_disc and vd_disc.lower() not in ('nan', 'none', ''):
+                                st.caption(f"  _{vd_disc}_")
                         if len(op_perdidas_df) > 5:
                             st.caption(f"+ {len(op_perdidas_df)-5} outros chats críticos...")
                     else:
@@ -654,8 +713,8 @@ def run_page():
                     st.info("Nenhuma restrição mapeada.")
             
             with col_i4:
-                st.markdown("#### ❓ Principais Perguntas SPIN Faltantes")
-                perguntas = _top_items(df_av['perguntas_faltantes_spin'], n=10)
+                st.markdown("#### ❓ Principais Perguntas que Faltaram")
+                perguntas = _top_items(df_av['perguntas_faltantes'], n=10)
                 perguntas = [(p, n) for p, n in perguntas if str(p).lower() not in ['não mencionado', 'nao mencionado', 'incerto', 'nenhuma']]
                 if perguntas:
                     for p, n in perguntas[:6]:
@@ -766,16 +825,16 @@ def run_page():
                     st.plotly_chart(fig_dist, use_container_width=True)
 
     # ────────────────────────────────────────────
-    # TAB 3 — ANÁLISE SPIN
+    # TAB 3 — ANÁLISE DE COMPETÊNCIAS
     # ────────────────────────────────────────────
     with tab3:
         if df_av.empty:
-            st.info("Sem avaliações para análise SPIN.")
+            st.info("Sem avaliações para análise de competências.")
         else:
             # ── Notas médias por categoria (time) ────────────────────────────
             st.markdown("#### 📊 Notas Médias por Categoria — Time")
             cat_medias = {}
-            for cat_key, (cat_label, _) in _CATS_SPIN.items():
+            for cat_key, (cat_label, _) in _CATS_VENDEDOR.items():
                 vals = [
                     nd[cat_key]
                     for nd in df_av['notas_pct']
@@ -802,11 +861,11 @@ def run_page():
             else:
                 st.info("Nenhuma nota por categoria encontrada nos JSONs de avaliação.")
 
-            # ── Radar SPIN por Agente (Top 7) ────────────────────────────────
-            st.markdown("#### 🕸️ Radar SPIN por Agente (Top 7)")
+            # ── Radar de Competências por Agente (Top 7) ────────────────────────────────
+            st.markdown("#### 🕸️ Radar de Competências por Agente (Top 7)")
             top_ags   = df_av['agente'].value_counts().index.tolist()[:7]
-            cats_keys = list(_CATS_SPIN.keys())
-            cats_lbls = [_CATS_SPIN[k][0] for k in cats_keys]
+            cats_keys = list(_CATS_VENDEDOR.keys())
+            cats_lbls = [_CATS_VENDEDOR[k][0] for k in cats_keys]
             fig_radar = go.Figure()
             for ag in top_ags:
                 df_ag_r = df_av[df_av['agente'] == ag]
@@ -976,7 +1035,8 @@ def run_page():
             st.markdown("#### 📋 Chats Avaliados")
             _cols_tab = [
                 'chat_id', 'data_chat', 'lead_classification', 'lead_score',
-                'tipo_ligacao', 'produto_recomendado', 'evaluation_ia', 'transcript',
+                'tipo_ligacao', 'produto_recomendado', 'evaluation_ia',
+                'vendedor_disclaimer', 'lead_disclaimer', 'transcript',
             ]
             cols_avail = [c for c in _cols_tab if c in df_ag.columns]
             df_ag_tab = df_ag[cols_avail].copy()
@@ -993,6 +1053,8 @@ def run_page():
                 'chat_id': 'Chat ID', 'data_chat': 'Data',
                 'lead_classification': 'Classe', 'lead_score': 'Score Lead',
                 'tipo_ligacao': 'Tipo', 'produto_recomendado': 'Produto',
+                'vendedor_disclaimer': 'Justificativa Vendedor',
+                'lead_disclaimer': 'Justificativa Lead',
                 'transcript': 'Transcrição',
             }
             df_ag_tab = df_ag_tab.rename(columns=_rename)
@@ -1042,6 +1104,16 @@ def run_page():
                     'Transcrição': st.column_config.TextColumn(
                         'Transcrição',
                         help='Clique na célula para ver a transcrição completa',
+                        width='medium',
+                    ),
+                    'Justificativa Vendedor': st.column_config.TextColumn(
+                        'Justificativa Vendedor',
+                        help='Por que o vendedor recebeu essa nota',
+                        width='large',
+                    ),
+                    'Justificativa Lead': st.column_config.TextColumn(
+                        'Justificativa Lead',
+                        help='Por que o lead recebeu essa classificação',
                         width='large',
                     ),
                 },
@@ -1092,20 +1164,94 @@ def run_page():
                     else:
                         st.info("Chat sem avaliação da IA.")
 
-                t_feed, t_trans = st.tabs(["🤖 Feedback da IA", "💬 Transcrição RAW"])
+                t_resumo, t_feed, t_trans = st.tabs(["📊 Resumo Executivo", "🤖 Feedback Completo", "💬 Transcrição"])
 
-                with t_trans:
-                    if pd.notna(transcript) and str(transcript).strip():
-                        st.text_area(
-                            "Texto Integral do Chat",
-                            value=str(transcript), height=500, disabled=True,
-                        )
+                # ── TAB RESUMO EXECUTIVO (disclaimers + KPIs rápidos) ─────────
+                with t_resumo:
+                    if isinstance(j, dict) and bool(j):
+                        nota_vend = row_data.get('evaluation_ia')
+                        lead_sc = row_data.get('lead_score')
+                        lead_cl = row_data.get('lead_classification', '—')
+                        vd_disclaimer = str(row_data.get('vendedor_disclaimer', '')).strip()
+                        ld_disclaimer = str(row_data.get('lead_disclaimer', '')).strip()
+
+                        # KPIs rápidos
+                        kr1, kr2, kr3, kr4 = st.columns(4)
+                        kr1.metric("Nota Vendedor", f"{_cor_nota(nota_vend)} {int(nota_vend)}" if pd.notna(nota_vend) else "—")
+                        kr2.metric("Score Lead", f"{int(lead_sc)}" if pd.notna(lead_sc) else "—")
+                        kr3.metric("Classe Lead", lead_cl)
+                        iqh_val = j.get('qualidade_entrada', {}).get('iqh_0_100')
+                        kr4.metric("IQH", f"{iqh_val}" if iqh_val else "—")
+
+                        st.divider()
+
+                        # Disclaimers lado a lado
+                        col_dv, col_dl = st.columns(2)
+                        with col_dv:
+                            st.markdown("##### 🏷️ Por que essa nota pro vendedor?")
+                            if vd_disclaimer and vd_disclaimer.lower() not in ('nan', 'none', ''):
+                                st.info(vd_disclaimer)
+                            else:
+                                # Fallback: montar resumo a partir dos dados existentes
+                                val_vend = j.get('avaliacao_vendedor', {})
+                                erro = val_vend.get('erro_mais_caro', {})
+                                erro_txt = erro.get('descricao', '') if isinstance(erro, dict) else str(erro)
+                                if erro_txt and erro_txt.lower() not in ('não mencionado', ''):
+                                    st.warning(f"**Erro mais caro:** {erro_txt}")
+                                else:
+                                    st.caption("Disclaimer não disponível para este chat.")
+
+                        with col_dl:
+                            st.markdown("##### 🏷️ Por que essa classificação pro lead?")
+                            if ld_disclaimer and ld_disclaimer.lower() not in ('nan', 'none', ''):
+                                st.info(ld_disclaimer)
+                            else:
+                                sinais_q = j.get('avaliacao_lead', {}).get('sinais_quente', [])
+                                if sinais_q and isinstance(sinais_q, list):
+                                    top_sinal = sinais_q[0]
+                                    if isinstance(top_sinal, dict):
+                                        st.success(f"**Sinal principal:** {top_sinal.get('sinal', '')}")
+                                else:
+                                    st.caption("Disclaimer não disponível para este chat.")
+
+                        # Resumo da conversa
+                        resumo = j.get('resumo_da_conversa', [])
+                        if resumo and isinstance(resumo, list):
+                            st.divider()
+                            st.markdown("##### 📋 Resumo da Conversa")
+                            for item in resumo:
+                                if isinstance(item, str) and item.strip() and item.lower() != 'não mencionado':
+                                    st.write(f"→ {item}")
+
+                        # Mensagem pronta
+                        msg_pronta = j.get('recomendacao_final', {}).get('mensagem_pronta_para_enviar_agora')
+                        if msg_pronta and str(msg_pronta).lower() not in ('não mencionado', 'none', ''):
+                            st.divider()
+                            st.markdown("##### ✉️ Mensagem Pronta (Copy-Paste)")
+                            st.code(msg_pronta, language=None)
+
                     else:
-                        st.warning("Transcrição não disponível para este chat.")
+                        st.info("Sem dados de avaliação para este chat.")
 
+                # ── TAB FEEDBACK COMPLETO (detalhamento de competências) ─────────────────
                 with t_feed:
                     if isinstance(j, dict) and bool(j):
                         val_vend = j.get('avaliacao_vendedor', {})
+
+                        # Notas por categoria em formato visual
+                        notas = val_vend.get('notas_por_categoria', {})
+                        if notas and isinstance(notas, dict):
+                            st.markdown("##### 📊 Notas por Categoria")
+                            for cat_key, (cat_label, cat_max) in _CATS_VENDEDOR.items():
+                                val = notas.get(cat_key)
+                                if val is not None:
+                                    try:
+                                        pct = float(val) / cat_max
+                                        emoji = "🟢" if pct >= 0.75 else ("🟡" if pct >= 0.5 else "🔴")
+                                        st.write(f"{emoji} **{cat_label}:** {val}/{cat_max}")
+                                    except (TypeError, ValueError):
+                                        pass
+                            st.divider()
 
                         col1, col2 = st.columns(2)
                         with col1:
@@ -1143,15 +1289,34 @@ def run_page():
                             for a in alertas_chat:
                                 st.write(f"- {a}")
 
-                        msg_pronta = j.get('recomendacao_final', {}).get('mensagem_pronta_para_enviar_agora')
-                        if msg_pronta and str(msg_pronta).lower() not in ['não mencionado', 'none', '']:
-                            st.info(f"**✉️ Sugestão de Mensagem Pronta (Copy-Paste):**\n\n{msg_pronta}")
+                        st.divider()
 
-                        iqh_val = j.get('qualidade_entrada', {}).get('iqh_0_100')
-                        st.caption(f"**Índice de Qualidade do Histórico (IQH):** {iqh_val}/100")
+                        # Análise do Lead
+                        avl = j.get('avaliacao_lead', {})
+                        if avl and isinstance(avl, dict):
+                            st.markdown("##### 🎯 Análise do Lead")
+                            col_sq, col_sf = st.columns(2)
+                            with col_sq:
+                                st.markdown("**🔥 Sinais Quentes**")
+                                for s in avl.get('sinais_quente', []):
+                                    if isinstance(s, dict):
+                                        st.write(f"🟢 {s.get('sinal', '')}")
+                                        if s.get('evidencia'):
+                                            st.caption(f"  _{s['evidencia']}_")
+                                    elif isinstance(s, str) and s.strip():
+                                        st.write(f"🟢 {s}")
+                            with col_sf:
+                                st.markdown("**🧊 Sinais Frios**")
+                                for s in avl.get('sinais_frio', []):
+                                    if isinstance(s, dict):
+                                        st.write(f"🔴 {s.get('sinal', '')}")
+                                        if s.get('evidencia'):
+                                            st.caption(f"  _{s['evidencia']}_")
+                                    elif isinstance(s, str) and s.strip():
+                                        st.write(f"🔴 {s}")
 
                         st.divider()
-                        st.markdown("#### 🔎 Análise da Situação (SPIN / Extração)")
+                        st.markdown("##### 🔎 Dados Brutos (JSON)")
                         col_ext, col_rec = st.columns(2)
                         with col_ext:
                             st.markdown("**Extração**")
@@ -1160,7 +1325,16 @@ def run_page():
                             st.markdown("**Recomendação Final**")
                             st.json(j.get('recomendacao_final', {}), expanded=False)
                     else:
-                        st.info("Sem dados de avaliação SPIN/comercial para este chat.")
+                        st.info("Sem dados de avaliação comercial para este chat.")
+
+                with t_trans:
+                    if pd.notna(transcript) and str(transcript).strip():
+                        st.text_area(
+                            "Texto Integral do Chat",
+                            value=str(transcript), height=500, disabled=True,
+                        )
+                    else:
+                        st.warning("Transcrição não disponível para este chat.")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from collections import Counter
 from datetime import datetime
 import json
 from utils.sql_loader import carregar_dados
-from utils.transcricao_analyzer import TranscricaoOpenAIAnalyzer
+from utils.transcricao_analyzer import TranscricaoAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
 
 TIMEZONE = 'America/Sao_Paulo'
@@ -152,7 +152,7 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     # Instância compartilhada — OpenAI client é thread-safe
-    ia = TranscricaoOpenAIAnalyzer()
+    ia = TranscricaoAnalyzer()
     total = len(ids_selecionados)
     bar = st.progress(0)
     status_txt = st.empty()
@@ -181,18 +181,28 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
 
         try:
             analise = ia.analisar_transcricao(tx)
-            if 'erro' in analise:
+            if analise.get('erro'):
                 return (tid, nome, 'erro_ia', analise['erro'])
+
+            # Se a IA classificou como não-venda, montar insight mínimo
+            insight_para_salvar = analise.get('avaliacao_completa')
+            if not insight_para_salvar and not analise.get('deve_avaliar'):
+                insight_para_salvar = json.dumps({
+                    'classificacao_ligacao': analise.get('classificacao_ligacao', 'outros'),
+                    'motivo': analise.get('motivo', ''),
+                }, ensure_ascii=False)
 
             ok, err = atualizar_avaliacao_transcricao(
                 transcricao_id=tid,
-                insight_ia=analise.get('avaliacao_completa'),
+                insight_ia=insight_para_salvar,
                 evaluation_ia=analise.get('nota_vendedor'),
                 created_at=row_data.get('data_trancricao'),
                 agent=row_data.get('agente'),
                 duration=row_data.get('duracao'),
                 phone=row_data.get('telefone_lead'),
                 type_=row_data.get('tipo_ligacao'),
+                vendedor_disclaimer=analise.get('vendedor_disclaimer'),
+                lead_disclaimer=analise.get('lead_disclaimer'),
             )
             if ok:
                 return (tid, nome, 'ok', None)
@@ -262,7 +272,7 @@ def _executar_reavaliacao(df_avaliadas: pd.DataFrame):
     import threading
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    ia = TranscricaoOpenAIAnalyzer()
+    ia = TranscricaoAnalyzer()
     total = len(df_avaliadas)
     bar = st.progress(0)
     status_txt = st.empty()
@@ -290,26 +300,36 @@ def _executar_reavaliacao(df_avaliadas: pd.DataFrame):
             return (tid, nome, 'insuficiente', None, 0)
 
         try:
-            analise = ia.reavaliar_transcricao(tx, insight_existente)
+            # Nova versão: analisar_transcricao faz tudo (triagem + avaliação)
+            analise = ia.analisar_transcricao(tx)
 
-            if 'erro' in analise:
+            if analise.get('erro'):
                 return (tid, nome, 'erro_ia', analise['erro'], 0)
 
-            tokens = analise.get('tokens_usados') or 0
-            status_r = 'na' if analise.get('lead_classificacao') == 'NA' else 'reavaliada'
+            status_r = 'na' if analise.get('lead_classificacao') == 'NA' or not analise.get('deve_avaliar') else 'reavaliada'
+
+            # Se a IA classificou como não-venda, montar insight mínimo
+            insight_para_salvar = analise.get('avaliacao_completa')
+            if not insight_para_salvar and not analise.get('deve_avaliar'):
+                insight_para_salvar = json.dumps({
+                    'classificacao_ligacao': analise.get('classificacao_ligacao', 'outros'),
+                    'motivo': analise.get('motivo', ''),
+                }, ensure_ascii=False)
 
             ok, err = atualizar_avaliacao_transcricao(
                 transcricao_id=tid,
-                insight_ia=analise.get('avaliacao_completa'),
+                insight_ia=insight_para_salvar,
                 evaluation_ia=analise.get('nota_vendedor'),
                 created_at=row_data.get('data_trancricao'),
                 agent=row_data.get('agente'),
                 duration=row_data.get('duracao'),
                 phone=row_data.get('telefone_lead'),
                 type_=row_data.get('tipo_ligacao'),
+                vendedor_disclaimer=analise.get('vendedor_disclaimer'),
+                lead_disclaimer=analise.get('lead_disclaimer'),
             )
             if ok:
-                return (tid, nome, status_r, analise.get('reavaliacao_motivo'), tokens)
+                return (tid, nome, status_r, analise.get('motivo', 'Reavaliação completa'), 0)
             return (tid, nome, 'erro_db', err or 'Erro desconhecido', 0)
 
         except Exception as e:
@@ -796,20 +816,30 @@ def run_page():
                         st.error("Transcrição não encontrada.")
                     else:
                         with st.spinner("Reavaliando..."):
-                            ia = TranscricaoOpenAIAnalyzer()
+                            ia = TranscricaoAnalyzer()
                             analise = ia.analisar_transcricao(tx)
-                        if 'erro' in analise:
+                        if analise.get('erro'):
                             st.error(analise['erro'])
                         else:
+                            # Se a IA classificou como não-venda, montar insight mínimo
+                            insight_para_salvar = analise.get('avaliacao_completa')
+                            if not insight_para_salvar and not analise.get('deve_avaliar'):
+                                insight_para_salvar = json.dumps({
+                                    'classificacao_ligacao': analise.get('classificacao_ligacao', 'outros'),
+                                    'motivo': analise.get('motivo', ''),
+                                }, ensure_ascii=False)
+
                             ok, err = atualizar_avaliacao_transcricao(
                                 transcricao_id=tid,
-                                insight_ia=analise.get('avaliacao_completa'),
+                                insight_ia=insight_para_salvar,
                                 evaluation_ia=analise.get('nota_vendedor'),
                                 created_at=row_av.get('data_trancricao'),
                                 agent=detalhe.get('agente'),
                                 duration=detalhe.get('duracao'),
                                 phone=detalhe.get('telefone'),
                                 type_=detalhe.get('tipo'),
+                                vendedor_disclaimer=analise.get('vendedor_disclaimer'),
+                                lead_disclaimer=analise.get('lead_disclaimer'),
                             )
                             if ok:
                                 carregar_transcricoes_base.clear()
@@ -890,3 +920,122 @@ def run_page():
                 mime="text/csv"
             )
             st.caption(f"{len(df_exp)} registros")
+
+    # ══════════════════════════════════════════════════════════════
+    # SEÇÃO BATCH — Consulta e coleta de resultados (independente de filtro)
+    # ══════════════════════════════════════════════════════════════
+    st.divider()
+    with st.expander("📦 Consultar / Coletar Resultados de Batch", expanded=False):
+        st.markdown("Verifique o andamento de um batch enviado à Anthropic e colete os resultados quando estiver pronto.")
+
+        _session_ids = st.session_state.get('transcricao_batch_ids', [])
+        _batch_input = st.text_input(
+            "ID do Batch (ex: msgbatch_xxxxx):",
+            value=_session_ids[-1] if _session_ids else "",
+            key="transcricao_batch_id_input",
+        )
+
+        if _session_ids:
+            _sel_batch = st.selectbox(
+                "Ou escolha um dos batches desta sessão:",
+                options=["— digitar manualmente —"] + _session_ids[::-1],
+                key="transcricao_batch_sel_session",
+            )
+            if _sel_batch != "— digitar manualmente —":
+                _batch_input = _sel_batch
+
+        _col_b1, _col_b2 = st.columns(2)
+
+        with _col_b1:
+            if st.button("🔍 Consultar Status", key="btn_transcricao_consultar_batch", use_container_width=True):
+                if not _batch_input.strip():
+                    st.warning("Informe um Batch ID.")
+                else:
+                    _ia = TranscricaoAnalyzer()
+                    _status = _ia.consultar_batch(_batch_input.strip())
+
+                    if 'erro' in _status:
+                        st.error(f"Erro: {_status['erro']}")
+                    else:
+                        _proc = _status.get('processing_status', '?')
+                        _counts = _status.get('request_counts', {})
+                        _ok = _counts.get('succeeded', 0)
+                        _proc_n = _counts.get('processing', 0)
+                        _err = _counts.get('errored', 0)
+                        _can = _counts.get('canceled', 0)
+                        _exp = _counts.get('expired', 0)
+                        _total = _ok + _proc_n + _err + _can + _exp
+
+                        if _proc == 'ended':
+                            st.success(f"✅ Batch **finalizado** — {_ok}/{_total} com sucesso")
+                        elif _proc == 'in_progress':
+                            st.info(f"⏳ Em andamento — {_ok} prontos, {_proc_n} processando de {_total}")
+                        else:
+                            st.warning(f"Status: **{_proc}**")
+
+                        st.table({
+                            "Status": [_proc],
+                            "✅ Ok": [_ok],
+                            "⏳ Processando": [_proc_n],
+                            "❌ Erros": [_err],
+                            "🚫 Cancelados": [_can],
+                            "⌛ Expirados": [_exp],
+                            "Criado em": [_status.get('created_at', '—')],
+                            "Finalizado em": [_status.get('ended_at') or '—'],
+                        })
+
+                        st.session_state['_transcricao_batch_status_cache'] = {
+                            'id': _batch_input.strip(),
+                            'proc_status': _proc,
+                        }
+
+        with _col_b2:
+            _cache = st.session_state.get('_transcricao_batch_status_cache', {})
+            _coleta_ok = (
+                _cache.get('id') == _batch_input.strip()
+                and _cache.get('proc_status') == 'ended'
+            )
+            if st.button(
+                "💾 Coletar e Salvar Resultados",
+                key="btn_transcricao_coletar_batch",
+                use_container_width=True,
+                disabled=not _coleta_ok,
+                help="Disponível após consultar e confirmar que o batch está finalizado (ended)",
+            ):
+                _ia2 = TranscricaoAnalyzer()
+                with st.spinner("Coletando resultados do batch..."):
+                    _resultados = _ia2.coletar_resultados_batch(_batch_input.strip())
+
+                if not _resultados:
+                    st.warning("Nenhum resultado retornado ou batch ainda não finalizado.")
+                else:
+                    _sucesso, _erros = 0, []
+                    for _res in _resultados:
+                        _tid_raw = _res.get('transcricao_id', '')
+                        try:
+                            _tid = int(_tid_raw)
+                        except (ValueError, TypeError):
+                            _erros.append(f"ID inválido: {_tid_raw}")
+                            continue
+                        if _res.get('erro'):
+                            _erros.append(f"{_tid}: {_res['erro']}")
+                            continue
+                        _ok_save, _msg_save = atualizar_avaliacao_transcricao(
+                            transcricao_id=_tid,
+                            insight_ia=_res.get('avaliacao_completa'),
+                            evaluation_ia=_res.get('nota_vendedor'),
+                            vendedor_disclaimer=_res.get('vendedor_disclaimer'),
+                            lead_disclaimer=_res.get('lead_disclaimer'),
+                        )
+                        if _ok_save:
+                            _sucesso += 1
+                        else:
+                            _erros.append(f"{_tid}: {_msg_save}")
+
+                    st.success(f"🎉 {_sucesso}/{len(_resultados)} avaliações salvas.")
+                    if _sucesso:
+                        st.cache_data.clear()
+                    if _erros:
+                        with st.expander(f"⚠️ {len(_erros)} erros"):
+                            for _e in _erros:
+                                st.caption(_e)

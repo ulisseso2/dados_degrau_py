@@ -15,6 +15,8 @@ def atualizar_avaliacao_transcricao(
     duration: Optional[str] = None,
     phone: Optional[str] = None,
     type_: Optional[str] = None,
+    vendedor_disclaimer: Optional[str] = None,
+    lead_disclaimer: Optional[str] = None,
 ) -> Tuple[bool, Optional[str]]:
     if not transcricao_id:
         return False, "transcricao_id ausente"
@@ -54,7 +56,13 @@ def atualizar_avaliacao_transcricao(
         avaliacao_lead = data.get('avaliacao_lead', {}) or {}
         extracao = data.get('extracao', {}) or {}
         recomendacao = data.get('recomendacao_final', {}) or {}
-        produto_principal = (recomendacao.get('produto_principal', {}) or {}).get('produto')
+        _produto_raw = recomendacao.get('produto_principal')
+        if isinstance(_produto_raw, dict):
+            produto_principal = _produto_raw.get('produto')
+        elif isinstance(_produto_raw, str) and _produto_raw:
+            produto_principal = _produto_raw
+        else:
+            produto_principal = None
 
         strengths_raw = avaliacao_vendedor.get('pontos_fortes', [])
         improvements_raw = avaliacao_vendedor.get('melhorias', [])
@@ -117,7 +125,9 @@ def atualizar_avaliacao_transcricao(
             main_pain_points,
             restrictions,
             contest_area,
-            main_product
+            main_product,
+            vendedor_disclaimer,
+            lead_disclaimer
         ) VALUES (
             :transcricao_id,
             :uuid,
@@ -133,7 +143,9 @@ def atualizar_avaliacao_transcricao(
             :main_pain_points,
             :restrictions,
             :contest_area,
-            :main_product
+            :main_product,
+            :vendedor_disclaimer,
+            :lead_disclaimer
         )
         ON DUPLICATE KEY UPDATE
             ai_insight = VALUES(ai_insight),
@@ -147,6 +159,8 @@ def atualizar_avaliacao_transcricao(
             restrictions = VALUES(restrictions),
             contest_area = VALUES(contest_area),
             main_product = VALUES(main_product),
+            vendedor_disclaimer = VALUES(vendedor_disclaimer),
+            lead_disclaimer = VALUES(lead_disclaimer),
             updated_at = CURRENT_TIMESTAMP
         """
     )
@@ -176,6 +190,8 @@ def atualizar_avaliacao_transcricao(
                     "transcricao_id": transcricao_id,
                     "uuid": uuid,
                     **campos,
+                    "vendedor_disclaimer": vendedor_disclaimer,
+                    "lead_disclaimer": lead_disclaimer,
                 },
             )
             conn.execute(

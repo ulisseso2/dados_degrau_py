@@ -19,6 +19,8 @@ SELECT
     c.classification_reason as motivo_triagem,
     c.transcript,
     c.ai_evaluation,
+    c.vendedor_disclaimer,
+    c.lead_disclaimer,
     c.octa_origin,
     c.octa_group,
     c.octa_status,
