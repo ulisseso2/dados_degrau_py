@@ -888,7 +888,7 @@ def run_page():
         st.header("Detalhamento dos Últimos Chats")
 
         if 'octadesk_table_limit' not in st.session_state:
-            st.session_state['octadesk_table_limit'] = 50
+            st.session_state['octadesk_table_limit'] = 100
 
         df_detalhes = df_chats_filtered.copy()
         if 'createdAt' in df_detalhes.columns:
@@ -896,162 +896,169 @@ def run_page():
 
         df_detalhes = df_detalhes.head(st.session_state['octadesk_table_limit'])
 
-        if 'contact.phoneContacts' in df_detalhes.columns:
-            def _extract_phone(phone_contacts):
-                if not isinstance(phone_contacts, list) or not phone_contacts:
-                    return ""
-                phones = []
-                for pc in phone_contacts:
-                    if isinstance(pc, dict) and pc.get('number'):
-                        country = pc.get('countryCode', '')
-                        number = str(pc['number'])
-                        if country:
-                            phones.append(f"+{country}{number}")
-                        else:
-                            phones.append(number)
-                return " / ".join(phones) if phones else ""
-
-            df_detalhes.insert(
-                df_detalhes.columns.get_loc('contact.phoneContacts'),
-                'Telefone Cliente',
-                df_detalhes['contact.phoneContacts'].apply(_extract_phone)
-            )
-
-        df_messages = get_octadesk_messages(api_token, base_url, df_detalhes, max_chats=len(df_detalhes))
-        df_transcricoes = build_chat_transcripts(df_messages, df_detalhes)
-
-        if df_transcricoes is not None and not df_transcricoes.empty:
-            df_detalhes = df_detalhes.merge(
-                df_transcricoes,
-                how='left',
-                left_on='id',
-                right_on='chatId'
-            ).drop(columns=['chatId'], errors='ignore')
-
-        cols_remover = [
-            'assignedToGroupDate',
-            'contact.id',
-            'contact.phoneContacts',
-            'contact.customFields',
-            'contact.organization.name',
-            'group.id',
-            'survey.response',
-            'survey.comment',
-            'botAssignedDate',
-            'assignedToAgentDate',
-            'agent.id',
-            'agent.email',
-            'agent.phoneContacts',
-            'agent.customFilds',
-            'agent.organization.name'
-        ]
-        df_detalhes = df_detalhes.drop(columns=[c for c in cols_remover if c in df_detalhes.columns])
-
-        # --- MATCHING COM OPORTUNIDADES ---
-        def _normalizar_telefone_octa(tel_raw):
-            if not tel_raw or not isinstance(tel_raw, str):
-                return []
-            numeros = []
-            for parte in tel_raw.split('/'):
-                n = ''.join(filter(str.isdigit, parte.strip()))
-                if n.startswith('55') and len(n) > 11:
-                    n = n[2:]
-                if n:
-                    numeros.append(n)
-            return numeros
-
-        try:
-            df_opor = carregar_dados(SQL_MATCH_OPORTUNIDADES)
-            if df_opor is not None and not df_opor.empty:
-                crm_phone_map = {}
-                for _, r in df_opor.iterrows():
-                    tel = ''.join(filter(str.isdigit, str(r.get('telefone', '') or '')))
-                    if tel:
-                        crm_phone_map.setdefault(tel, []).append(r['oportunidade_id'])
-
-                oportunidade_ids = []
-                for _, row in df_detalhes.iterrows():
-                    octa_number = str(row.get('number', '') or '')
-                    octa_email = str(row.get('contact.email', '') or '').lower().strip()
-                    octa_tel_raw = str(row.get('Telefone Cliente', '') or '')
-
-                    if octa_number:
-                        match = df_opor[df_opor['chat_id'].astype(str) == octa_number]
-                        if not match.empty:
-                            oportunidade_ids.append(match.iloc[0]['oportunidade_id'])
+        # Cache: evita reprocessar ao interagir com checkboxes da tabela
+        _octa_ids = tuple(df_detalhes['id'].tolist()) if 'id' in df_detalhes.columns else tuple(range(len(df_detalhes)))
+        if st.session_state.get('octa_df_key') == _octa_ids and 'octa_df_detalhes' in st.session_state:
+            df_detalhes = st.session_state['octa_df_detalhes']
+        else:
+            if 'contact.phoneContacts' in df_detalhes.columns:
+                def _extract_phone(phone_contacts):
+                    if not isinstance(phone_contacts, list) or not phone_contacts:
+                        return ""
+                    phones = []
+                    for pc in phone_contacts:
+                        if isinstance(pc, dict) and pc.get('number'):
+                            country = pc.get('countryCode', '')
+                            number = str(pc['number'])
+                            if country:
+                                phones.append(f"+{country}{number}")
+                            else:
+                                phones.append(number)
+                    return " / ".join(phones) if phones else ""
+    
+                df_detalhes.insert(
+                    df_detalhes.columns.get_loc('contact.phoneContacts'),
+                    'Telefone Cliente',
+                    df_detalhes['contact.phoneContacts'].apply(_extract_phone)
+                )
+    
+            df_messages = get_octadesk_messages(api_token, base_url, df_detalhes, max_chats=len(df_detalhes))
+            df_transcricoes = build_chat_transcripts(df_messages, df_detalhes)
+    
+            if df_transcricoes is not None and not df_transcricoes.empty:
+                df_detalhes = df_detalhes.merge(
+                    df_transcricoes,
+                    how='left',
+                    left_on='id',
+                    right_on='chatId'
+                ).drop(columns=['chatId'], errors='ignore')
+    
+            cols_remover = [
+                'assignedToGroupDate',
+                'contact.id',
+                'contact.phoneContacts',
+                'contact.customFields',
+                'contact.organization.name',
+                'group.id',
+                'survey.response',
+                'survey.comment',
+                'botAssignedDate',
+                'assignedToAgentDate',
+                'agent.id',
+                'agent.email',
+                'agent.phoneContacts',
+                'agent.customFilds',
+                'agent.organization.name'
+            ]
+            df_detalhes = df_detalhes.drop(columns=[c for c in cols_remover if c in df_detalhes.columns])
+    
+            # --- MATCHING COM OPORTUNIDADES ---
+            def _normalizar_telefone_octa(tel_raw):
+                if not tel_raw or not isinstance(tel_raw, str):
+                    return []
+                numeros = []
+                for parte in tel_raw.split('/'):
+                    n = ''.join(filter(str.isdigit, parte.strip()))
+                    if n.startswith('55') and len(n) > 11:
+                        n = n[2:]
+                    if n:
+                        numeros.append(n)
+                return numeros
+    
+            try:
+                df_opor = carregar_dados(SQL_MATCH_OPORTUNIDADES)
+                if df_opor is not None and not df_opor.empty:
+                    crm_phone_map = {}
+                    for _, r in df_opor.iterrows():
+                        tel = ''.join(filter(str.isdigit, str(r.get('telefone', '') or '')))
+                        if tel:
+                            crm_phone_map.setdefault(tel, []).append(r['oportunidade_id'])
+    
+                    oportunidade_ids = []
+                    for _, row in df_detalhes.iterrows():
+                        octa_number = str(row.get('number', '') or '')
+                        octa_email = str(row.get('contact.email', '') or '').lower().strip()
+                        octa_tel_raw = str(row.get('Telefone Cliente', '') or '')
+    
+                        if octa_number:
+                            match = df_opor[df_opor['chat_id'].astype(str) == octa_number]
+                            if not match.empty:
+                                oportunidade_ids.append(match.iloc[0]['oportunidade_id'])
+                                continue
+    
+                        if octa_email and '@octachat.com' not in octa_email:
+                            match = df_opor[df_opor['email'] == octa_email]
+                            if not match.empty:
+                                com_chat = match[match['chat_id'].notna() & (match['chat_id'] != '')]
+                                oportunidade_ids.append(
+                                    com_chat.iloc[0]['oportunidade_id'] if not com_chat.empty
+                                    else match.iloc[0]['oportunidade_id']
+                                )
+                                continue
+    
+                        fones_locais = _normalizar_telefone_octa(octa_tel_raw)
+                        matched_by_phone = None
+                        for fone in fones_locais:
+                            if fone in crm_phone_map:
+                                matched_by_phone = crm_phone_map[fone][0]
+                                break
+                        if matched_by_phone is not None:
+                            oportunidade_ids.append(matched_by_phone)
                             continue
-
-                    if octa_email and '@octachat.com' not in octa_email:
-                        match = df_opor[df_opor['email'] == octa_email]
-                        if not match.empty:
-                            com_chat = match[match['chat_id'].notna() & (match['chat_id'] != '')]
-                            oportunidade_ids.append(
-                                com_chat.iloc[0]['oportunidade_id'] if not com_chat.empty
-                                else match.iloc[0]['oportunidade_id']
-                            )
-                            continue
-
-                    fones_locais = _normalizar_telefone_octa(octa_tel_raw)
-                    matched_by_phone = None
-                    for fone in fones_locais:
-                        if fone in crm_phone_map:
-                            matched_by_phone = crm_phone_map[fone][0]
-                            break
-                    if matched_by_phone is not None:
-                        oportunidade_ids.append(matched_by_phone)
-                        continue
-
-                    oportunidade_ids.append(None)
-
-                df_detalhes['oportunidade_id'] = oportunidade_ids
-            else:
+    
+                        oportunidade_ids.append(None)
+    
+                    df_detalhes['oportunidade_id'] = oportunidade_ids
+                else:
+                    df_detalhes['oportunidade_id'] = None
+            except Exception as e:
+                st.warning(f"⚠️ Não foi possível buscar oportunidades: {e}")
                 df_detalhes['oportunidade_id'] = None
-        except Exception as e:
-            st.warning(f"⚠️ Não foi possível buscar oportunidades: {e}")
-            df_detalhes['oportunidade_id'] = None
-
-        # ══════════════════════════════════════════════════════════════
-        # MUDANÇA PRINCIPAL: _check_avaliavel agora usa filtro de bot
-        # ══════════════════════════════════════════════════════════════
-        def _check_avaliavel(row):
-            # 1) Agent.name é Bot / Ariel / Octabot
-            agent = str(row.get('agent.name', '')).lower().strip()
-            if agent in ['bot', 'ariel', 'octabot', 'none']:
-                return False, "Atendido apenas por robô"
-                
-            # 2) Whats sem Human Response (campo da Octadesk)
-            origem = str(row.get('conversationOriginLabel', '')).strip()
-            if origem in ['Whats Degrau', 'Whats Central']:
-                human_resp = row.get('bot.firstHumanResponseAt')
-                if human_resp is None or (isinstance(human_resp, (list, tuple)) and len(human_resp) == 0):
-                    return False, "Whats sem resposta humana"
-                try:
-                    if pd.isna(human_resp):
-                        return False, "Whats sem resposta humana"
-                except Exception:
-                    pass
-                if str(human_resp).strip() == '':
-                    return False, "Whats sem resposta humana"
+    
+            # ══════════════════════════════════════════════════════════════
+            # MUDANÇA PRINCIPAL: _check_avaliavel agora usa filtro de bot
+            # ══════════════════════════════════════════════════════════════
+            def _check_avaliavel(row):
+                # 1) Agent.name é Bot / Ariel / Octabot
+                agent = str(row.get('agent.name', '')).lower().strip()
+                if agent in ['bot', 'ariel', 'octabot', 'none']:
+                    return False, "Atendido apenas por robô"
                     
-            # 3) NOVO: Filtrar bot da transcrição e contar interação humana real
-            transcricao = str(row.get('transcricao', '')).strip()
-            if not transcricao:
-                return False, "Sem transcrição"
-
-            filtro = filtrar_mensagens_bot(transcricao)
-            avaliavel, motivo = verificar_avaliabilidade(filtro, agent_name=agent)
-
-            if not avaliavel:
-                return False, motivo
-                
-            return True, f"Apto para IA ({filtro['stats']['chars_humanos']} chars humanos)"
-
-        df_detalhes['Avaliável'], df_detalhes['Motivo Inapto'] = zip(*df_detalhes.apply(_check_avaliavel, axis=1))
-
-        # Reordenar colunas
-        cols_ordered = ['number', 'oportunidade_id', 'Já Avaliado', 'Avaliável', 'Motivo Inapto', 'createdAt', 'status', 'group.name', 'agent.name', 'conversationOriginLabel', 'Telefone Cliente', 'transcricao']
-        cols_ordered_final = [c for c in cols_ordered if c in df_detalhes.columns] + [c for c in df_detalhes.columns if c not in cols_ordered]
-        df_detalhes = df_detalhes[cols_ordered_final]
+                # 2) Whats sem Human Response (campo da Octadesk)
+                origem = str(row.get('conversationOriginLabel', '')).strip()
+                if origem in ['Whats Degrau', 'Whats Central']:
+                    human_resp = row.get('bot.firstHumanResponseAt')
+                    if human_resp is None or (isinstance(human_resp, (list, tuple)) and len(human_resp) == 0):
+                        return False, "Whats sem resposta humana"
+                    try:
+                        if pd.isna(human_resp):
+                            return False, "Whats sem resposta humana"
+                    except Exception:
+                        pass
+                    if str(human_resp).strip() == '':
+                        return False, "Whats sem resposta humana"
+                        
+                # 3) NOVO: Filtrar bot da transcrição e contar interação humana real
+                transcricao = str(row.get('transcricao', '')).strip()
+                if not transcricao:
+                    return False, "Sem transcrição"
+    
+                filtro = filtrar_mensagens_bot(transcricao)
+                avaliavel, motivo = verificar_avaliabilidade(filtro, agent_name=agent)
+    
+                if not avaliavel:
+                    return False, motivo
+                    
+                return True, f"Apto para IA ({filtro['stats']['chars_humanos']} chars humanos)"
+    
+            df_detalhes['Avaliável'], df_detalhes['Motivo Inapto'] = zip(*df_detalhes.apply(_check_avaliavel, axis=1))
+    
+            # Reordenar colunas
+            cols_ordered = ['number', 'oportunidade_id', 'Já Avaliado', 'Avaliável', 'Motivo Inapto', 'createdAt', 'status', 'group.name', 'agent.name', 'conversationOriginLabel', 'Telefone Cliente', 'transcricao']
+            cols_ordered_final = [c for c in cols_ordered if c in df_detalhes.columns] + [c for c in df_detalhes.columns if c not in cols_ordered]
+            df_detalhes = df_detalhes[cols_ordered_final]
+            st.session_state['octa_df_detalhes'] = df_detalhes
+            st.session_state['octa_df_key'] = _octa_ids
         
         # Interface de Seleção
         st.write("### 🤖 Avaliação em Lote via IA")
@@ -1075,8 +1082,18 @@ def run_page():
         elif filtro_avaliacao == "Somente Já Avaliados":
             df_show = df_show[df_show['Já Avaliado'] == True]
 
-        df_show.insert(0, "Selecionar", False)
+        _select_all_flag = st.session_state.get('octa_select_all', False)
+        df_show.insert(0, "Selecionar", _select_all_flag)
         
+        _csel1, _csel2, _ = st.columns([2, 2, 6])
+        with _csel1:
+            if st.button("✅ Selecionar Todos", key="btn_select_all", use_container_width=True):
+                st.session_state['octa_select_all'] = True
+                st.rerun()
+        with _csel2:
+            if st.button("⬜ Desmarcar Todos", key="btn_deselect_all", use_container_width=True):
+                st.session_state['octa_select_all'] = False
+                st.rerun()
         edited_df = st.data_editor(
             df_show, 
             hide_index=True,
@@ -1091,8 +1108,8 @@ def run_page():
 
         col_btn1, col_btn2, col_btn3 = st.columns([2, 5, 3])
         with col_btn1:
-            if st.button("Exibir mais 50", key="btn_exibir_mais_50", use_container_width=True):
-                st.session_state['octadesk_table_limit'] += 50
+            if st.button("Exibir mais 100", key="btn_exibir_mais_100", use_container_width=True):
+                st.session_state['octadesk_table_limit'] += 100
                 st.rerun()
 
         with col_btn2:

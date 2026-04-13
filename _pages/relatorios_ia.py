@@ -347,11 +347,12 @@ def init_facebook_api_central():
     """Inicializa a API do Facebook para a conta Central de Concursos."""
     return init_facebook_api(secrets_key="facebook_api_central", env_suffix="_CENTRAL")
 
+
 def get_facebook_data(account, start_date, end_date):
     """Busca dados do Meta Ads com métricas completas.
     - Cliques = inline_link_clicks (cliques no link, não cliques totais)
     - CTR/CPC baseados em inline_link_clicks
-    - Leads primários = lead_presencial + lead_live (eventos customizados)
+    - Leads primários = lead_presencial + lead_live (Custom Conversions)
     """
     try:
         fields = [
@@ -368,20 +369,29 @@ def get_facebook_data(account, start_date, end_date):
             'cost_per_inline_link_click',
             AdsInsights.Field.actions,
             AdsInsights.Field.cost_per_action_type,
+            # Conversions traz eventos pixel por nome (lead_presencial, lead_live, lead_online)
+            'conversions',
         ]
         params = {
             'level': 'campaign',
             'time_range': {'since': start_date, 'until': end_date},
+            # Usa a configuração de atribuição da conta (igual ao Gerenciador de Anúncios)
+            'use_account_attribution_setting': True,
         }
         insights = account.get_insights(fields=fields, params=params)
+
         rows = []
 
-        # Eventos de lead primário (presencial + live)
-        LEAD_PRIMARIO_ACTIONS = {'lead_presencial', 'lead_live'}
-        # Eventos de venda para campanhas de e-commerce
+        # Eventos de venda para campanhas de e-commerce (do campo actions)
         VENDA_ACTIONS = {
             'purchase', 'omni_purchase',
             'offsite_conversion.fb_pixel_purchase',
+        }
+        # Nomes dos eventos pixel de lead (do campo conversions)
+        LEAD_EVENTS = {
+            'offsite_conversion.fb_pixel_custom.lead_presencial': 'lead_presencial',
+            'offsite_conversion.fb_pixel_custom.lead_live': 'lead_live',
+            'offsite_conversion.fb_pixel_custom.lead_online': 'lead_online',
         }
 
         for insight in insights:
@@ -392,20 +402,29 @@ def get_facebook_data(account, start_date, end_date):
             ctr_link = float(insight.get('inline_link_click_ctr', 0))
             cpc_link = float(insight.get('cost_per_inline_link_click', 0))
 
-            # Leads primários: Lead_Presencial + Lead_Live
+            # Leads primários via campo 'conversions' (eventos pixel por nome)
             lead_presencial = 0
             lead_live = 0
-            vendas = 0
+            lead_online = 0
+            conversions = insight.get('conversions', [])
+            for conv in conversions:
+                atype = conv.get('action_type', '')
+                val = int(conv.get('value', 0))
+                target = LEAD_EVENTS.get(atype)
+                if target == 'lead_presencial':
+                    lead_presencial = val
+                elif target == 'lead_live':
+                    lead_live = val
+                elif target == 'lead_online':
+                    lead_online = val
 
+            # Vendas via campo 'actions'
+            vendas = 0
             actions = insight.get(AdsInsights.Field.actions, [])
             for action in actions:
                 atype = action.get('action_type', '')
                 val = int(action.get('value', 0))
-                if atype == 'lead_presencial':
-                    lead_presencial += val
-                elif atype == 'lead_live':
-                    lead_live += val
-                elif atype in VENDA_ACTIONS:
+                if atype in VENDA_ACTIONS:
                     vendas += val
 
             leads_primarios = lead_presencial + lead_live
@@ -430,6 +449,7 @@ def get_facebook_data(account, start_date, end_date):
                 'CPC Link': round(cpc_link, 2),
                 'lead_presencial': lead_presencial,
                 'lead_live': lead_live,
+                'lead_online': lead_online,
                 'Resultado Presencial + Live': leads_primarios,
                 'CPL Primário': round(cpl_primario, 2),
                 'Vendas': vendas,
@@ -488,15 +508,16 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
                 freq = r.get('Frequência', 0)
                 lead_p = r.get('lead_presencial', 0)
                 lead_l = r.get('lead_live', 0)
+                lead_o = r.get('lead_online', 0)
                 leads = r.get('Resultado Presencial + Live', 0)
                 cpl = r.get('CPL Primário', 0)
                 vendas = r.get('Vendas', 0)
 
                 bloco.append(f"  Cliques no link: {cliques:,} | CTR link: {ctr:.2f}% | CPC link: R${cpc:.2f} | CPM: R${cpm:.2f}")
                 bloco.append(f"  Alcance: {alcance:,} | Frequência: {freq:.1f}")
-                if leads > 0 or lead_p > 0 or lead_l > 0:
+                if leads > 0 or lead_p > 0 or lead_l > 0 or lead_o > 0:
                     aviso = " ⚠️ <30, dados insuficientes" if leads < 30 else ""
-                    bloco.append(f"  lead_presencial: {lead_p} | lead_live: {lead_l} | Resultado Presencial + Live: {leads} | CPL Primário: R${cpl:.2f}{aviso}")
+                    bloco.append(f"  lead_presencial: {lead_p} | lead_live: {lead_l} | lead_online: {lead_o} | Resultado Presencial + Live: {leads} | CPL Primário: R${cpl:.2f}{aviso}")
                 if vendas > 0:
                     bloco.append(f"  Vendas: {vendas}")
             else:
@@ -1440,8 +1461,25 @@ def run_page():
 
         st.info(f"📅 **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}** ({janela_dias} dias)")
 
-        if st.button("🚀 Gerar Análise Completa", type="primary", use_container_width=True, key="btn_ads"):
-            _executar_analise(contas, start_date, end_date, janela_dias, SYSTEM_PROMPT_ADS_V2, "completo_ads")
+        col_btn_ads1, col_btn_ads2 = st.columns(2)
+        with col_btn_ads1:
+            if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_ads_buscar"):
+                _coletar_dados(contas, start_date, end_date, janela_dias, "ads_dados")
+        with col_btn_ads2:
+            dados_ads_prontos = "ads_dados" in st.session_state
+            if st.button(
+                "🤖 Analisar com IA",
+                use_container_width=True,
+                key="btn_ads_ia",
+                disabled=not dados_ads_prontos,
+            ):
+                _enviar_para_ia("ads_dados", SYSTEM_PROMPT_ADS_V2, "completo_ads")
+
+        if "ads_dados" in st.session_state:
+            info = st.session_state["ads_dados"]
+            st.info(f"📦 Dados prontos: **{info['data_ref']}** — clique em 'Analisar com IA' quando estiver pronto.")
+            with st.expander("📋 Ver dados coletados"):
+                st.code(info["dados_consolidados"], language="text")
 
     # =========================================================
     # ABA 2: ALERTA DIÁRIO
@@ -1455,8 +1493,25 @@ def run_page():
 
         st.info(f"📅 Verificando dados de ontem: **{start_alerta.strftime('%d/%m/%Y')}**")
 
-        if st.button("🔍 Verificar Anomalias", type="primary", use_container_width=True, key="btn_alerta"):
-            _executar_analise(contas, start_alerta, end_alerta, 1, SYSTEM_PROMPT_ALERTA_DIARIO, "alerta")
+        col_btn_al1, col_btn_al2 = st.columns(2)
+        with col_btn_al1:
+            if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_alerta_buscar"):
+                _coletar_dados(contas, start_alerta, end_alerta, 1, "alerta_dados")
+        with col_btn_al2:
+            dados_alerta_prontos = "alerta_dados" in st.session_state
+            if st.button(
+                "🚨 Analisar com IA",
+                use_container_width=True,
+                key="btn_alerta_ia",
+                disabled=not dados_alerta_prontos,
+            ):
+                _enviar_para_ia("alerta_dados", SYSTEM_PROMPT_ALERTA_DIARIO, "alerta")
+
+        if "alerta_dados" in st.session_state:
+            info = st.session_state["alerta_dados"]
+            st.info(f"📦 Dados prontos: **{info['data_ref']}** — clique em 'Analisar com IA' quando estiver pronto.")
+            with st.expander("📋 Ver dados coletados"):
+                st.code(info["dados_consolidados"], language="text")
 
     # =========================================================
     # ABA 3: HISTÓRICO
@@ -1647,3 +1702,123 @@ def _mostrar_distribuicao_objetivos(df_gd, df_gc, df_fb, df_fbc=None):
                 f"{int(row['Campanhas'])} camp.",
                 f"R$ {row['Custo']:,.0f}".replace(",", ".")
             )
+
+
+def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
+    """Coleta dados das APIs, exibe métricas e salva no session_state para análise posterior."""
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+    data_ref = start_str if start_str == end_str else f"{start_str}_a_{end_str}"
+
+    df_google_degrau = pd.DataFrame()
+    df_google_central = pd.DataFrame()
+    df_facebook = pd.DataFrame()
+    df_facebook_central = pd.DataFrame()
+
+    if "Google Ads (Degrau)" in contas:
+        with st.spinner("🔄 Buscando Google Ads (Degrau)..."):
+            client_degrau = init_google_ads_client("google-ads.yaml")
+            if client_degrau:
+                try:
+                    customer_id = str(st.secrets["google_ads"]["customer_id"])
+                except Exception:
+                    customer_id = "4934481887"
+                df_google_degrau = get_google_ads_data(client_degrau, customer_id, start_str, end_str)
+            else:
+                st.warning("⚠️ Não foi possível conectar ao Google Ads (Degrau)")
+
+    if "Google Ads (Central)" in contas:
+        with st.spinner("🔄 Buscando Google Ads (Central)..."):
+            client_central = init_google_ads_client_central()
+            if client_central:
+                try:
+                    customer_id_c = str(st.secrets["google_ads_central"]["customer_id"])
+                except Exception:
+                    customer_id_c = "1646681121"
+                df_google_central = get_google_ads_data(client_central, customer_id_c, start_str, end_str)
+            else:
+                st.warning("⚠️ Não foi possível conectar ao Google Ads (Central)")
+
+    if "Meta Ads (Degrau)" in contas:
+        with st.spinner("🔄 Buscando Meta Ads (Degrau)..."):
+            fb_account = init_facebook_api()
+            if fb_account:
+                df_facebook = get_facebook_data(fb_account, start_str, end_str)
+            else:
+                st.warning("⚠️ Não foi possível conectar ao Meta Ads (Degrau)")
+
+    if "Meta Ads (Central)" in contas:
+        with st.spinner("🔄 Buscando Meta Ads (Central)..."):
+            fb_account_central = init_facebook_api_central()
+            if fb_account_central:
+                df_facebook_central = get_facebook_data(fb_account_central, start_str, end_str)
+            else:
+                st.warning("⚠️ Não foi possível conectar ao Meta Ads (Central)")
+
+    if df_google_degrau.empty and df_google_central.empty and df_facebook.empty and df_facebook_central.empty:
+        st.error("❌ Nenhum dado coletado. Verifique as credenciais e o período.")
+        return
+
+    st.subheader("📊 Dados Coletados")
+    col1, col2, col3, col4 = st.columns(4)
+    custo_gd = df_google_degrau['Custo'].sum() if not df_google_degrau.empty else 0
+    custo_gc = df_google_central['Custo'].sum() if not df_google_central.empty else 0
+    custo_fb = df_facebook['Custo'].sum() if not df_facebook.empty else 0
+    custo_fbc = df_facebook_central['Custo'].sum() if not df_facebook_central.empty else 0
+    col1.metric("Google Degrau", formatar_reais(custo_gd))
+    col2.metric("Google Central", formatar_reais(custo_gc))
+    col3.metric("Meta Degrau", formatar_reais(custo_fb))
+    col4.metric("Meta Central", formatar_reais(custo_fbc))
+    st.metric("💰 Total Investido", formatar_reais(custo_gd + custo_gc + custo_fb + custo_fbc))
+
+    _mostrar_distribuicao_objetivos(df_google_degrau, df_google_central, df_facebook, df_facebook_central)
+
+    dados_consolidados = formatar_dados_para_claude(
+        df_google_degrau, df_google_central, df_facebook, janela_dias,
+        df_facebook_central=df_facebook_central,
+        start_date=start_date, end_date=end_date
+    )
+
+    st.session_state[session_key] = {
+        "dados_consolidados": dados_consolidados,
+        "data_ref": data_ref,
+    }
+    st.success("✅ Dados coletados! Revise abaixo e clique em 'Analisar com IA' quando estiver pronto.")
+    with st.expander("📋 Ver dados que serão enviados à IA", expanded=True):
+        st.code(dados_consolidados, language="text")
+
+
+def _enviar_para_ia(session_key, system_prompt, tipo):
+    """Lê os dados do session_state, envia ao Claude e exibe a análise."""
+    if session_key not in st.session_state:
+        st.warning("⚠️ Nenhum dado encontrado. Clique em 'Buscar Dados' primeiro.")
+        return
+
+    dados = st.session_state[session_key]
+    dados_consolidados = dados["dados_consolidados"]
+    data_ref = dados["data_ref"]
+
+    with st.spinner("🤖 Analisando com Claude..."):
+        analise = analisar_com_claude(dados_consolidados, system_prompt, tipo)
+
+    icone = "🚨" if tipo == "alerta" else "🤖"
+    st.subheader(f"{icone} Análise do Claude")
+    st.markdown(analise)
+
+    filepath = salvar_relatorio(analise, dados_consolidados, data_ref, tipo)
+    if filepath == "db":
+        st.success("✅ Relatório salvo no banco de dados!")
+    else:
+        st.success("✅ Relatório salvo localmente!")
+
+    pdf_bytes = gerar_pdf_relatorio(analise, dados_consolidados, data_ref, tipo)
+    st.download_button(
+        label="📥 Exportar para PDF",
+        data=pdf_bytes,
+        file_name=f"relatorio_{tipo}_{data_ref}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        key=f"btn_pdf_{tipo}_{data_ref}",
+    )
+    with st.expander("📋 Ver dados brutos enviados ao Claude"):
+        st.code(dados_consolidados, language="text")
