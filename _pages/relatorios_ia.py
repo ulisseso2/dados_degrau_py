@@ -177,9 +177,42 @@ OBJETIVO_MAP_META = {
 OBJETIVO_MAP_GOOGLE = {
     "SEARCH": "LEADS",
     "PERFORMANCE_MAX": "LEADS",
+    "MULTI_CHANNEL": "LEADS",   # Performance Max no enum da API
     "DISPLAY": "AWARENESS",
     "VIDEO": "VIDEO",
 }
+
+# ---- Lookup dicts para resolver enums numéricos da API ----
+_CHANNEL_TYPE_MAP = {
+    2: "SEARCH", 3: "DISPLAY", 4: "SHOPPING", 5: "HOTEL",
+    6: "VIDEO", 7: "MULTI_CHANNEL", 9: "DISCOVERY",
+}
+_STATUS_MAP = {
+    2: "ENABLED", 3: "PAUSED", 4: "REMOVED",
+}
+_BIDDING_MAP = {
+    2: "ENHANCED_CPC", 5: "MANUAL_CPC", 6: "MANUAL_CPM", 7: "MANUAL_CPV",
+    8: "MAXIMIZE_CONVERSIONS", 9: "MAXIMIZE_CONVERSION_VALUE",
+    12: "TARGET_CPA", 13: "TARGET_CPM", 14: "TARGET_IMPRESSION_SHARE",
+    16: "TARGET_ROAS", 17: "TARGET_SPEND",
+}
+_SUB_TYPE_MAP = {
+    10: "VIDEO_OUTSTREAM", 11: "VIDEO_ACTION", 12: "VIDEO_NON_SKIPPABLE",
+    18: "VIDEO_SEQUENCE", 20: "VIDEO_REACH_TARGET_FREQUENCY",
+}
+
+def _resolve_enum(val, lookup=None):
+    """Resolve enum da Google Ads API para string. 
+    Funciona com proto-plus (que retorna int ou enum com .name) e com enums numéricos."""
+    if hasattr(val, 'name'):
+        return val.name
+    name = str(val).split(".")[-1]
+    if lookup:
+        try:
+            return lookup.get(int(name), name)
+        except (ValueError, TypeError):
+            pass
+    return name
 
 def classificar_por_nome(nome_campanha):
     """Fallback: classifica objetivo pela convenção de nomenclatura."""
@@ -250,7 +283,10 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 campaign.id,
                 campaign.status,
                 campaign.advertising_channel_type,
+                campaign.advertising_channel_sub_type,
+                campaign.bidding_strategy_type,
                 campaign.target_cpa.target_cpa_micros,
+                campaign.maximize_conversions.target_cpa_micros,
                 metrics.cost_micros,
                 metrics.impressions,
                 metrics.clicks,
@@ -267,7 +303,14 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 metrics.video_views,
                 metrics.average_cpv,
                 metrics.engagements,
-                metrics.engagement_rate
+                metrics.engagement_rate,
+                metrics.interaction_rate,
+                metrics.unique_users,
+                metrics.average_impression_frequency_per_user,
+                metrics.video_quartile_p25_rate,
+                metrics.video_quartile_p50_rate,
+                metrics.video_quartile_p75_rate,
+                metrics.video_quartile_p100_rate
             FROM campaign
             WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
                 AND metrics.cost_micros > 0
@@ -281,25 +324,59 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
             cpm = row.metrics.average_cpm / 1_000_000 if row.metrics.average_cpm else 0
             cpa = row.metrics.cost_per_conversion / 1_000_000 if row.metrics.cost_per_conversion else 0
             cpv = row.metrics.average_cpv / 1_000_000 if row.metrics.average_cpv else 0
-            tcpa = row.campaign.target_cpa.target_cpa_micros / 1_000_000 if row.campaign.target_cpa.target_cpa_micros else 0
+
+            # tCPA: verifica TARGET_CPA e MAXIMIZE_CONVERSIONS (com CPA-alvo)
+            tcpa_target = row.campaign.target_cpa.target_cpa_micros / 1_000_000 if row.campaign.target_cpa.target_cpa_micros else 0
+            tcpa_maxconv = row.campaign.maximize_conversions.target_cpa_micros / 1_000_000 if row.campaign.maximize_conversions.target_cpa_micros else 0
+            tcpa = tcpa_target or tcpa_maxconv
 
             # Parcelas de impressão (None quando não aplicável, ex: PMax/YouTube)
             imp_lost_budget = row.metrics.search_budget_lost_impression_share
             imp_lost_rank = row.metrics.search_rank_lost_impression_share
 
-            channel_type = str(row.campaign.advertising_channel_type).split(".")[-1]
+            # Resolve enums para nomes legíveis (API pode retornar inteiros ou proto-plus enums)
+            channel_type = _resolve_enum(row.campaign.advertising_channel_type, _CHANNEL_TYPE_MAP)
+            status = _resolve_enum(row.campaign.status, _STATUS_MAP)
+            sub_type_raw = _resolve_enum(row.campaign.advertising_channel_sub_type, _SUB_TYPE_MAP)
+            bidding_type = _resolve_enum(row.campaign.bidding_strategy_type, _BIDDING_MAP)
+
             objetivo_api = OBJETIVO_MAP_GOOGLE.get(channel_type)
             objetivo = objetivo_api if objetivo_api else classificar_por_nome(row.campaign.name)
 
-            status = str(row.campaign.status).split(".")[-1]
+            # Rec/Cons para YouTube — baseado em sub_type e estratégia de lance
+            _REC = {"VIDEO_NON_SKIPPABLE", "VIDEO_OUTSTREAM", "VIDEO_REACH_TARGET_FREQUENCY"}
+            _ACT = {"VIDEO_ACTION"}
+            if sub_type_raw in _REC or bidding_type in {"TARGET_CPM", "MANUAL_CPM"}:
+                rec_cons = "Reconhecimento"
+            elif sub_type_raw in _ACT or bidding_type == "MAXIMIZE_CONVERSIONS":
+                rec_cons = "Ação/Conversão"
+            elif channel_type == "VIDEO":
+                rec_cons = "Consideração"  # TrueView / VVC (sub_type UNSPECIFIED + MANUAL_CPV)
+            else:
+                rec_cons = "-"
+
+            # Métricas exclusivas de YouTube
+            unique_users = row.metrics.unique_users if row.metrics.unique_users else 0
+            avg_freq = row.metrics.average_impression_frequency_per_user if row.metrics.average_impression_frequency_per_user else 0
+            interaction_rate = round(row.metrics.interaction_rate * 100, 2) if row.metrics.interaction_rate else 0
+
+            q25 = round(row.metrics.video_quartile_p25_rate * 100, 1) if row.metrics.video_quartile_p25_rate else 0
+            q50 = round(row.metrics.video_quartile_p50_rate * 100, 1) if row.metrics.video_quartile_p50_rate else 0
+            q75 = round(row.metrics.video_quartile_p75_rate * 100, 1) if row.metrics.video_quartile_p75_rate else 0
+            q100 = round(row.metrics.video_quartile_p100_rate * 100, 1) if row.metrics.video_quartile_p100_rate else 0
 
             rows.append({
                 'Campanha': row.campaign.name,
                 'Status': status,
                 'Objetivo': objetivo,
                 'Canal': channel_type,
+                'Subtipo': sub_type_raw,
+                'Rec/Cons': rec_cons,
+                'Tipo Lance': bidding_type,
                 'Custo': round(custo, 2),
                 'Impressões': row.metrics.impressions,
+                'Usuários Exclusivos': int(unique_users),
+                'Freq Méd Imp/Usuário': round(avg_freq, 2),
                 'Cliques': row.metrics.clicks,
                 'CTR (%)': round(row.metrics.ctr * 100, 2),
                 'CPC': round(cpc, 2),
@@ -312,9 +389,14 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 'Imp Lost Rank (%)': round(imp_lost_rank * 100, 1) if imp_lost_rank else None,
                 'Video Views': row.metrics.video_views,
                 'Video View Rate (%)': round(row.metrics.video_view_rate * 100, 2) if row.metrics.video_view_rate else 0,
+                'Taxa de Interação (%)': interaction_rate,
                 'CPV': round(cpv, 4),
                 'Engajamentos': row.metrics.engagements,
                 'Engagement Rate (%)': round(row.metrics.engagement_rate * 100, 2) if row.metrics.engagement_rate else 0,
+                '% Assistido 25': q25,
+                '% Assistido 50': q50,
+                '% Assistido 75': q75,
+                '% Assistido 100': q100,
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -539,22 +621,36 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
                 engajamentos = r.get('Engajamentos', 0)
                 eng_rate = r.get('Engagement Rate (%)', 0)
 
-                bloco.append(f"  Canal: {canal} | Cliques: {cliques:,} | CTR: {ctr:.2f}% | CPC: R${cpc:.2f} | CPM: R${cpm:.2f}")
-                bloco.append(f"  Conversões: {conv} | CPA: R${cpa:.2f}" + (f" | tCPA configurado: R${tcpa:.2f}" if tcpa > 0 else "") + f" | Taxa conv: {taxa_conv:.2f}%")
-
-                # Parcelas de impressão (Search e PMax)
-                if imp_budget is not None or imp_rank is not None:
-                    ib = f"{imp_budget:.1f}%" if imp_budget is not None else "N/A"
-                    ir = f"{imp_rank:.1f}%" if imp_rank is not None else "N/A"
-                    bloco.append(f"  Parc impr perd (orç): {ib} | Parc impr perd (class): {ir}")
-
-                # Métricas YouTube — apenas para campanhas de canal VIDEO
                 if canal == "VIDEO":
-                    bloco.append(f"  Video Views: {video_views:,} | View Rate: {view_rate:.2f}% | CPV: R${cpv:.4f}")
-                    bloco.append(f"  Engajamentos: {engajamentos:,} | Engagement Rate: {eng_rate:.2f}%")
+                    # ── YouTube: apenas métricas de vídeo, sem Conversões/CPA/Parcelas ──
+                    rec_cons = r.get('Rec/Cons', '-')
+                    tipo_lance = r.get('Tipo Lance', '-')
+                    unique_users = r.get('Usuários Exclusivos', 0)
+                    avg_freq = r.get('Freq Méd Imp/Usuário', 0)
+                    q25 = r.get('% Assistido 25', 0)
+                    q50 = r.get('% Assistido 50', 0)
+                    q75 = r.get('% Assistido 75', 0)
+                    q100 = r.get('% Assistido 100', 0)
+                    taxa_interacao = r.get('Taxa de Interação (%)', 0)
+                    bloco.append(f"  Tipo: {rec_cons} | Estratégia de Lance: {tipo_lance}")
+                    bloco.append(f"  Custo: R${r['Custo']:.2f} | Impressões: {r['Impressões']:,} | CPM: R${cpm:.2f} | CPC: R${cpc:.2f} | CPV: R${cpv:.4f}")
+                    bloco.append(f"  Usuários Exclusivos: {unique_users:,} | Freq. Méd. Imp./Usuário: {avg_freq:.2f}")
+                    bloco.append(f"  Video Views: {video_views:,} | View Rate: {view_rate:.2f}%")
+                    bloco.append(f"  % Assistido: 25%={q25:.1f}% | 50%={q50:.1f}% | 75%={q75:.1f}% | 100%={q100:.1f}%")
+                    bloco.append(f"  Taxa de Interação: {taxa_interacao:.2f}% | Engajamentos: {engajamentos:,}")
+                else:
+                    # ── Search, PMax, Display: métricas de conversão e parcelas ──
+                    tcpa_str = f"R${tcpa:.2f}" if tcpa > 0 else "não configurado"
+                    bloco.append(f"  Canal: {canal} | Cliques: {cliques:,} | CTR: {ctr:.2f}% | CPC: R${cpc:.2f} | CPM: R${cpm:.2f}")
+                    bloco.append(f"  Conversões: {conv} | CPA: R${cpa:.2f} | CPA Desejado: {tcpa_str} | Taxa conv: {taxa_conv:.2f}%")
 
-                if conv > 0 and conv < 30:
-                    bloco.append(f"  ⚠️ <30 conversões — CPA não é estatisticamente confiável")
+                    if imp_budget is not None or imp_rank is not None:
+                        ib = f"{imp_budget:.1f}%" if imp_budget is not None else "N/A"
+                        ir = f"{imp_rank:.1f}%" if imp_rank is not None else "N/A"
+                        bloco.append(f"  Parc impr perd (orç): {ib} | Parc impr perd (class): {ir}")
+
+                    if conv > 0 and conv < 30:
+                        bloco.append(f"  ⚠️ <30 conversões — CPA não é estatisticamente confiável")
 
             bloco.append("")
         return bloco
@@ -1631,6 +1727,13 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     # Mostra distribuição por objetivo
     _mostrar_distribuicao_objetivos(df_google_degrau, df_google_central, df_facebook, df_facebook_central)
 
+    # Tabelas detalhadas por conta Google Ads
+    with st.expander("📋 Ver campanhas Google Ads por conta", expanded=False):
+        if not df_google_degrau.empty:
+            _mostrar_tabelas_google_ads(df_google_degrau, "Google Ads — Degrau")
+        if not df_google_central.empty:
+            _mostrar_tabelas_google_ads(df_google_central, "Google Ads — Central")
+
     # Formata e envia
     dados_consolidados = formatar_dados_para_claude(
         df_google_degrau, df_google_central, df_facebook, janela_dias,
@@ -1704,6 +1807,84 @@ def _mostrar_distribuicao_objetivos(df_gd, df_gc, df_fb, df_fbc=None):
             )
 
 
+def _mostrar_tabelas_google_ads(df_google, label):
+    """Exibe tabelas separadas para campanhas YouTube e demais campanhas do Google Ads."""
+    if df_google is None or df_google.empty:
+        return
+
+    df_video = df_google[df_google['Canal'] == 'VIDEO'].copy()
+    df_outros = df_google[df_google['Canal'] != 'VIDEO'].copy()
+
+    # ── CAMPANHAS YOUTUBE ────────────────────────────────────────────────────
+    if not df_video.empty:
+        st.markdown(f"##### 📺 Campanhas YouTube — {label}")
+        colunas_yt = [
+            'Campanha', 'Status', 'Rec/Cons', 'Tipo Lance',
+            'Custo', 'Impressões', 'Usuários Exclusivos', 'Freq Méd Imp/Usuário',
+            'CPM', 'CPC', 'CPV',
+            'Video Views', 'Video View Rate (%)',
+            '% Assistido 25', '% Assistido 50', '% Assistido 75', '% Assistido 100',
+            'Taxa de Interação (%)', 'Engajamentos',
+        ]
+        colunas_yt = [c for c in colunas_yt if c in df_video.columns]
+        df_yt_display = df_video[colunas_yt].copy()
+
+        # Formata colunas monetárias
+        for col in ['Custo', 'CPM', 'CPC', 'CPV']:
+            if col in df_yt_display.columns:
+                df_yt_display[col] = df_yt_display[col].apply(
+                    lambda v: f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    if col == 'CPV' and pd.notna(v) else (
+                        f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        if pd.notna(v) and v > 0 else "-"
+                    )
+                )
+        # Formata percentuais
+        for col in ['Video View Rate (%)', '% Assistido 25', '% Assistido 50',
+                    '% Assistido 75', '% Assistido 100', 'Taxa de Interação (%)']:
+            if col in df_yt_display.columns:
+                df_yt_display[col] = df_yt_display[col].apply(
+                    lambda v: f"{v:.2f}%" if pd.notna(v) else "-"
+                )
+        for col in ['Freq Méd Imp/Usuário']:
+            if col in df_yt_display.columns:
+                df_yt_display[col] = df_yt_display[col].apply(
+                    lambda v: f"{v:.2f}" if pd.notna(v) and v > 0 else "-"
+                )
+        st.dataframe(df_yt_display, use_container_width=True, hide_index=True)
+
+    # ── DEMAIS CAMPANHAS (Search, PMax, Display) ─────────────────────────────
+    if not df_outros.empty:
+        st.markdown(f"##### 🔍 Demais Campanhas — {label}")
+        colunas_std = [
+            'Campanha', 'Status', 'Canal', 'Tipo Lance',
+            'Custo', 'Impressões', 'Cliques', 'CTR (%)',
+            'CPC', 'CPM', 'Conversões', 'CPA', 'tCPA',
+            'Taxa Conv (%)', 'Imp Lost Budget (%)', 'Imp Lost Rank (%)',
+        ]
+        colunas_std = [c for c in colunas_std if c in df_outros.columns]
+        df_std_display = df_outros[colunas_std].copy()
+        df_std_display.rename(columns={'tCPA': 'CPA Desejado (Lead)'}, inplace=True)
+
+        for col in ['Custo', 'CPC', 'CPM', 'CPA', 'CPA Desejado (Lead)']:
+            if col in df_std_display.columns:
+                df_std_display[col] = df_std_display[col].apply(
+                    lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    if pd.notna(v) and v > 0 else "-"
+                )
+        for col in ['CTR (%)', 'Taxa Conv (%)']:
+            if col in df_std_display.columns:
+                df_std_display[col] = df_std_display[col].apply(
+                    lambda v: f"{v:.2f}%" if pd.notna(v) else "-"
+                )
+        for col in ['Imp Lost Budget (%)', 'Imp Lost Rank (%)']:
+            if col in df_std_display.columns:
+                df_std_display[col] = df_std_display[col].apply(
+                    lambda v: f"{v:.1f}%" if pd.notna(v) else "-"
+                )
+        st.dataframe(df_std_display, use_container_width=True, hide_index=True)
+
+
 def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
     """Coleta dados das APIs, exibe métricas e salva no session_state para análise posterior."""
     start_str = start_date.strftime('%Y-%m-%d')
@@ -1772,6 +1953,13 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
     st.metric("💰 Total Investido", formatar_reais(custo_gd + custo_gc + custo_fb + custo_fbc))
 
     _mostrar_distribuicao_objetivos(df_google_degrau, df_google_central, df_facebook, df_facebook_central)
+
+    # Tabelas detalhadas por conta Google Ads
+    with st.expander("📋 Ver campanhas Google Ads por conta", expanded=False):
+        if not df_google_degrau.empty:
+            _mostrar_tabelas_google_ads(df_google_degrau, "Google Ads — Degrau")
+        if not df_google_central.empty:
+            _mostrar_tabelas_google_ads(df_google_central, "Google Ads — Central")
 
     dados_consolidados = formatar_dados_para_claude(
         df_google_degrau, df_google_central, df_facebook, janela_dias,
