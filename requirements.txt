@@ -3,9 +3,10 @@ streamlit==1.46.1
 streamlit-aggrid==1.1.6
 
 # Manipulação e Visualização de Dados
-pandas==2.3.1
+pandas==2.2.3
 numpy==2.3.1
 plotly==6.2.0
+openpyxl==3.1.5
 
 # Conexão com Banco de Dados
 SQLAlchemy==2.0.41
@@ -18,43 +19,45 @@ google-ads==27.0.0
 google-auth-oauthlib==1.2.2
 
 # API da Meta (Facebook)
-facebook_business==23.0.0
+facebook-business==23.0.0
 
 # Utilitários
-python-dotenv==1.1.1
+python-dotenv==1.2.1
 PyYAML==6.0.2
 xlsxwriter==3.2.5
 toml==0.10.2
 reportlab==4.4.6
-python-docx==0.8.11
+python-docx==1.2.0
 
 # OpenAI para análise de transcrições
 openai==1.58.1
 
 # Anthropic (Claude) para relatórios IA
-anthropic>=0.74.0
+anthropic==0.89.0
 
 # Geração de PDF
-fpdf2>=2.8.0
+fpdf2==2.8.7
 
-# Dependências principais (resolvidas pelo pip)
-aiohttp
-altair
-blinker
-cachetools
-certifi
-click
-Jinja2
-packaging
-pillow
-protobuf
-pyarrow
-pydeck
-python-dateutil
-pytz
-requests
-tenacity
-toml
-tornado
-typing_extensions
-watchdog
+# Extração de dados de PDF
+pdfplumber==0.11.9
+
+# Dependências principais (versões fixadas para reprodutibilidade)
+aiohttp==3.12.14
+altair==5.5.0
+blinker==1.9.0
+cachetools==5.5.2
+certifi==2025.7.9
+click==8.2.1
+Jinja2==3.1.6
+packaging==25.0
+pillow==10.4.0
+protobuf==6.31.1
+pyarrow==20.0.0
+pydeck==0.9.1
+python-dateutil==2.9.0.post0
+pytz==2025.2
+requests==2.32.4
+tenacity==9.1.2
+tornado==6.5.1
+typing_extensions==4.14.1
+watchdog==6.0.0

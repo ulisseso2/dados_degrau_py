@@ -1,24 +1,71 @@
+# Ambiente virtual
 .venv/
+venv/
+
+# Python compilado
 __pycache__/
 *.pyc
-.env
+*.pyo
+
+# Sistema operacional
 .DS_Store
-.streamlit/
+
+# Ferramentas locais
+.claude/
+
+# Streamlit (apenas secrets — config.toml é rastreado se existir)
+.streamlit/secrets.toml
+
+# Notebooks (gerados localmente)
 notebooks/
-venv/
-*.json
-*.yaml
-google-ads.yamlgoogle-ads.yaml
+
+# Cache e banco de dados locais
 .cache/
 *.pkl
-!data_cache/central_backup/*.parquet
-!data_cache/central_backup/metadata.json
-*.toml
-
-# Arquivos com credenciais sensíveis
-COPIAR_PARA_STREAMLIT.toml
-INSTRUCOES_SECRETS_STREAMLIT.md
-gerar_token_rapido.py
-.streamlit/secrets.toml
+*.db
 octadesk_cache.db
 data_cache/octadesk_cache.db
+
+# Cache de parquet — exceção: backup central
+*.parquet
+!data_cache/central_backup/*.parquet
+!data_cache/central_backup/metadata.json
+
+# ─── CREDENCIAIS E CONFIGURAÇÕES SENSÍVEIS ───────────────────────────────────
+# Estes arquivos contêm chaves/tokens reais e NÃO devem ser versionados.
+# Copie-os manualmente ao migrar para outro servidor.
+
+# Variáveis de ambiente
+.env
+
+# Credenciais Google Cloud (service account)
+gcp_credentials.json
+gcp_credentials_central.json
+
+# Configuração Google Ads (contém developer_token, client_id, client_secret…)
+google-ads.yaml
+google-ads_central.yaml
+
+# Secrets do Streamlit Cloud
+COPIAR_PARA_STREAMLIT.toml
+
+# Outros arquivos sensíveis
+INSTRUCOES_SECRETS_STREAMLIT.md
+gerar_token_rapido.py
+
+# ─── DADOS DO PROJETO (rastreados) ───────────────────────────────────────────
+# Os arquivos JSON em consultas/ são dados da aplicação, não credenciais.
+# As exceções abaixo garantem que sejam versionados mesmo com *.json ignorado.
+
+# Ignorar JSON genérico (credenciais, relatórios gerados, caches)
+*.json
+
+# Exceções: dados estáticos necessários para execução do projeto
+!consultas/*.json
+!data_cache/central_backup/metadata.json
+
+# Ignorar YAML genérico (credenciais de API ficam cobertas acima)
+*.yaml
+
+# Ignorar TOML genérico (secrets ficam cobertos acima)
+*.toml
