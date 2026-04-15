@@ -18,10 +18,11 @@ from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 from sqlalchemy import text as sql_text
 
-load_dotenv()
-load_dotenv('.facebook_credentials.env', override=True)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_PROJECT_ROOT, '.env'))
+load_dotenv(os.path.join(_PROJECT_ROOT, '.facebook_credentials.env'), override=True)
 
-HISTORICO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "historico")
+HISTORICO_DIR = os.path.join(_PROJECT_ROOT, "data", "historico")
 
 # =====================================================
 # GERAÇÃO DE RELATÓRIO HTML
