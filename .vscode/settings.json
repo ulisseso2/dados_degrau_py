@@ -11,5 +11,6 @@
         "streamlit",
         "tzdata",
         "xlsxwriter"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:pyenv"
 }

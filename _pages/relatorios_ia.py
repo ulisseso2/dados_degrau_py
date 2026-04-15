@@ -1,22 +1,21 @@
-import streamlit as st
-import os
-import json
-import glob
 import datetime as dt_module
+import glob
+import json
+import os
+import re
 from datetime import datetime, timedelta
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from google.ads.googleads.client import GoogleAdsClient
-from google.ads.googleads.errors import GoogleAdsException
-from facebook_business.api import FacebookAdsApi
+import streamlit as st
+import yaml
+from dotenv import load_dotenv
 from facebook_business.adobjects.adaccount import AdAccount
 from facebook_business.adobjects.adsinsights import AdsInsights
-from dotenv import load_dotenv
-import yaml
-import re
-import io
-from fpdf import FPDF
+from facebook_business.api import FacebookAdsApi
+from google.ads.googleads.client import GoogleAdsClient
+from google.ads.googleads.errors import GoogleAdsException
 from sqlalchemy import text as sql_text
 
 load_dotenv()
@@ -25,135 +24,709 @@ load_dotenv('.facebook_credentials.env', override=True)
 HISTORICO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "historico")
 
 # =====================================================
-# GERAÇÃO DE PDF
+# GERAÇÃO DE RELATÓRIO HTML
 # =====================================================
 
-def gerar_pdf_relatorio(analise, dados_consolidados, data_ref, tipo="completo_ads"):
-    """Gera um PDF formatado do relatório de análise."""
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.add_page()
-
-    # Usa fonte built-in com suporte a caracteres latinos
-    pdf.set_font("Helvetica", size=10)
-
-    # --- Cabeçalho ---
-    pdf.set_font("Helvetica", "B", 18)
+def gerar_html_relatorio(analise, dados_consolidados, data_ref, tipo="completo_ads"):
+    """Gera um HTML formatado e estilizado do relatório de análise."""
     titulo_tipo = {
-        "completo_ads": "Analise Completa de Ads",
-        "alerta": "Alerta Diario",
-        "seo": "Analise de SEO",
-        "social": "Analise de Social Media",
-    }.get(tipo, "Relatorio")
-    pdf.cell(0, 12, _sanitize(titulo_tipo), new_x="LMARGIN", new_y="NEXT", align="C")
+        "completo_ads": "Análise Completa de Ads",
+        "alerta": "Alerta Diário",
+        "seo": "Análise de SEO",
+        "social": "Análise de Social Media",
+    }.get(tipo, "Relatório")
 
-    pdf.set_font("Helvetica", size=10)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 6, f"Periodo: {data_ref}  |  Gerado em: {datetime.now().strftime('%d/%m/%Y as %H:%M')}", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(6)
+    corpo_html = _render_markdown_to_html(analise)
+    dados_html = _render_dados_brutos_html(dados_consolidados)
+    agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
 
-    # Linha separadora
-    pdf.set_draw_color(41, 128, 185)
-    pdf.set_line_width(0.8)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(6)
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{titulo_tipo} — {data_ref}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    # --- Corpo da análise ---
-    _render_markdown_to_pdf(pdf, analise)
+  :root {{
+    --primary: #1e64aa;
+    --primary-light: #eaf3ff;
+    --success: #16a34a;
+    --success-light: #e6ffe8;
+    --warning: #d97706;
+    --warning-light: #fff8e1;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }}
 
-    # --- Página de dados brutos ---
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Dados Brutos Enviados ao Claude", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(4)
-    pdf.set_font("Courier", size=7)
-    for linha in dados_consolidados.split("\n"):
-        pdf.cell(0, 4, _sanitize(linha[:120]), new_x="LMARGIN", new_y="NEXT")
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 
-    buffer = io.BytesIO()
-    pdf.output(buffer)
-    buffer.seek(0)
-    return buffer.getvalue()
+  body {{
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--gray-900);
+    background: #fff;
+    line-height: 1.6;
+    font-size: 14px;
+  }}
+
+  .page {{
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 32px;
+  }}
+
+  /* Cabeçalho */
+  .header {{
+    text-align: center;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 3px solid var(--primary);
+  }}
+  .header h1 {{
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 6px;
+  }}
+  .header .meta {{
+    font-size: 13px;
+    color: var(--gray-500);
+  }}
+
+  /* Blocos principais */
+  .bloco-header {{
+    background: linear-gradient(135deg, var(--primary), #2980b9);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px 8px 0 0;
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 32px;
+    letter-spacing: 0.3px;
+  }}
+  .bloco-body {{
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 20px;
+    margin-bottom: 8px;
+    background: #fff;
+  }}
+
+  /* Marca (═══ MARCA ═══) */
+  .marca-header {{
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--primary);
+    padding: 10px 0;
+    margin: 20px 0 12px;
+    border-bottom: 2px solid var(--primary);
+  }}
+  .marca-header:first-child {{ margin-top: 0; }}
+
+  /* Objetivo ── OBJETIVO: ... ── */
+  .objetivo-header {{
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-700);
+    padding: 6px 12px;
+    margin: 16px 0 8px;
+    background: var(--gray-100);
+    border-left: 4px solid var(--primary);
+    border-radius: 0 4px 4px 0;
+  }}
+
+  /* Campanha */
+  .campanha-box {{
+    background: var(--primary-light);
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin: 16px 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-900);
+  }}
+
+  /* Meta badges (PLATAFORMA, TIPO, STATUS) */
+  .meta-badges {{
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 4px 0 10px;
+  }}
+  .meta-badge {{
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }}
+  .meta-badge.plataforma {{ background: #dbeafe; color: #1e40af; }}
+  .meta-badge.tipo {{ background: #fef3c7; color: #92400e; }}
+  .meta-badge.status {{ background: #d1fae5; color: #065f46; }}
+
+  /* Labels especiais */
+  .label-key {{
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 14px;
+    margin-bottom: 4px;
+  }}
+  .label-destaques {{ color: var(--success); }}
+  .label-pontos {{ color: var(--warning); }}
+  .label-decisoes {{ color: var(--danger); }}
+
+  /* NÚMEROS */
+  .numeros-section {{
+    margin: 10px 0;
+  }}
+  .numeros-section .numeros-title {{
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--gray-700);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }}
+  .numeros-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }}
+  .numeros-card {{
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }}
+  .numeros-card .card-label {{
+    font-size: 11px;
+    color: var(--gray-500);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }}
+  .numeros-card .card-value {{
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-900);
+  }}
+
+  /* Sub-sections (DIAGNÓSTICO, PLANO DE AÇÃO) */
+  .diagnostico-box {{
+    background: var(--primary-light);
+    border-left: 4px solid var(--primary);
+    padding: 10px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 10px 0;
+  }}
+  .diagnostico-box .box-title {{
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--primary);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }}
+
+  .plano-box {{
+    background: var(--success-light);
+    border-left: 4px solid var(--success);
+    padding: 10px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 10px 0;
+  }}
+  .plano-box .box-title {{
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--success);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }}
+
+  /* Alertas */
+  .alerta-box {{
+    background: var(--warning-light);
+    border: 1px solid var(--warning);
+    border-left: 4px solid var(--warning);
+    padding: 10px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 10px 0;
+    font-weight: 500;
+  }}
+
+  /* Tabelas */
+  table {{
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 13px;
+  }}
+  th {{
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }}
+  th:first-child {{ border-radius: 6px 0 0 0; }}
+  th:last-child {{ border-radius: 0 6px 0 0; }}
+  td {{
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--gray-200);
+  }}
+  tr:nth-child(even) td {{ background: var(--gray-50); }}
+  tr:last-child td:first-child {{ border-radius: 0 0 0 6px; }}
+  tr:last-child td:last-child {{ border-radius: 0 0 6px 0; }}
+
+  /* Investimento total e bloco principal */
+  .investimento-box {{
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 10px 0;
+  }}
+  .investimento-box strong {{ color: var(--gray-900); }}
+
+  /* Listas */
+  ul {{ margin: 4px 0 8px 20px; }}
+  li {{ margin: 3px 0; }}
+  ol {{ margin: 4px 0 8px 20px; }}
+  ol li {{ margin: 4px 0; }}
+
+  /* Separadores */
+  hr {{
+    border: none;
+    border-top: 1px solid var(--gray-200);
+    margin: 16px 0;
+  }}
+
+  /* Texto em bold */
+  strong {{ font-weight: 600; }}
+
+  /* Headers markdown */
+  h2 {{ font-size: 20px; margin: 24px 0 10px; color: var(--gray-900); }}
+  h3 {{ font-size: 16px; margin: 18px 0 8px; color: var(--gray-700); }}
+  h4 {{ font-size: 14px; margin: 14px 0 6px; color: var(--gray-700); }}
+
+  /* Parágrafo */
+  p {{ margin: 4px 0; }}
+
+  /* Visão Geral consolidada */
+  .visao-geral {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 10px 0 16px;
+  }}
+  .visao-geral .vg-item {{
+    text-align: center;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 12px 8px;
+  }}
+  .visao-geral .vg-label {{
+    font-size: 11px;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    font-weight: 500;
+  }}
+  .visao-geral .vg-value {{
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+  }}
+
+  /* Dados brutos */
+  .dados-brutos {{
+    margin-top: 40px;
+    page-break-before: always;
+  }}
+  .dados-brutos h2 {{
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 6px;
+  }}
+  .dados-brutos pre {{
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 16px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    max-height: none;
+    overflow: visible;
+  }}
+
+  @media print {{
+    body {{ font-size: 12px; }}
+    .page {{ padding: 20px; max-width: 100%; }}
+    .bloco-header {{ page-break-after: avoid; }}
+    .campanha-box {{ page-break-after: avoid; }}
+    .dados-brutos {{ page-break-before: always; }}
+  }}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <h1>{titulo_tipo}</h1>
+    <div class="meta">Período: {data_ref} &nbsp;|&nbsp; Gerado em: {agora}</div>
+  </div>
+
+  {corpo_html}
+
+  <div class="dados-brutos">
+    <h2>Dados Brutos Enviados ao Claude</h2>
+    {dados_html}
+  </div>
+
+</div>
+</body>
+</html>"""
+    return html.encode("utf-8")
 
 
-def _sanitize(text):
-    """Remove caracteres não suportados pela fonte Helvetica (latin-1)."""
-    replacements = {
-        "\u2014": "--", "\u2013": "-", "\u2018": "'", "\u2019": "'",
-        "\u201c": '"', "\u201d": '"', "\u2026": "...", "\u2022": "*",
-        "\u2192": "->", "\u2190": "<-", "\u2265": ">=", "\u2264": "<=",
-        "\u2260": "!=", "\u00b2": "2", "\u00b3": "3",
-    }
-    # Emojis e ícones comuns
-    emoji_map = {
-        "\U0001f680": "[ROCKET]", "\U0001f4ca": "[CHART]", "\U0001f4c1": "[FOLDER]",
-        "\U0001f6a8": "[ALERT]", "\U0001f916": "[BOT]", "\U0001f3af": "[TARGET]",
-        "\u2705": "[OK]", "\u274c": "[X]", "\u26a0\ufe0f": "[!]", "\u26a0": "[!]",
-        "\U0001f4a1": "[IDEA]", "\U0001f525": "[FIRE]", "\U0001f4c8": "[UP]",
-        "\U0001f4c9": "[DOWN]", "\u2b06\ufe0f": "[UP]", "\u2b07\ufe0f": "[DOWN]",
-        "\U0001f4cb": "[LIST]", "\U0001f4dd": "[NOTE]",
-    }
-    replacements.update(emoji_map)
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    # Remove qualquer caractere fora de latin-1
-    return text.encode("latin-1", errors="replace").decode("latin-1")
+def _render_dados_brutos_html(dados):
+    """Converte dados brutos em HTML seguro."""
+    import html as html_mod
+    return f"<pre>{html_mod.escape(dados)}</pre>"
 
 
-def _render_markdown_to_pdf(pdf, markdown_text):
-    """Renderiza markdown básico (headers, bold, listas) no PDF."""
+def _render_markdown_to_html(markdown_text):
+    """Converte a análise do Claude em HTML estruturado com estilos bonitos."""
+    import html as html_mod
     lines = markdown_text.split("\n")
-    for line in lines:
-        stripped = line.strip()
+    html_parts = []
+    i = 0
+    in_bloco = False
 
-        # Headers
+    def _bold(text):
+        """Substitui **texto** por <strong>texto</strong>."""
+        return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html_mod.escape(text))
+
+    def _parse_numeros_to_cards(linhas):
+        """Converte linhas de NÚMEROS em cards HTML."""
+        cards = []
+        for linha in linhas:
+            for parte in linha.split("|"):
+                parte = parte.strip()
+                if ":" in parte:
+                    k, _, v = parte.partition(":")
+                    k, v = k.strip(), v.strip()
+                    if k and v:
+                        cards.append(f'<div class="numeros-card"><div class="card-label">{html_mod.escape(k)}</div><div class="card-value">{html_mod.escape(v)}</div></div>')
+                elif parte:
+                    cards.append(f'<div class="numeros-card"><div class="card-value">{html_mod.escape(parte)}</div></div>')
+        if cards:
+            return f'<div class="numeros-grid">{"".join(cards)}</div>'
+        return ""
+
+    def _parse_table(start_idx):
+        """Tenta parsear uma tabela markdown (linhas com |). Retorna (html, next_idx)."""
+        tbl_lines = []
+        j = start_idx
+        while j < len(lines) and "|" in lines[j].strip() and lines[j].strip().startswith("|"):
+            tbl_lines.append(lines[j].strip())
+            j += 1
+        if len(tbl_lines) < 2:
+            return None, start_idx
+        # Primeira linha = headers, segunda = separador (---|---), restante = dados
+        headers = [c.strip() for c in tbl_lines[0].split("|") if c.strip()]
+        data_start = 2 if len(tbl_lines) > 2 and re.match(r"^[\|\s\-:]+$", tbl_lines[1]) else 1
+        rows = []
+        for tl in tbl_lines[data_start:]:
+            cols = [c.strip() for c in tl.split("|") if c.strip()]
+            if cols:
+                rows.append(cols)
+        if not headers:
+            return None, start_idx
+        out = '<table><thead><tr>'
+        for h in headers:
+            out += f'<th>{html_mod.escape(h)}</th>'
+        out += '</tr></thead><tbody>'
+        for row in rows:
+            out += '<tr>'
+            for ci, col in enumerate(row):
+                out += f'<td>{html_mod.escape(col)}</td>'
+            # Preenche colunas faltantes
+            for _ in range(len(headers) - len(row)):
+                out += '<td></td>'
+            out += '</tr>'
+        out += '</tbody></table>'
+        return out, j
+
+    while i < len(lines):
+        stripped = lines[i].strip()
+
+        # ── BLOCO N — TÍTULO ────────────────────────────────────
+        if re.match(r"^BLOCO\s+\d+", stripped, re.IGNORECASE):
+            if in_bloco:
+                html_parts.append('</div>')  # fecha bloco-body anterior
+            label = re.sub(r"[*_`]", "", stripped)
+            html_parts.append(f'<div class="bloco-header">{html_mod.escape(label)}</div>')
+            html_parts.append('<div class="bloco-body">')
+            in_bloco = True
+            i += 1
+            continue
+
+        # ── ═══ MARCA ═══ ───────────────────────────────────────
+        if re.match(r"^[═=]{3,}", stripped):
+            nome = re.sub(r"[═=\s]+", " ", stripped).strip()
+            if nome:
+                html_parts.append(f'<div class="marca-header">{html_mod.escape(nome)}</div>')
+            i += 1
+            continue
+
+        # ── ── OBJETIVO: ... ── ─────────────────────────────────
+        m_obj = re.match(r"^[─\-]+\s*OBJETIVO\s*:\s*(.+?)\s*[─\-]*$", stripped, re.IGNORECASE)
+        if m_obj:
+            html_parts.append(f'<div class="objetivo-header">OBJETIVO: {html_mod.escape(m_obj.group(1))}</div>')
+            i += 1
+            continue
+
+        # ── CAMPANHA: nome ──────────────────────────────────────
+        if re.match(r"^CAMPANHA\s*:", stripped, re.IGNORECASE):
+            nome_camp = stripped.split(":", 1)[-1].strip()
+            html_parts.append(f'<div class="campanha-box">📋 {html_mod.escape(nome_camp)}</div>')
+            i += 1
+            continue
+
+        # ── Meta badges (PLATAFORMA, TIPO, STATUS) ──────────────
+        m_meta = re.match(r"^(PLATAFORMA|TIPO|STATUS)\s*:\s*(.+)", stripped, re.IGNORECASE)
+        if m_meta:
+            chave = m_meta.group(1).upper()
+            valor = m_meta.group(2).strip()
+            css_class = chave.lower()
+            html_parts.append(f'<span class="meta-badge {css_class}">{chave}: {html_mod.escape(valor)}</span>')
+            i += 1
+            continue
+
+        # ── INVESTIMENTO TOTAL ──────────────────────────────────
+        if re.match(r"^INVESTIMENTO TOTAL", stripped, re.IGNORECASE):
+            inv_lines = [stripped]
+            j = i + 1
+            while j < len(lines) and lines[j].strip().startswith("-"):
+                inv_lines.append(lines[j].strip())
+                j += 1
+            inner = "<br>".join(_bold(l) for l in inv_lines)
+            html_parts.append(f'<div class="investimento-box">{inner}</div>')
+            i = j
+            continue
+
+        # ── BLOCO PRINCIPAL — LEADS ─────────────────────────────
+        if re.match(r"^BLOCO PRINCIPAL", stripped, re.IGNORECASE):
+            inv_lines = [stripped]
+            j = i + 1
+            while j < len(lines) and lines[j].strip().startswith("-"):
+                inv_lines.append(lines[j].strip())
+                j += 1
+            inner = "<br>".join(_bold(l) for l in inv_lines)
+            html_parts.append(f'<div class="investimento-box">{inner}</div>')
+            i = j
+            continue
+
+        # ── DESTAQUES POSITIVOS / PONTOS DE ATENÇÃO / DECISÕES ─
+        m_label = re.match(r"^(DESTAQUES?\s+POSITIVOS?|PONTOS?\s+DE\s+ATEN[CÇ][AÃ]O|DECIS[OÕ]ES\s+NECESS[AÁ]RIAS)\s*:", stripped, re.IGNORECASE)
+        if m_label:
+            chave = m_label.group(1).upper()
+            if "DESTAQUE" in chave:
+                css = "label-destaques"
+            elif "PONTO" in chave:
+                css = "label-pontos"
+            else:
+                css = "label-decisoes"
+            html_parts.append(f'<div class="label-key {css}">{html_mod.escape(chave)}:</div>')
+            i += 1
+            continue
+
+        # ── NÚMEROS ─────────────────────────────────────────────
+        m_num = re.match(r"^N[UÚ]MEROS\s*(\([^)]*\))?\s*:(.*)", stripped, re.IGNORECASE)
+        if m_num:
+            extra = m_num.group(1) or ""
+            valor_inline = m_num.group(2).strip()
+            num_lines = []
+            if valor_inline:
+                num_lines.append(valor_inline)
+            j = i + 1
+            while j < len(lines):
+                s = lines[j].strip()
+                if s.startswith("[") or "|" in s or (s and not re.match(r"^[A-Z]", s)):
+                    num_lines.append(s)
+                    j += 1
+                else:
+                    break
+            html_parts.append(f'<div class="numeros-section"><div class="numeros-title">Números {html_mod.escape(extra)}</div>')
+            html_parts.append(_parse_numeros_to_cards(num_lines))
+            html_parts.append('</div>')
+            i = j
+            continue
+
+        # ── VISÃO GERAL (YouTube consolidado) ───────────────────
+        if re.match(r"^VIS[AÃ]O GERAL", stripped, re.IGNORECASE):
+            # Tenta capturar linhas com métricas separadas por |
+            dados_linha = stripped.split(":", 1)[-1].strip() if ":" in stripped else ""
+            j = i + 1
+            while j < len(lines) and "|" in lines[j]:
+                dados_linha += " | " + lines[j].strip()
+                j += 1
+            pares = []
+            for parte in dados_linha.split("|"):
+                parte = parte.strip()
+                if ":" in parte:
+                    k, _, v = parte.partition(":")
+                    pares.append((k.strip(), v.strip()))
+            if pares:
+                items = ""
+                for k, v in pares:
+                    items += f'<div class="vg-item"><div class="vg-label">{html_mod.escape(k)}</div><div class="vg-value">{html_mod.escape(v)}</div></div>'
+                html_parts.append(f'<div class="visao-geral">{items}</div>')
+            else:
+                html_parts.append(f'<p>{_bold(stripped)}</p>')
+            i = j
+            continue
+
+        # ── TABELA markdown (|...|...|) ─────────────────────────
+        if stripped.startswith("|") and "|" in stripped[1:]:
+            tbl_html, next_i = _parse_table(i)
+            if tbl_html:
+                html_parts.append(tbl_html)
+                i = next_i
+                continue
+
+        # ── TABELA label + inline markdown ──────────────────────
+        if re.match(r"^TABELA\s+", stripped, re.IGNORECASE):
+            titulo_tabela = stripped
+            j = i + 1
+            if j < len(lines) and lines[j].strip().startswith("|"):
+                tbl_html, next_i = _parse_table(j)
+                if tbl_html:
+                    html_parts.append(f'<h4>{html_mod.escape(titulo_tabela)}</h4>')
+                    html_parts.append(tbl_html)
+                    i = next_i
+                    continue
+            html_parts.append(f'<h4>{html_mod.escape(titulo_tabela)}</h4>')
+            i += 1
+            continue
+
+        # ── DIAGNÓSTICO ─────────────────────────────────────────
+        m_diag = re.match(r"^DIAGN[OÓ]STICO\s*:(.*)", stripped, re.IGNORECASE)
+        if m_diag:
+            val = m_diag.group(1).strip()
+            content_lines = [val] if val else []
+            j = i + 1
+            while j < len(lines):
+                s = lines[j].strip()
+                if s and not re.match(r"^(PLANO|CAMPANHA|N[UÚ]MEROS|TIPO|PLATAFORMA|STATUS|[═=]{3}|BLOCO\s+\d|[⚠🚨]|TABELA|VIS[AÃ]O)", s, re.IGNORECASE):
+                    content_lines.append(s)
+                    j += 1
+                else:
+                    break
+            inner = "<br>".join(_bold(l) for l in content_lines)
+            html_parts.append(f'<div class="diagnostico-box"><div class="box-title">Diagnóstico</div>{inner}</div>')
+            i = j
+            continue
+
+        # ── PLANO DE AÇÃO ───────────────────────────────────────
+        m_plano = re.match(r"^PLANO DE A[CÇ][AÃ]O\s*:(.*)", stripped, re.IGNORECASE)
+        if m_plano:
+            val = m_plano.group(1).strip()
+            content_lines = [val] if val else []
+            j = i + 1
+            while j < len(lines):
+                s = lines[j].strip()
+                if s and not re.match(r"^(DIAGN[OÓ]STICO|CAMPANHA|N[UÚ]MEROS|TIPO|PLATAFORMA|STATUS|[═=]{3}|BLOCO\s+\d|[⚠🚨]|TABELA|VIS[AÃ]O)", s, re.IGNORECASE):
+                    content_lines.append(s)
+                    j += 1
+                else:
+                    break
+            items = []
+            for cl in content_lines:
+                items.append(_bold(cl))
+            inner = "<br>".join(items)
+            html_parts.append(f'<div class="plano-box"><div class="box-title">Plano de Ação</div>{inner}</div>')
+            i = j
+            continue
+
+        # ── Alertas ⚠️ / 🚨 ────────────────────────────────────
+        if "⚠" in stripped or "🚨" in stripped or stripped.startswith("[!]") or stripped.startswith("[ALERTA]"):
+            html_parts.append(f'<div class="alerta-box">⚠️ {_bold(stripped)}</div>')
+            i += 1
+            continue
+
+        # ── Markdown headers ────────────────────────────────────
         if stripped.startswith("### "):
-            pdf.ln(3)
-            pdf.set_font("Helvetica", "B", 11)
-            pdf.cell(0, 6, _sanitize(stripped[4:]), new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", size=10)
+            html_parts.append(f'<h4>{_bold(stripped[4:])}</h4>')
+            i += 1
             continue
         if stripped.startswith("## "):
-            pdf.ln(4)
-            pdf.set_font("Helvetica", "B", 13)
-            pdf.cell(0, 7, _sanitize(stripped[3:]), new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", size=10)
+            html_parts.append(f'<h3>{_bold(stripped[3:])}</h3>')
+            i += 1
             continue
         if stripped.startswith("# "):
-            pdf.ln(5)
-            pdf.set_font("Helvetica", "B", 15)
-            pdf.cell(0, 8, _sanitize(stripped[2:]), new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", size=10)
+            html_parts.append(f'<h2>{_bold(stripped[2:])}</h2>')
+            i += 1
             continue
 
-        # Separadores
+        # ── Separadores — ───────────────────────────────────────
         if stripped in ("---", "***", "___"):
-            pdf.ln(2)
-            pdf.set_draw_color(200, 200, 200)
-            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-            pdf.ln(3)
+            html_parts.append('<hr>')
+            i += 1
             continue
 
-        # Lista
+        # ── Lista ────────────────────────────────────────────────
         if stripped.startswith("- ") or stripped.startswith("* "):
-            texto = _sanitize(stripped[2:])
-            texto = re.sub(r"\*\*(.+?)\*\*", r"\1", texto)  # remove bold markers
-            left_margin = pdf.l_margin
-            pdf.set_x(left_margin + 6)
-            pdf.multi_cell(0, 5, f"* {texto}")
+            ul_items = []
+            while i < len(lines) and (lines[i].strip().startswith("- ") or lines[i].strip().startswith("* ")):
+                ul_items.append(f'<li>{_bold(lines[i].strip()[2:])}</li>')
+                i += 1
+            html_parts.append(f'<ul>{"".join(ul_items)}</ul>')
             continue
 
-        # Linha vazia
+        # ── Lista numerada ───────────────────────────────────────
+        if re.match(r"^\d+\.\s", stripped):
+            ol_items = []
+            while i < len(lines) and re.match(r"^\d+\.\s", lines[i].strip()):
+                texto = re.sub(r"^\d+\.\s*", "", lines[i].strip())
+                ol_items.append(f'<li>{_bold(texto)}</li>')
+                i += 1
+            html_parts.append(f'<ol>{"".join(ol_items)}</ol>')
+            continue
+
+        # ── Linha vazia ──────────────────────────────────────────
         if not stripped:
-            pdf.ln(3)
+            i += 1
             continue
 
-        # Texto normal (remove markdown bold)
-        texto = _sanitize(stripped)
-        texto = re.sub(r"\*\*(.+?)\*\*", r"\1", texto)
-        pdf.set_x(pdf.l_margin)
-        pdf.multi_cell(0, 5, texto)
+        # ── Texto normal ─────────────────────────────────────────
+        html_parts.append(f'<p>{_bold(stripped)}</p>')
+        i += 1
+
+    if in_bloco:
+        html_parts.append('</div>')  # fecha último bloco-body
+
+    return "\n".join(html_parts)
+
 
 
 # =====================================================
@@ -464,9 +1037,10 @@ def get_facebook_data(account, start_date, end_date):
 
         rows = []
 
-        # Eventos de venda para campanhas de e-commerce (do campo actions)
+        # Eventos de venda para campanhas ONLINE (Compras no site = pixel purchase offsite)
+        # Usa apenas offsite_conversion.fb_pixel_purchase para refletir exatamente
+        # o campo "Compras no site" do Gerenciador de Anúncios da Meta.
         VENDA_ACTIONS = {
-            'purchase', 'omni_purchase',
             'offsite_conversion.fb_pixel_purchase',
         }
         # Nomes dos eventos pixel de lead (do campo conversions)
@@ -534,7 +1108,7 @@ def get_facebook_data(account, start_date, end_date):
                 'lead_online': lead_online,
                 'Resultado Presencial + Live': leads_primarios,
                 'CPL Primário': round(cpl_primario, 2),
-                'Vendas': vendas,
+                'Compras no site': vendas,
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -545,18 +1119,26 @@ def get_facebook_data(account, start_date, end_date):
 # FORMATAÇÃO DOS DADOS POR OBJETIVO (v2.0)
 # =====================================================
 
-def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, janela_dias, df_facebook_central=None, start_date=None, end_date=None):
+def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, janela_dias, df_facebook_central=None, start_date=None, end_date=None,
+                               prev_google_degrau=None, prev_google_central=None, prev_facebook=None, prev_facebook_central=None,
+                               prev_start_date=None, prev_end_date=None):
     """Formata os dados organizados por MARCA (Central vs Degrau) e dentro de cada marca por
-    plataforma, conforme exigido pelo system prompt v3.0."""
+    plataforma, conforme exigido pelo system prompt v3.0.
+    Quando dados do período anterior são fornecidos, inclui seção WoW para comparativo."""
     hoje = datetime.now().date()
     inicio = start_date if start_date is not None else hoje - timedelta(days=janela_dias)
     fim = end_date if end_date is not None else hoje
     dia_semana = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"][hoje.weekday()]
     janela_real = (fim - inicio).days + 1
 
+    # Verifica se temos dados do período anterior
+    tem_prev = any(d is not None and not d.empty for d in [prev_google_degrau, prev_google_central, prev_facebook, prev_facebook_central])
+
     linhas = []
     linhas.append("=== METADADOS ===")
-    linhas.append(f"Período: {inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}")
+    linhas.append(f"Período atual: {inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}")
+    if tem_prev and prev_start_date and prev_end_date:
+        linhas.append(f"Período anterior (comparativo WoW): {prev_start_date.strftime('%d/%m/%Y')} a {prev_end_date.strftime('%d/%m/%Y')}")
     linhas.append(f"Janela: {janela_real} dias")
     linhas.append(f"Tipo de relatório: {'Alerta diário' if janela_real == 1 else 'Análise completa'}")
     linhas.append(f"Data de hoje: {hoje.strftime('%d/%m/%Y')} ({dia_semana})")
@@ -593,15 +1175,15 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
                 lead_o = r.get('lead_online', 0)
                 leads = r.get('Resultado Presencial + Live', 0)
                 cpl = r.get('CPL Primário', 0)
-                vendas = r.get('Vendas', 0)
+                compras_site = r.get('Compras no site', 0)
 
                 bloco.append(f"  Cliques no link: {cliques:,} | CTR link: {ctr:.2f}% | CPC link: R${cpc:.2f} | CPM: R${cpm:.2f}")
                 bloco.append(f"  Alcance: {alcance:,} | Frequência: {freq:.1f}")
                 if leads > 0 or lead_p > 0 or lead_l > 0 or lead_o > 0:
                     aviso = " ⚠️ <30, dados insuficientes" if leads < 30 else ""
                     bloco.append(f"  lead_presencial: {lead_p} | lead_live: {lead_l} | lead_online: {lead_o} | Resultado Presencial + Live: {leads} | CPL Primário: R${cpl:.2f}{aviso}")
-                if vendas > 0:
-                    bloco.append(f"  Vendas: {vendas}")
+                if compras_site > 0:
+                    bloco.append(f"  Compras no site: {compras_site}")
             else:
                 # Métricas Google Ads
                 canal = r.get('Canal', '')
@@ -707,6 +1289,55 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
     linhas.append("=" * 60)
     linhas.append(f"Custo total: R${custo_all:.2f} | Conversões Google: {conv_all} | Resultado Presencial + Live (Meta): {leads_all}")
 
+    # ─── DADOS DO PERÍODO ANTERIOR (comparativo WoW) ───────────────────────
+    if tem_prev:
+        linhas.append("")
+        linhas.append("=" * 60)
+        linhas.append(f"PERÍODO ANTERIOR (WoW): {prev_start_date.strftime('%d/%m/%Y')} a {prev_end_date.strftime('%d/%m/%Y')}")
+        linhas.append("=" * 60)
+        linhas.append("Os dados abaixo são do período anterior, para comparativo período a período.")
+        linhas.append("")
+
+        # Central - período anterior
+        linhas.append("-" * 40)
+        linhas.append("MARCA: CENTRAL DE CONCURSOS (Período Anterior)")
+        linhas.append("-" * 40)
+
+        prev_custo_gc  = _soma(prev_google_central, 'Custo')
+        prev_custo_fbc = _soma(prev_facebook_central, 'Custo')
+        prev_conv_gc   = _soma(prev_google_central, 'Conversões')
+        prev_leads_fbc = _soma(prev_facebook_central, 'Resultado Presencial + Live')
+        prev_cpl_fbc   = prev_custo_fbc / prev_leads_fbc if prev_leads_fbc > 0 else 0
+
+        linhas.append(f"Investimento total Central: R${(prev_custo_gc + prev_custo_fbc):.2f}")
+        linhas.append(f"  Google Ads (Central): R${prev_custo_gc:.2f} | Conversões: {int(prev_conv_gc)}")
+        linhas.append(f"  Meta Ads (Central):   R${prev_custo_fbc:.2f} | Resultado Presencial + Live: {int(prev_leads_fbc)}" +
+                      (f" | CPL: R${prev_cpl_fbc:.2f}" if prev_leads_fbc > 0 else ""))
+        linhas.append("")
+
+        linhas.extend(_bloco_campanhas(prev_google_central, "Google Ads (Central) — Período Anterior"))
+        linhas.extend(_bloco_campanhas(prev_facebook_central, "Meta Ads (Central) — Período Anterior"))
+
+        # Degrau - período anterior
+        linhas.append("-" * 40)
+        linhas.append("MARCA: DEGRAU CULTURAL (Período Anterior)")
+        linhas.append("-" * 40)
+
+        prev_custo_gd  = _soma(prev_google_degrau, 'Custo')
+        prev_custo_fb  = _soma(prev_facebook, 'Custo')
+        prev_conv_gd   = _soma(prev_google_degrau, 'Conversões')
+        prev_leads_fb  = _soma(prev_facebook, 'Resultado Presencial + Live')
+        prev_cpl_fb    = prev_custo_fb / prev_leads_fb if prev_leads_fb > 0 else 0
+
+        linhas.append(f"Investimento total Degrau: R${(prev_custo_gd + prev_custo_fb):.2f}")
+        linhas.append(f"  Google Ads (Degrau): R${prev_custo_gd:.2f} | Conversões: {int(prev_conv_gd)}")
+        linhas.append(f"  Meta Ads (Degrau):   R${prev_custo_fb:.2f} | Resultado Presencial + Live: {int(prev_leads_fb)}" +
+                      (f" | CPL: R${prev_cpl_fb:.2f}" if prev_leads_fb > 0 else ""))
+        linhas.append("")
+
+        linhas.extend(_bloco_campanhas(prev_google_degrau, "Google Ads (Degrau) — Período Anterior"))
+        linhas.extend(_bloco_campanhas(prev_facebook, "Meta Ads (Degrau) — Período Anterior"))
+
     return "\n".join(linhas)
 
 # =====================================================
@@ -716,7 +1347,7 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
 SYSTEM_PROMPT_ADS_V2 = """
 SYSTEM PROMPT — SISTEMA DE INTELIGÊNCIA DE MARKETING
 Degrau Cultural / Central de Concursos
-Versão 2.1 — Março 2026
+Versão 2.2 — Abril 2026
 
 1. IDENTIDADE E PAPEL
 
@@ -724,10 +1355,10 @@ Você é o analista sênior de tráfego pago da operação Degrau Cultural / Cen
 Seu trabalho é receber dados de campanhas diretamente das plataformas (Google Ads API e Meta
 Marketing API), analisar performance e entregar dois outputs:
 
-RESUMO DIRETORIA: visão executiva, clara, sem jargão técnico excessivo, focada em investimento,
+1. RESUMO DIRETORIA: visão executiva, clara, sem jargão técnico excessivo, focada em investimento,
 retorno, tendências e decisões necessárias.
 
-ANÁLISE COMPLETA PARA O GESTOR DE TRÁFEGO: diagnóstico técnico campanha a campanha, com
+2. ANÁLISE COMPLETA PARA O GESTOR DE TRÁFEGO: diagnóstico técnico campanha a campanha, com
 gargalos identificados e plano de ação prático.
 
 Idioma de saída: português brasileiro. Tom: técnico, direto, sem enrolação. Pode usar tom
@@ -737,8 +1368,10 @@ acontecendo, (b) por que é problema, (c) o que fazer.
 2. CONTEXTO DO NEGÓCIO
 
 2.1 Marcas
-- Central de Concursos — São Paulo (conta Google Ads: "Google Ads (Central)", Meta: "Meta Ads (Central)")
-- Degrau Cultural — Rio de Janeiro (conta Google Ads: "Google Ads (Degrau)", Meta: "Meta Ads (Degrau)")
+- Central de Concursos — São Paulo, SP — Unidade Metrô República (desde 1989)
+  Tel: (11) 3017-8800 | Site: centraldeconcursos.com.br
+- Degrau Cultural — Rio de Janeiro, RJ — Unidades: Campo Grande, Madureira, Centro, Niterói (desde 1983)
+  Tel: (21) 3970-1015 | Site: degraucultural.com.br
 
 2.2 Segmento
 Cursos preparatórios para concursos públicos no Brasil. Três modalidades de ensino:
@@ -749,19 +1382,21 @@ Cursos preparatórios para concursos públicos no Brasil. Três modalidades de e
 2.3 Modelo de negócio e funil
 - Presencial e Live: o site NÃO vende. O objetivo das campanhas é GERAR LEADS via formulário.
   O lead é atendido por um consultor que explica modalidades, unidades, valores e condições.
-- Online: o curso online PODE ser comprado direto no site. Campanhas Meta específicas de venda
-  online devem ser analisadas como campanhas de conversão/venda, não como campanhas de lead.
+- Online: o curso online PODE ser comprado direto no site. Existem campanhas Meta específicas
+  de venda online: estas devem ser analisadas como campanhas de conversão/venda, não como
+  campanhas de lead.
 - PMax Google: leva para página do concurso com as 3 modalidades. O lead pode converter como
   lead presencial/live OU comprar online direto. É uma campanha "indireta" para venda online.
 
 2.4 Concorrentes principais
 Estratégia Concursos e Gran Cursos Online. Modelo deles: venda de curso online direto no site.
-Competem nas mesmas palavras-chave no leilão do Google, mas o modelo de negócio é diferente.
+Competem nas mesmas palavras-chave no leilão do Google, mas o modelo de negócio é diferente
+(eles vendem direto; nós captamos lead para presencial/live + venda indireta de online).
 
 2.5 Concursos ativos
-Os concursos ativos mudam constantemente. Identificar os concursos a partir dos nomes das
-campanhas. Exemplos recorrentes: INSS, TJ SP, Banco do Brasil, PM SP, PC SP, GCM SP, PM RJ,
-DETRAN RJ, MP SP, SEFAZ SP, entre outros.
+Os concursos ativos mudam constantemente. O sistema deve identificar os concursos a partir dos
+nomes das campanhas. Exemplos recorrentes: INSS, TJ SP, Banco do Brasil, PM SP, PC SP, GCM SP,
+PM RJ, DETRAN RJ, MP SP, SEFAZ SP, entre outros.
 
 3. SEGMENTAÇÃO GEOGRÁFICA DAS CAMPANHAS
 
@@ -775,256 +1410,391 @@ DETRAN RJ, MP SP, SEFAZ SP, entre outros.
   Gonçalo, São João de Meriti.
 - Meta Ads: majoritariamente cidade do Rio de Janeiro com raio de 50 km + Niterói.
 
-REGRA OBRIGATÓRIA: análises SEMPRE separadas por marca. Nunca misturar Central de Concursos
-com Degrau Cultural na mesma seção.
+REGRA OBRIGATÓRIA: as análises devem ser SEMPRE separadas por marca. Campanhas da Central de
+Concursos são analisadas em bloco separado das campanhas da Degrau Cultural. Nunca misturar
+campanhas das duas marcas na mesma seção de análise, mesmo que sigam a mesma estrutura e lógica.
 
 4. MÉTRICAS POR PLATAFORMA
 
 4.1 Google Ads — Campanhas de Search e PMax
-Métricas obrigatórias:
-- Impressões, Cliques, CTR, Custo, CPM médio, CPC médio
-- Conversões (primárias: Lead Presencial + Lead Live), CPA real
-- tCPA configurado (se disponível — comparar com CPA real)
+Métricas obrigatórias na análise:
+- Orçamento, Status, Impressões, Cliques, CTR, Custo, CPM médio
+- Conversões (primárias: Lead Presencial + Lead Live)
+- Custo por conversão (CPA)
+- CPA desejado (tCPA configurado)
 - Taxa de conversão
-- Parcela de impressões perdida por orçamento (campo: Imp Lost Budget %)
-- Parcela de impressões perdida por classificação (campo: Imp Lost Rank %)
-  Nos dados: "Parc impr perd (orç)" e "Parc impr perd (class)"
+- Parcela de impressões perdida por orçamento (search impression share lost — budget)
+- Parcela de impressões perdida por classificação (search impression share lost — rank)
 
 4.2 Google Ads — Campanhas de YouTube
-CRÍTICO: distinguir por objetivo.
-- Campanhas de CONVERSÃO → avaliar por CPA normalmente.
-- Campanhas VVC (Video View / Visualização / Engajamento) → avaliar por:
-  CPV (Custo por View), Taxa de visualização (Video View Rate %), Engajamentos,
-  Engagement Rate, Video Views. NUNCA julgar campanha VVC por CPA.
+Classificar automaticamente por objetivo: CONVERSÃO ou RECONHECIMENTO/CONSIDERAÇÃO (VVC).
+
+4.2.1 YouTube — Reconhecimento e Consideração (VVC)
+Campanhas com objetivo de video view, visualização ou engajamento.
+Métricas obrigatórias organizadas em três pilares:
+
+Alcance:
+- Impressões, Usuários exclusivos, Freq. méd. impr. / usuário (7 dias), CPM médio
+
+Retenção de vídeo:
+- Taxa de visualização (View Rate), Vídeo assistido até 25%, 50%, 75%, 100%
+
+Engajamento:
+- CPV médio TrueView, CPC médio, Interações, Taxa de interação
+
+Informativa:
+- Tipo de estratégia de lances (para contextualizar diferenças de entrega entre campanhas)
+
+NUNCA avaliar campanha VVC por CPA. NUNCA avaliar por CTR de clique como métrica principal.
+O foco é alcance, retenção de vídeo e engajamento.
+
+4.2.2 YouTube — Conversão
+Campanhas com objetivo de conversão. Avaliar por CPA normalmente, igual a Search/PMax.
 
 4.3 Meta Ads — Campanhas de Lead
-Métricas obrigatórias:
-- Custo (Valor usado), Impressões, Alcance, Frequência, CPM
-- Cliques no link (campo: Cliques Link — inline_link_clicks, NÃO cliques totais)
-- CTR link (inline_link_click_ctr), CPC link (cost_per_inline_link_click)
-- Lead Presencial (evento lead_presencial), Lead Live (evento lead_live)
-- Leads Primários = Lead Presencial + Lead Live
-- CPL Primário = Custo / Leads Primários
+Métricas obrigatórias na análise:
+- Orçamento, Impressões, Alcance, Valor usado
+- Resultados: Presencial + Lead (conversões primárias)
+- Custo por lead primário (fórmula customizada: valor usado / (lead_presencial + lead_live))
+- Frequência
 
 4.4 Meta Ads — Campanhas de Venda Online
-Analisar como e-commerce: ROAS, custo por compra, volume de vendas.
-NÃO misturar métricas de campanha de lead com campanha de venda online.
+Quando a campanha tiver objetivo de venda/conversão de curso online, analisar como e-commerce:
+- ROAS (retorno sobre investimento em ads)
+- Custo por compra
+- Valor de conversão
+- Volume de vendas (Compras no site)
+- Ticket médio (se disponível)
+NÃO misturar métricas de campanha de lead com campanha de venda online. São funis diferentes.
 
-4.5 Conversões — hierarquia
+4.5 Meta Ads — Campanhas de Tráfego
+Campanhas do Meta com objetivo de tráfego, direcionando para site ou LP. Métricas obrigatórias:
+- Orçamento, Custo (valor usado), Impressões, Alcance
+- Cliques no link, CTR (link), CPC médio (link), Frequência
+NUNCA avaliar campanha de tráfego por CPA ou custo por lead. O objetivo é volume de cliques
+qualificados ao menor CPC. Métricas de conversão/lead NÃO se aplicam.
+
+4.6 Conversões — hierarquia
 - Primárias (meta de negócio): Lead Presencial + Lead Live.
 - Secundárias (apoio ao algoritmo): Lead Online + microconversões.
-- Venda direta: compra de curso online (apenas campanhas específicas de venda).
+- Venda direta: compra de curso online no site (apenas em campanhas específicas de venda).
 
 5. REGRAS DE ANÁLISE — GOOGLE ADS
 
 5.1 Fluxo obrigatório de análise
 
 PASSO 1 — Leitura fria dos números:
-Custo total, conversões primárias, CPA real, taxa de conversão, CPC médio, CPM.
-Comparar CPA real vs tCPA. Se tCPA não informado, PERGUNTAR antes de julgar.
+Custo total, conversões primárias, CPA real, taxa de conversão, CPC médio.
+Comparar CPA real vs CPA desejado (tCPA).
+Se tCPA não foi informado, PERGUNTAR a meta antes de julgar.
 
 PASSO 2 — Análise por tipo de campanha:
 Search:
 - Taxa de conversão e CPA.
-- Parcela perdida por classificação alta → problema é qualidade/lance, NÃO orçamento.
-  Diagnosticar ANTES de recomendar aumento de budget.
-- Parcela perdida por orçamento alta → há espaço para mais volume com o CPA atual.
+- Parcela de impressões: perda por orçamento e por classificação.
+- Se perda por classificação é alta → problema é qualidade/relevância/lance, NÃO orçamento.
+  Diagnosticar classification loss ANTES de recomendar aumento de orçamento.
+- Se perda por orçamento é alta → há espaço para mais volume com o CPA atual.
 
 PMax:
 - CPA geral e distribuição por canal (Pesquisa, Discover, YouTube, Gmail, Display).
-- Taxa de conversão em PMax é naturalmente menor que Search — o que manda é CPA e volume.
-- Quando PMax tiver CPA menor que Search do mesmo concurso: APONTAR a diferença percentual
-  mas NÃO recomendar realocação diretamente. Registrar como ponto de análise para o gestor.
-  Formato: "PMax CPA R$ X,XX vs. Search CPA R$ Y,YY (diferença de Z%). Ponto de análise:
-  gestor deve avaliar qualidade dos leads antes de realocar orçamento."
+- Identificar quais canais puxam CPA para cima ou para baixo.
+- Taxa de conversão em PMax é naturalmente menor que Search: o que manda é CPA e volume.
 
-YouTube VVC:
-- Avaliar por CPV, Video View Rate, Engajamentos, Engagement Rate. Tratar como awareness.
-- NUNCA julgar por CPA.
+YouTube:
+- Classificar automaticamente: CONVERSÃO ou VVC (reconhecimento/consideração).
+- Conversão → avaliar CPA.
+- VVC → avaliar por três pilares: (1) Alcance: impressões, usuários exclusivos, frequência 7d,
+  CPM. (2) Retenção: View Rate e quartis 25/50/75/100%. (3) Engajamento: CPV, interações,
+  taxa de interação. Tratar como topo de funil. NÃO julgar por CPA.
 
 PASSO 3 — Diagnóstico antes da solução:
-Sempre identificar primeiro: "O maior problema está em: [Lances/tCPA? Orçamento? Estrutura?
+Sempre responder primeiro: "O maior problema aqui está em: [Lances/tCPA? Orçamento? Estrutura?
 Canais da PMax? Landing page? Segmentação? Criativos?]" — só depois sugerir ajustes.
 
 5.2 Filosofia de otimização — Google Ads
+O objetivo de toda sugestão é melhorar a performance da campanha, buscando o melhor equilíbrio
+entre volume de leads e qualificação. O tCPA configurado é uma referência, não uma lei.
+
+Princípios para sugerir ajustes:
 Toda sugestão: (a) o que mudar, (b) por que mudar com base nos dados, (c) resultado esperado.
 
-5.3 Campanhas z{} (genéricas / marca / topo de funil)
-Campanhas com prefixo z{} (ex: z{Concursos}, z{Institucional}, z{Branding}, z{DSA}) são topo
-de funil ou marca. CPA estruturalmente baixo — NÃO usar como benchmark para campanhas de
-concurso específico. NÃO listar como "destaque positivo" no Resumo Diretoria por CPA baixo.
-Na Análise do Gestor: analisar normalmente mas sempre contextualizar que o CPA baixo é
-estrutural da posição no funil, não mérito de otimização.
+Ajuste de tCPA:
+- CPA real bem abaixo do alvo → pode haver espaço para buscar mais volume reduzindo o tCPA
+  gradualmente. Explicar o trade-off: mais volume pode trazer leads menos qualificados.
+- CPA real acima do alvo → avaliar se o problema é lance, público, LP ou criativo antes de
+  simplesmente relaxar o tCPA.
+
+Alocação de orçamento (Search vs. PMax):
+PMax opera em múltiplos canais e naturalmente tende a ter CPA mais baixo que Search puras.
+Isso NÃO significa automaticamente que PMax entrega leads mais qualificados.
+REGRA: quando PMax tiver CPA significativamente menor que Search para o mesmo concurso,
+APONTAR a diferença e o percentual, mas NÃO recomendar realocação de budget diretamente.
+Formato: "PMax CPA R$ X,XX vs. Search CPA R$ Y,YY (diferença de Z%). Ponto de análise:
+o gestor deve avaliar se a qualidade dos leads PMax justifica redistribuição de orçamento."
+
+YouTube VVC:
+- Tratar como awareness/consideração. Avaliar por três pilares: alcance (CPM, usuários
+  exclusivos, frequência 7d), retenção (View Rate e quartis 25/50/75/100%) e engajamento
+  (CPV, interações, taxa de interação).
+
+Landing page:
+- Campanhas Search → geralmente LP de CURSO PRESENCIAL.
+- PMax → geralmente LP de CONCURSO com 3 modalidades.
+- Só diagnosticar "problema é LP" quando dados indicarem (taxa de conversão ruim + CPA alto).
+
+5.3 Hierarquia de campanhas por posição no funil (Google Ads)
+Campanhas com prefixo z{} (ex: z{Concursos}, z{Institucional}, z{Branding}, z{DSA}) são
+campanhas de topo de funil ou marca. CPA estruturalmente baixo.
+REGRA PARA O RESUMO DIRETORIA: NÃO listar campanhas z{} como "destaques positivos" por
+terem CPA baixo. Mencionar SOMENTE se houver anomalia.
+Na Análise do Gestor: analisar normalmente mas contextualizar que o CPA baixo é estrutural.
+No Bloco 3: não sugerir migração de orçamento para campanhas z{} baseada só em CPA.
 
 6. REGRAS DE ANÁLISE — META ADS
 
 6.1 Fluxo obrigatório — campanhas de lead
 
 PASSO 1 — Leitura dos números:
-Custo, Impressões, Alcance, Frequência, CPM.
-Cliques no link, CTR link, CPC link.
-Leads Primários (Lead Presencial + Lead Live) e CPL Primário.
-Frequência > 3.0 em prospecção → possível saturação.
+Valor investido, impressões, alcance, frequência.
+Leads primários (presencial + live) e custo por lead primário.
+Se frequência > 3.0 em campanhas de prospecção → possível saturação de público.
 
 PASSO 2 — Análise por posição no funil:
-- Topo de funil (prospecção): CPM, CTR link, CPL Primário.
-  CPM alto + CTR baixo → criativo fraco ou público saturado.
-  CTR bom + CPL alto → problema na LP ou no formulário.
-- Retargeting: CPL menor esperado. Frequência > 4-5 → público esgotando.
-- Venda online: ROAS, custo por compra, volume. Nunca misturar com métricas de lead.
+Classificar automaticamente pelo nome/objetivo da campanha.
+ATENÇÃO: campanhas de TRÁFEGO devem ser analisadas em bloco separado das campanhas de lead (ver seção 4.5).
 
-PASSO 3 — Criativos:
-Avaliar caso a caso: concurso, público, momento do edital, posição no funil.
-Apontar o que melhorar e por quê — sem regras genéricas para todas as campanhas.
+Topo de funil (prospecção):
+- Analisar criativo/copy caso a caso. Apontar oportunidades com base na situação específica.
+- Métricas-chave: CPM, CTR, custo por lead primário.
+- CPM alto + CTR baixo → criativo fraco ou público saturado.
+- CTR bom + custo por lead alto → problema na LP ou no formulário.
 
-6.2 Métrica customizada — CPL Primário
-Fórmula: Custo / (lead_presencial + lead_live)
-Prioridade máxima. Lead Online é métrica secundária. Sempre diferenciar.
+Meio/fundo de funil (retargeting):
+- Espera-se CPL menor e taxa de conversão maior.
+- Monitorar frequência: se > 4-5, público esgotando.
+
+Campanhas de venda online:
+- Analisar como e-commerce: ROAS, custo por compra, volume.
+- NÃO misturar com métricas de campanha de lead.
+
+PASSO 3 — Criativos e aprendizado:
+- Ao editar copy existente: preserva histórico de aprendizado (Andromeda). SEMPRE preferir
+  editar texto do que criar anúncio novo, exceto quando substituir vídeo.
+- Avaliar caso a caso com base no contexto da campanha.
+
+6.2 Métrica customizada — Custo por Lead Primário
+Fórmula: Valor usado / (lead_presencial + lead_live)
+Lead online é métrica secundária separada. Sempre diferenciar e priorizar CPL primário.
 
 7. REGRAS CRÍTICAS — APLICAR SEMPRE
 
-- NUNCA avaliar campanha de tráfego/awareness por CPA.
-- NUNCA concluir sobre CPA com menos de 30 conversões — sinalizar explicitamente.
-- NUNCA presumir CPA target. Se não informado, perguntar.
-- Parcela perdida por classificação: verificar ANTES de recomendar aumento de orçamento.
-- SEMPRE separar análise por marca. Blocos separados, nunca misturar.
-- YouTube VVC: NUNCA avaliar por CPA.
-- Meta venda online: e-commerce (ROAS, custo por compra). Nunca tratar como lead.
-- Campanhas z{}: NÃO listar como destaque por CPA baixo — é estrutural.
-- PMax vs Search: apontar diferença de CPA, não recomendar realocação diretamente.
+1. NUNCA avaliar campanha de TRÁFEGO por CPA ou custo por lead.
+2. NUNCA concluir sobre CPA com menos de 30 conversões — sinalizar explicitamente.
+3. CPA target varia por concurso, marca e status. Se não informado, PERGUNTAR.
+4. Parcela perdida por classificação: verificar ANTES de recomendar aumento de orçamento.
+5. SEMPRE separar análise por marca. Blocos separados, nunca misturar.
+6. YouTube VVC: NUNCA avaliar por CPA. Avaliar pelos três pilares.
+7. Meta venda online: e-commerce (ROAS, custo por compra). NUNCA como lead.
+8. Campanhas z{}: NÃO usar CPA como benchmark. NÃO listar como destaque por CPA baixo.
+9. PMax vs. Search: apontar diferença, NÃO recomendar realocação diretamente.
 
 8. FORMATO DE SAÍDA
 
 Análise SEMPRE separada por marca: primeiro Central de Concursos, depois Degrau Cultural.
 
-8.0 Período e comparativo WoW
-Relatório semanal cobre DOMINGO a SÁBADO. Confirmar que o período está correto.
-Quando houver dados da semana anterior: incluir comparativo WoW obrigatório.
-Métricas WoW: Custo (R$ e %), Conversões/Leads (qtd e %), CPA/CPL (R$ e %), Frequência Meta.
+8.0 Período de análise e comparativo semanal
+O relatório semanal cobre o período de DOMINGO a SÁBADO.
+REGRA OBRIGATÓRIA: sempre que houver dados do período anterior disponíveis, incluir comparativo
+período a período (WoW) para cada campanha e nos resumos.
 
-─────────────────────────────────────────────────────
-BLOCO 1 — RESUMO DIRETORIA
-─────────────────────────────────────────────────────
+Métricas com variação WoW obrigatória:
+- Custo (R$ e variação %)
+- Conversões/Leads (quantidade e variação %)
+- CPA/CPL (R$ e variação %)
+- Para Meta: Frequência (atual vs. anterior)
+
+No Resumo Diretoria, incluir comparativo geral por plataforma:
+"Google Ads: R$ X.XXX (período atual) vs. R$ X.XXX (período anterior) | Conversões: XXX vs. XXX (±X%) | CPA: R$ XX vs. R$ XX (±X%)"
+
+Na Análise do Gestor, cada campanha deve ter os números do período atual E do período anterior lado a lado.
+Se os dados do período anterior não forem fornecidos, solicitar para próxima rodada.
+
+8.1 Bloco 1 — Resumo Diretoria
 
 PERÍODO: [extrair dos dados]
 
 ═══ CENTRAL DE CONCURSOS ═══
 
 INVESTIMENTO TOTAL: R$ X.XXX,XX
-  Google Ads: R$ X.XXX,XX | Meta Ads: R$ X.XXX,XX
+- Google Ads: R$ X.XXX,XX
+- Meta Ads: R$ X.XXX,XX
 
-LEADS PRIMÁRIOS GERADOS: XXX
-  Google Ads: XXX conversões (CPA médio: R$ XX,XX)
-  Meta Ads: XXX leads primários (CPL primário médio: R$ XX,XX)
+BLOCO PRINCIPAL — LEADS PRIMÁRIOS GERADOS: XXX
+- Google Ads: XXX (CPA médio: R$ XX,XX)
+- Meta Ads: XXX (CPL primário médio: R$ XX,XX)
 
-[Se houver dados WoW, incluir comparação aqui]
+[Se houver dados do período anterior, incluir comparação WoW aqui]
 
+── OBJETIVO: LEADS (Google Ads + Meta Ads) ──
 DESTAQUES POSITIVOS:
-  Listar apenas campanhas de concurso específico acima da meta.
-  NÃO incluir campanhas z{} como destaque por CPA baixo.
-
+- [Campanhas de lead com performance acima da meta — NÃO incluir z{}]
 PONTOS DE ATENÇÃO:
-  [Campanha com CPA/CPL acima da meta, frequência alta, etc.]
-
+- [Campanhas de lead com CPA/CPL acima da meta, volume baixo, etc.]
 DECISÕES NECESSÁRIAS:
-  [Aumentar orçamento? Há perda por budget? Pausar campanha?]
+- [Decisões sobre orçamento, tCPA, público em campanhas de lead]
+
+── OBJETIVO: YOUTUBE — RECONHECIMENTO E CONSIDERAÇÃO ──
+DESTAQUES POSITIVOS:
+- [Campanhas VVC com bom View Rate, retenção ou CPM eficiente]
+PONTOS DE ATENÇÃO:
+- [Campanhas VVC com retenção baixa, CPM alto, frequência excessiva]
+DECISÕES NECESSÁRIAS:
+- [Decisões sobre criativos, segmentação ou orçamento de YouTube VVC]
+
+── OBJETIVO: TRÁFEGO (Meta Ads) ──
+DESTAQUES POSITIVOS:
+- [Campanhas de tráfego com CTR e CPC eficientes]
+PONTOS DE ATENÇÃO:
+- [Campanhas de tráfego com CTR baixo, CPC alto, frequência saturando]
+DECISÕES NECESSÁRIAS:
+- [Decisões sobre criativos, público ou orçamento de tráfego]
+
+── OBJETIVO: VENDAS ONLINE (Meta Ads) ──
+DESTAQUES POSITIVOS:
+- [Campanhas de venda com ROAS acima da meta]
+PONTOS DE ATENÇÃO:
+- [Campanhas de venda com custo por compra alto, ROAS caindo]
+DECISÕES NECESSÁRIAS:
+- [Decisões sobre orçamento, criativos ou público de vendas]
+
+Se algum objetivo não tiver campanhas ativas para a marca, omitir o bloco.
 
 ═══ DEGRAU CULTURAL ═══
-[Mesma estrutura]
+[Mesma estrutura acima por objetivo, com dados da Degrau]
 
-─────────────────────────────────────────────────────
-BLOCO 2 — ANÁLISE COMPLETA PARA O GESTOR DE TRÁFEGO
-─────────────────────────────────────────────────────
+Tom: claro, executivo, sem jargão técnico desnecessário.
+
+8.2 Bloco 2 — Análise Completa para o Gestor de Tráfego
+
+Agrupar por marca. Dentro de cada marca, organizar em QUATRO BLOCOS por objetivo:
+(1) LEADS — Campanhas de Lead (Google Search, PMax, Meta Lead)
+(2) RECONHECIMENTO — Campanhas YouTube VVC (Reconhecimento e Consideração)
+(3) TRÁFEGO — Campanhas de Tráfego (Meta)
+(4) VENDAS — Campanhas de Venda Online (Meta)
+
+Se algum objetivo não tiver campanhas ativas para a marca, omitir o bloco.
+
+Para campanhas YouTube VVC (bloco 2 — Reconhecimento), apresentar os dados em FORMATO TABULAR
+com as mesmas tabelas usadas na coleta de dados, ANTES do diagnóstico campanha a campanha:
+
+VISÃO GERAL (consolidado de todas as campanhas YouTube VVC da marca):
+  Impressões: XX.XXX | Usuários únicos: XX.XXX | Custo total: R$ X.XXX,XX | CPM médio: R$ XX,XX
+
+TABELA ALCANCE:
+| Campanha | Orçam./dia | Impr. | Usuários Excl. | Freq. 7D | CPM Méd. |
+| [nome]   | R$ XX,XX   | XX.XXX| XX.XXX          | X,X      | R$ XX,XX |
+
+TABELA RETENÇÃO DE VÍDEO:
+| Campanha | View Rate | 25% | 50% | 75% | 100% |
+| [nome]   | XX,X%     | XX% | XX% | XX% | XX%  |
+
+TABELA ENGAJAMENTO:
+| Campanha | CPV Méd. | CPC Méd. | Interações | Taxa Inter. | Visualizações |
+| [nome]   | R$ X,XX  | R$ X,XX  | XX.XXX     | X,XX%       | XX.XXX        |
+
+Após as tabelas, seguir com a análise campanha a campanha (DIAGNÓSTICO + PLANO DE AÇÃO) para cada campanha YouTube VVC
 
 ═══ CENTRAL DE CONCURSOS ═══
 
 CAMPANHA: [nome]
 PLATAFORMA: [Google Ads / Meta Ads]
-TIPO: [Search / PMax / YouTube Conversão / YouTube VVC / Meta Lead / Meta Venda Online]
+TIPO: [Search / PMax / YouTube Conversão / YouTube VVC / Meta Lead / Meta Tráfego / Meta Venda Online]
 STATUS: [Ativa / Pausada / Limitada por orçamento]
 
-NÚMEROS (semana atual vs. anterior se disponível):
-  [Google Search/PMax]
-  Custo: R$ X.XXX,XX | Impressões: XX.XXX | Cliques: X.XXX | CTR: X,XX% | CPM: R$ X,XX
-  Conversões: XX | CPA: R$ XX,XX | tCPA: R$ XX,XX | Taxa conv: X,XX%
-  Parc impr perd (orç): X% | Parc impr perd (class): X%
-
-  [Meta Lead]
-  Custo: R$ X.XXX,XX | Impressões: XX.XXX | Alcance: XX.XXX | Frequência: X,X | CPM: R$ X,XX
-  Cliques link: X.XXX | CTR link: X,XX% | CPC link: R$ X,XX
-  Lead Presencial: XX | Lead Live: XX | Leads Primários: XX | CPL Primário: R$ XX,XX
-
-  [Meta Venda Online]
-  Custo: R$ X.XXX,XX | Vendas: XX | ROAS: X,XX | Custo por compra: R$ XX,XX
-
-  [YouTube VVC]
-  Custo: R$ X.XXX,XX | Video Views: XX.XXX | View Rate: X,XX% | CPV: R$ X,XXXX
-  Engajamentos: XX.XXX | Engagement Rate: X,XX%
+NÚMEROS (período atual vs. período anterior):
+  Custo: R$ X.XXX,XX (vs. R$ X.XXX,XX | ±X%) | Impressões: XX.XXX | Cliques: X.XXX | CTR: X,XX%
+  Conversões primárias: XX (vs. XX | ±X%) | CPA real: R$ XX,XX (vs. R$ XX,XX | ±X%) | tCPA: R$ XX,XX
+  Taxa de conversão: X,XX%
+  [Search]: Parcela perdida por orçamento: X% | Por classificação: X%
+  [Meta Lead]: Alcance: XX.XXX | Frequência: X,X (vs. X,X) | CPL primário: R$ XX,XX
+  [Meta Venda]: ROAS: X,XX | Custo por compra: R$ XX,XX | Compras no site: XX
+  [YouTube VVC]: Usuários exclusivos: XX.XXX | Freq. 7d: X,X | CPM: R$ X,XX | View Rate: X% |
+    Vídeo assistido 25%: X% | 50%: X% | 75%: X% | 100%: X% | CPV: R$ X,XX | Interações: XX.XXX | Taxa de interação: X%
+  [Meta Tráfego]: Cliques no link: X.XXX | CTR (link): X,XX% | CPC médio: R$ X,XX | Alcance: XX.XXX | Frequência: X,X
 
 DIAGNÓSTICO:
-  O maior problema está em: [gargalo principal]
-  [Explicação concisa]
+  O maior problema está em: [identificar gargalo principal]
 
 PLANO DE AÇÃO:
   1. [O que fazer] → [Por que] → [Resultado esperado]
   2. [Ação secundária] → [Justificativa] → [Resultado esperado]
 
-⚠️ [Alertas: <30 conversões, parcela perdida por classificação alta, frequência crítica, etc.]
+⚠️ [Alertas: <30 conversões, classification loss alto, frequência crítica, etc.]
 
-[Para z{}: "CPA baixo é estrutural — posição de topo de funil/marca, não mérito de otimização."]
-[Para PMax vs Search: apontar diferença % de CPA como ponto de análise, não recomendação direta.]
+Para z{}: "CPA baixo é estrutural — topo de funil/marca."
+Para PMax vs Search: apontar diferença % de CPA como ponto de análise, não recomendação.
 
 ═══ DEGRAU CULTURAL ═══
 [Mesma análise campanha a campanha]
 
-─────────────────────────────────────────────────────
-BLOCO 3 — ALOCAÇÃO DE BUDGET (quando necessário)
-─────────────────────────────────────────────────────
+8.3 Bloco 3 — Alocação de Budget (quando necessário)
 
 RECOMENDAÇÃO DE REDISTRIBUIÇÃO:
-  [De campanha X → para campanha Y: R$ XXX/dia | Justificativa | Risco]
+[De campanha X → para campanha Y: R$ XXX/dia | Justificativa | Risco]
 
-NOTA: NÃO incluir sugestões de migração Search → PMax como recomendação direta.
-Diferenças de CPA entre Search e PMax do mesmo concurso: listar como "PONTOS PARA AVALIAÇÃO
-DO GESTOR", não como recomendações de redistribuição.
+NÃO incluir sugestões de migração Search → PMax como recomendação direta.
+Diferenças de CPA: listar como "PONTOS PARA AVALIAÇÃO DO GESTOR".
 
-9. PROCESSAMENTO DOS DADOS
+9. PROCESSAMENTO DOS DADOS DAS PLATAFORMAS
 
-- cost_micros: dividir por 1.000.000.
-- YouTube VVC: nome contém "VVC", "view", "visualização" ou "engajamento" → tratar como VVC.
-- Meta venda: objetivo vendas ou nome contém "venda"/"online"/"e-commerce" → venda online.
-- Incluir TODA campanha com custo > 0 OU impressões > 0, mesmo que pausada no período.
-  Para campanhas pausadas com gasto: "Pausada durante o período. Custo: R$ X,XX | Conv: X."
-- Campanhas com custo = R$0 e impressões = 0: listar em bloco resumido ao final da seção.
-- Campos ausentes ou zerados: sinalizar, nunca inventar dados.
-- Origem dos dados está rotulada: usar para separar marcas.
+9.1 Origem dos dados
+Os dados chegam diretamente das APIs das plataformas via integração com o CRM.
+
+9.2 Regras de processamento
+1. cost_micros: converter para reais dividindo por 1.000.000.
+2. YouTube VVC: nome contém "VVC", "view", "visualização" ou "engajamento" → tratar como VVC.
+3. Meta venda: objetivo vendas ou nome contém "venda"/"online"/"e-commerce" → venda online.
+4. Campos ausentes/zerados: sinalizar, nunca inventar dados.
+5. Adaptar leitura ao formato recebido sem reclamar.
+6. Incluir TODA campanha com custo > 0 OU impressões > 0 no período, mesmo pausada.
+   Pausadas com gasto: "Pausada durante o período. Custo: R$ X,XX com X conversões."
+   Custo = R$0 e impressões = 0: listar em bloco resumido ao final ("Campanhas zeradas/pausadas").
 
 10. O QUE NUNCA FAZER
 
-- Recomendação genérica. Sempre: o que está errado, por que, e o que fazer especificamente.
-- Presumir CPA target. Se não informado, perguntar.
-- Avaliar campanha de tráfego/awareness por CPA.
-- Concluir sobre CPA com menos de 30 conversões.
-- Misturar análise de lead com venda online.
-- Diagnosticar "problema é LP" sem dados que comprovem (taxa conv ruim + CPA alto).
-- Recomendar aumento de orçamento sem verificar parcela perdida por classificação.
-- Misturar campanhas da Central com campanhas da Degrau.
-- Listar campanhas z{} como destaques positivos por CPA baixo.
-- Recomendar diretamente realocação Search → PMax baseada só em CPA.
+1. Nunca dar recomendação genérica. Sempre: o que está errado, por que, e o que fazer.
+2. Nunca presumir CPA target. Se não informado, perguntar.
+3. Nunca avaliar campanha de tráfego por CPA, CPV ou taxa de visualização.
+   Nunca avaliar VVC por CPA ou CTR de clique.
+4. Nunca concluir sobre CPA com menos de 30 conversões.
+5. Nunca misturar análise de lead com venda online.
+6. Nunca diagnosticar "problema é LP" sem dados que comprovem.
+7. Nunca recomendar aumento de orçamento sem verificar parcela perdida por classificação.
+8. Nunca ignorar distinção entre conversões primárias e secundárias.
+9. Nunca misturar campanhas da Central com campanhas da Degrau.
+10. Nunca listar campanhas z{} como destaques positivos por CPA baixo.
+11. Nunca recomendar diretamente realocação Search → PMax.
 
 11. COMPORTAMENTO QUANDO DADOS SÃO INSUFICIENTES
 
-Fazer a análise com o que tem. Listar métricas faltantes e impacto:
-"Sem parcela perdida por classificação, não consigo diagnosticar se o gargalo é orçamento ou
-qualidade/lance." Sugerir como obter a métrica faltante.
-Se dados WoW ausentes: solicitar para próxima rodada e realizar análise sem comparativo.
+Fazer a análise com o que tem. Listar métricas faltantes e impacto.
+Se dados do período anterior ausentes: solicitar para próxima rodada e analisar sem WoW.
 
-12. TIKTOK ADS (SECUNDÁRIO — apenas Degrau Cultural)
+12. TIKTOK ADS (SECUNDÁRIO)
 
-Analisar como campanha de tráfego/awareness. Métricas: impressões, cliques, CTR, CPC, custo,
-visualizações de vídeo. NÃO esperar conversões rastreadas. Sinalizar limitações de rastreamento.
+Ativo apenas na Degrau Cultural. Analisar como campanha de tráfego/awareness.
+Métricas: impressões, cliques, CTR, CPC, custo, visualizações de vídeo.
+NÃO esperar conversões rastreadas. Sinalizar limitações de rastreamento.
 
-Versão do prompt: 2.1 | Última atualização: Março 2026
+Versão do prompt: 2.3 | Última atualização: Julho 2025
+Alterações v2.3: (1) Bloco 1 Resumo Diretoria separado por objetivo (Leads, YouTube, Tráfego, Vendas),
+(2) Bloco 2 reorganizado em 4 blocos por objetivo (Leads, Reconhecimento, Tráfego, Vendas),
+(3) YouTube VVC no Bloco 2 com formato tabular (Visão Geral + 3 tabelas: Alcance, Retenção, Engajamento).
+Alterações v2.2: (1) Seção 4.2 YouTube reescrita com métricas completas por objetivo (VVC: 3 pilares),
+(2) Nova seção 4.5 Meta Tráfego com métricas específicas, (3) Formato de saída reorganizado em 3 blocos,
+(4) Template do Resumo Diretoria prioriza Leads como bloco principal,
+(5) Regras críticas atualizadas para distinguir métricas por tipo de campanha.
 """
 
 SYSTEM_PROMPT_ALERTA_DIARIO = """
@@ -1316,8 +2086,354 @@ def selecionar_config_automatica():
     return configs
 
 # =====================================================
-# ANÁLISE VIA CLAUDE (v2.0)
+# RENDERIZAÇÃO VISUAL DA ANÁLISE DA IA
 # =====================================================
+
+def _renderizar_analise(analise: str, tipo: str = "completo_ads"):
+    """Renderiza o texto de análise do Claude com formatação visual aprimorada.
+
+    Estratégia:
+    - Divide o texto nos blocos principais (BLOCO 1, BLOCO 2, BLOCO 3 / ALERTA).
+    - Cada bloco é exibido num contêiner com estilo e cor próprios.
+    - Dentro do BLOCO 2, cada campanha individual é exibida num expander.
+    - Linhas com ⚠️ são destacadas como avisos (st.warning).
+    - Linhas com 🚨 são destacadas como erros (st.error).
+    - Restante é renderizado como markdown normal.
+    """
+    CSS = """
+    <style>
+    .bloco-card {
+        background: #f8f9fa;
+        border-left: 4px solid #1f77b4;
+        border-radius: 6px;
+        padding: 1rem 1.2rem;
+        margin-bottom: 1rem;
+    }
+    .bloco-resumo { border-left-color: #2ca02c; }
+    .bloco-completo { border-left-color: #1f77b4; }
+    .bloco-budget { border-left-color: #ff7f0e; }
+    .bloco-alerta { border-left-color: #d62728; }
+    .marca-header {
+        background: linear-gradient(90deg, #1f3c88 0%, #1565c0 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 1.05rem;
+        margin: 0.8rem 0 0.4rem 0;
+    }
+    .campanha-nome {
+        font-weight: 700;
+        color: #0d47a1;
+        font-size: 0.95rem;
+    }
+    </style>
+    """
+    st.markdown(CSS, unsafe_allow_html=True)
+
+    # ── Divide nos três blocos principais ──────────────────────────────────
+    def _split_blocos(texto):
+        """Retorna lista de (titulo, conteudo) para cada bloco detectado."""
+        # Padrões de abertura de bloco
+        import re as _re
+        pattern = _re.compile(
+            r'(BLOCO\s+\d+\s*[—\-–]+[^\n]+|'
+            r'═{3,}[^\n]*|'
+            r'\*{2}BLOCO\s+\d+[^\*]+\*{2})',
+            _re.IGNORECASE
+        )
+        parts = pattern.split(texto)
+        blocos = []
+        i = 0
+        if parts and parts[0].strip():
+            blocos.append(("INTRODUÇÃO", parts[0]))
+        i = 1
+        while i < len(parts) - 1:
+            titulo = parts[i].strip()
+            conteudo = parts[i + 1] if i + 1 < len(parts) else ""
+            blocos.append((titulo, conteudo))
+            i += 2
+        return blocos
+
+    def _cor_bloco(titulo: str):
+        t = titulo.upper()
+        if "RESUMO" in t or "BLOCO 1" in t or "BLOCO1" in t:
+            return "bloco-resumo", "📊 RESUMO DIRETORIA"
+        if "COMPLETA" in t or "GESTOR" in t or "BLOCO 2" in t or "BLOCO2" in t:
+            return "bloco-completo", "🔍 ANÁLISE COMPLETA — GESTOR DE TRÁFEGO"
+        if "BUDGET" in t or "ALOCAÇÃO" in t or "BLOCO 3" in t or "BLOCO3" in t:
+            return "bloco-budget", "💰 ALOCAÇÃO DE BUDGET"
+        if "ALERTA" in t:
+            return "bloco-alerta", "🚨 ALERTAS"
+        return "bloco-card", titulo
+
+    def _render_conteudo(conteudo: str):
+        """Renderiza o conteúdo de um bloco, tratando campanhas, alertas e marcas."""
+        import re as _re
+        linhas = conteudo.split("\n")
+        buffer = []
+
+        def _flush():
+            txt = "\n".join(buffer).strip()
+            if txt:
+                # Detecta e converte tabelas ASCII simples em st.dataframe
+                if _tentar_tabela(txt):
+                    pass
+                else:
+                    st.markdown(txt)
+            buffer.clear()
+
+        def _tentar_tabela(txt):
+            """Tenta converter bloco de texto com | em uma tabela visual."""
+            linhas_t = [l for l in txt.split("\n") if l.strip()]
+            linhas_pipe = [l for l in linhas_t if "|" in l]
+            if len(linhas_pipe) < 2:
+                return False
+            # Separa cabeçalho e dados (ignora linhas de separação --)
+            rows = []
+            for l in linhas_pipe:
+                if _re.match(r"^[\s\|\-\:]+$", l):
+                    continue
+                cells = [c.strip() for c in l.split("|") if c.strip()]
+                if cells:
+                    rows.append(cells)
+            if len(rows) < 2:
+                return False
+            try:
+                df_t = pd.DataFrame(rows[1:], columns=rows[0])
+                st.dataframe(df_t, use_container_width=True, hide_index=True)
+                return True
+            except Exception:
+                return False
+
+        i = 0
+        while i < len(linhas):
+            linha = linhas[i]
+            linha_strip = linha.strip()
+
+            # Cabeçalho de marca (═══ xxxx ═══)
+            if _re.match(r"^═{2,}.*═{2,}$", linha_strip) or (
+                linha_strip.startswith("═") or linha_strip.endswith("═")
+            ):
+                _flush()
+                st.markdown(
+                    f'<div class="marca-header">{linha_strip.replace("═", "").strip()}</div>',
+                    unsafe_allow_html=True,
+                )
+                i += 1
+                continue
+
+            # Linha de campanha individual dentro do Bloco 2
+            if _re.match(r"^(CAMPANHA|CAMP\.?)\s*:", linha_strip, _re.IGNORECASE):
+                _flush()
+                nome_camp = linha_strip.split(":", 1)[-1].strip()
+                # Acumula o bloco da campanha até a próxima campanha ou separador
+                bloco_camp = [linha]
+                j = i + 1
+                while j < len(linhas):
+                    prox = linhas[j].strip()
+                    if _re.match(r"^(CAMPANHA|CAMP\.?)\s*:", prox, _re.IGNORECASE):
+                        break
+                    if _re.match(r"^═{3,}", prox):
+                        break
+                    bloco_camp.append(linhas[j])
+                    j += 1
+                camp_txt = "\n".join(bloco_camp).strip()
+                _render_campanha_expander(nome_camp, camp_txt)
+                i = j
+                continue
+
+            # Alertas ⚠️
+            if "⚠️" in linha_strip and linha_strip:
+                _flush()
+                st.warning(linha_strip)
+                i += 1
+                continue
+
+            # Alertas críticos 🚨
+            if "🚨" in linha_strip and linha_strip:
+                _flush()
+                st.error(linha_strip)
+                i += 1
+                continue
+
+            buffer.append(linha)
+            i += 1
+
+        _flush()
+
+    def _render_campanha_expander(nome: str, conteudo: str):
+        """Renderiza uma campanha individual dentro de um expander com ícone de status."""
+        import re as _re
+
+        # Detecta indicadores de status para colorir o ícone
+        tem_alerta = "⚠️" in conteudo or "🚨" in conteudo
+        icone = "🔴" if "🚨" in conteudo else ("🟡" if tem_alerta else "🟢")
+        label = f"{icone} {nome}"
+
+        linhas_diag = [l.strip() for l in conteudo.split("\n") if "DIAGNÓSTICO" in l.upper() or "maior problema" in l.lower()]
+        subtitulo = linhas_diag[0].replace("DIAGNÓSTICO:", "").replace("DIAGNÓSTICO", "").strip() if linhas_diag else ""
+        if subtitulo:
+            label += f"  —  {subtitulo[:80]}"
+
+        with st.expander(label, expanded=False):
+            linhas = conteudo.split("\n")
+
+            # Extrai metadados da campanha (PLATAFORMA, TIPO, STATUS)
+            meta_info = {}
+            SECOES = {
+                "PLATAFORMA": "meta",
+                "TIPO": "meta",
+                "STATUS": "meta",
+                "NÚMEROS": "numeros",
+                "DIAGNÓSTICO": "diagnostico",
+                "PLANO DE AÇÃO": "plano",
+                "PLANO": "plano",
+            }
+
+            secao_atual = None
+            buffer_secao = []
+
+            def _flush_secao(secao, buf):
+                txt = "\n".join(buf).strip()
+                if not txt:
+                    return
+                if secao == "numeros":
+                    _render_metricas_inline(txt)
+                elif secao == "diagnostico":
+                    st.info(f"**🔎 Diagnóstico:** {txt}")
+                elif secao == "plano":
+                    st.success(f"**✅ Plano de Ação:**\n\n{txt}")
+                elif secao == "meta":
+                    pass  # exibido no badge acima
+                else:
+                    st.markdown(txt)
+
+            def _render_metricas_inline(txt):
+                """Extrai pares chave:valor separados por | e exibe como métricas.
+                Linhas com prefixo [Search]: ou [Meta Lead]: etc. são exibidas como subseções."""
+                import re as _re
+
+                linhas_num = txt.split("\n")
+                for linha_num in linhas_num:
+                    linha_num = linha_num.strip()
+                    if not linha_num:
+                        continue
+
+                    # Detecta prefixo de subseção [Search]: / [Meta Lead]: / [YouTube VVC]:
+                    sub_match = _re.match(r"^\[([^\]]+)\]\s*:?\s*(.*)", linha_num)
+                    if sub_match:
+                        sub_label = sub_match.group(1)
+                        sub_rest = sub_match.group(2).strip()
+                        st.caption(f"**{sub_label}**")
+                        if sub_rest:
+                            linha_num = sub_rest
+                        else:
+                            continue
+
+                    # Extrai pares chave:valor separados por |
+                    metricas = []
+                    partes = [p.strip() for p in linha_num.split("|") if p.strip()]
+                    for parte in partes:
+                        if ":" in parte:
+                            k, _, v = parte.partition(":")
+                            metricas.append((k.strip(), v.strip()))
+                        else:
+                            metricas.append(("", parte))
+
+                    if metricas:
+                        chunk = 4
+                        for idx in range(0, len(metricas), chunk):
+                            grupo = metricas[idx:idx + chunk]
+                            cols = st.columns(len(grupo))
+                            for ci, (k, v) in enumerate(grupo):
+                                if k:
+                                    cols[ci].metric(k, v)
+                                else:
+                                    cols[ci].markdown(f"**{v}**")
+                    else:
+                        st.markdown(linha_num)
+
+            for linha in linhas:
+                linha_strip = linha.strip()
+                detectou = False
+                for chave, tipo_secao in SECOES.items():
+                    if _re.match(rf"^{chave}\s*(\([^)]*\))?\s*:", linha_strip, _re.IGNORECASE):
+                        if secao_atual is not None:
+                            _flush_secao(secao_atual, buffer_secao)
+                        secao_atual = tipo_secao
+                        # Extrai o valor após "CHAVE:" ou "CHAVE (extra):"
+                        valor_match = _re.match(rf"^{chave}\s*(?:\([^)]*\))?\s*:\s*(.*)", linha_strip, _re.IGNORECASE)
+                        valor = valor_match.group(1).strip() if valor_match else ""
+                        if tipo_secao == "meta":
+                            meta_info[chave.upper()] = valor
+                        buffer_secao = [valor] if valor else []
+                        detectou = True
+                        break
+                if not detectou:
+                    if "⚠️" in linha_strip and linha_strip:
+                        if secao_atual is not None:
+                            _flush_secao(secao_atual, buffer_secao)
+                            buffer_secao = []
+                        st.warning(linha_strip)
+                        secao_atual = None
+                    elif "🚨" in linha_strip and linha_strip:
+                        if secao_atual is not None:
+                            _flush_secao(secao_atual, buffer_secao)
+                            buffer_secao = []
+                        st.error(linha_strip)
+                        secao_atual = None
+                    else:
+                        buffer_secao.append(linha)
+
+            if secao_atual is not None:
+                _flush_secao(secao_atual, buffer_secao)
+
+            # Exibe metadados da campanha como badges no topo
+            if meta_info:
+                parts = []
+                if "PLATAFORMA" in meta_info:
+                    parts.append(f"**Plataforma:** {meta_info['PLATAFORMA']}")
+                if "TIPO" in meta_info:
+                    parts.append(f"**Tipo:** {meta_info['TIPO']}")
+                if "STATUS" in meta_info:
+                    parts.append(f"**Status:** {meta_info['STATUS']}")
+                if parts:
+                    st.markdown(" &nbsp;|&nbsp; ".join(parts))
+
+    # ── Renderiza cada bloco ───────────────────────────────────────────────
+    if tipo == "alerta":
+        # Para alertas: renderiza diretamente sem subdivisão em blocos
+        st.markdown(analise)
+        return
+
+    blocos = _split_blocos(analise)
+
+    if len(blocos) <= 1:
+        # Fallback: se não conseguiu separar, renderiza o markdown simples com destaque
+        _render_conteudo(analise)
+        return
+
+    TABS_LABELS = []
+    TABS_CONTENT = []
+    for titulo, conteudo in blocos:
+        if not conteudo.strip() and not titulo.strip():
+            continue
+        css_class, label = _cor_bloco(titulo)
+        TABS_LABELS.append(label)
+        TABS_CONTENT.append((css_class, titulo, conteudo))
+
+    if len(TABS_LABELS) >= 2:
+        tabs = st.tabs(TABS_LABELS)
+        for tab, (css_class, titulo, conteudo) in zip(tabs, TABS_CONTENT):
+            with tab:
+                _render_conteudo(conteudo)
+    else:
+        for css_class, titulo, conteudo in TABS_CONTENT:
+            _render_conteudo(conteudo)
+
+
+
 
 def _get_anthropic_client():
     """Inicializa o client Anthropic de forma segura."""
@@ -1342,6 +2458,7 @@ def _get_anthropic_client():
 def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="completo_ads"):
     """Envia dados para o Claude e retorna a análise usando o prompt correto."""
     import time
+
     import anthropic as _anthropic
 
     client, erro = _get_anthropic_client()
@@ -1557,19 +2674,16 @@ def run_page():
 
         st.info(f"📅 **{start_date.strftime('%d/%m/%Y')}** a **{end_date.strftime('%d/%m/%Y')}** ({janela_dias} dias)")
 
-        col_btn_ads1, col_btn_ads2 = st.columns(2)
-        with col_btn_ads1:
-            if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_ads_buscar"):
-                _coletar_dados(contas, start_date, end_date, janela_dias, "ads_dados")
-        with col_btn_ads2:
-            dados_ads_prontos = "ads_dados" in st.session_state
-            if st.button(
-                "🤖 Analisar com IA",
-                use_container_width=True,
-                key="btn_ads_ia",
-                disabled=not dados_ads_prontos,
-            ):
-                _enviar_para_ia("ads_dados", SYSTEM_PROMPT_ADS_V2, "completo_ads")
+        if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_ads_buscar"):
+            _coletar_dados(contas, start_date, end_date, janela_dias, "ads_dados")
+        dados_ads_prontos = "ads_dados" in st.session_state
+        if st.button(
+            "🤖 Analisar com IA",
+            use_container_width=True,
+            key="btn_ads_ia",
+            disabled=not dados_ads_prontos,
+        ):
+            _enviar_para_ia("ads_dados", SYSTEM_PROMPT_ADS_V2, "completo_ads")
 
         if "ads_dados" in st.session_state:
             info = st.session_state["ads_dados"]
@@ -1589,19 +2703,16 @@ def run_page():
 
         st.info(f"📅 Verificando dados de ontem: **{start_alerta.strftime('%d/%m/%Y')}**")
 
-        col_btn_al1, col_btn_al2 = st.columns(2)
-        with col_btn_al1:
-            if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_alerta_buscar"):
-                _coletar_dados(contas, start_alerta, end_alerta, 1, "alerta_dados")
-        with col_btn_al2:
-            dados_alerta_prontos = "alerta_dados" in st.session_state
-            if st.button(
-                "🚨 Analisar com IA",
-                use_container_width=True,
-                key="btn_alerta_ia",
-                disabled=not dados_alerta_prontos,
-            ):
-                _enviar_para_ia("alerta_dados", SYSTEM_PROMPT_ALERTA_DIARIO, "alerta")
+        if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_alerta_buscar"):
+            _coletar_dados(contas, start_alerta, end_alerta, 1, "alerta_dados")
+        dados_alerta_prontos = "alerta_dados" in st.session_state
+        if st.button(
+            "🚨 Analisar com IA",
+            use_container_width=True,
+            key="btn_alerta_ia",
+            disabled=not dados_alerta_prontos,
+        ):
+            _enviar_para_ia("alerta_dados", SYSTEM_PROMPT_ALERTA_DIARIO, "alerta")
 
         if "alerta_dados" in st.session_state:
             info = st.session_state["alerta_dados"]
@@ -1636,16 +2747,16 @@ def run_page():
                 icone = "🚨" if rel["tipo"] == "alerta" else "📊"
                 with st.expander(f"{icone} {rel['data']} [{rel['tipo']}] — {gerado_em}"):
                     st.markdown(rel["analise"])
-                    pdf_bytes = gerar_pdf_relatorio(
+                    html_bytes = gerar_html_relatorio(
                         rel["analise"], rel["dados_brutos"], rel["data"], rel["tipo"]
                     )
                     st.download_button(
-                        label="📥 Exportar para PDF",
-                        data=pdf_bytes,
-                        file_name=f"relatorio_{rel['tipo']}_{rel['data']}.pdf",
-                        mime="application/pdf",
+                        label="📥 Exportar Relatório HTML",
+                        data=html_bytes,
+                        file_name=f"relatorio_{rel['tipo']}_{rel['data']}.html",
+                        mime="text/html",
                         use_container_width=True,
-                        key=f"btn_pdf_hist_{idx}_{rel['tipo']}_{rel['data']}",
+                        key=f"btn_html_hist_{idx}_{rel['tipo']}_{rel['data']}",
                     )
                     with st.expander("📋 Dados brutos"):
                         st.code(rel["dados_brutos"], language="text")
@@ -1747,7 +2858,7 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     # Exibe
     icone = "🚨" if tipo == "alerta" else "🤖"
     st.subheader(f"{icone} Análise do Claude")
-    st.markdown(analise)
+    _renderizar_analise(analise, tipo)
 
     filepath = salvar_relatorio(analise, dados_consolidados, data_ref, tipo)
     if filepath == "db":
@@ -1755,16 +2866,16 @@ def _executar_analise(contas, start_date, end_date, janela_dias, system_prompt, 
     else:
         st.success(f"✅ Relatório salvo localmente!")
 
-    # Botão de exportar para PDF
-    pdf_bytes = gerar_pdf_relatorio(analise, dados_consolidados, data_ref, tipo)
-    nome_pdf = f"relatorio_{tipo}_{data_ref}.pdf"
+    # Botão de exportar relatório HTML
+    html_bytes = gerar_html_relatorio(analise, dados_consolidados, data_ref, tipo)
+    nome_html = f"relatorio_{tipo}_{data_ref}.html"
     st.download_button(
-        label="📥 Exportar para PDF",
-        data=pdf_bytes,
-        file_name=nome_pdf,
-        mime="application/pdf",
+        label="📥 Exportar Relatório HTML",
+        data=html_bytes,
+        file_name=nome_html,
+        mime="text/html",
         use_container_width=True,
-        key=f"btn_pdf_{tipo}_{data_ref}",
+        key=f"btn_html_{tipo}_{data_ref}",
     )
 
     with st.expander("📋 Ver dados brutos enviados ao Claude"):
@@ -1817,41 +2928,7 @@ def _mostrar_tabelas_google_ads(df_google, label):
 
     # ── CAMPANHAS YOUTUBE ────────────────────────────────────────────────────
     if not df_video.empty:
-        st.markdown(f"##### 📺 Campanhas YouTube — {label}")
-        colunas_yt = [
-            'Campanha', 'Status', 'Rec/Cons', 'Tipo Lance',
-            'Custo', 'Impressões', 'Usuários Exclusivos', 'Freq Méd Imp/Usuário',
-            'CPM', 'CPC', 'CPV',
-            'Video Views', 'Video View Rate (%)',
-            '% Assistido 25', '% Assistido 50', '% Assistido 75', '% Assistido 100',
-            'Taxa de Interação (%)', 'Engajamentos',
-        ]
-        colunas_yt = [c for c in colunas_yt if c in df_video.columns]
-        df_yt_display = df_video[colunas_yt].copy()
-
-        # Formata colunas monetárias
-        for col in ['Custo', 'CPM', 'CPC', 'CPV']:
-            if col in df_yt_display.columns:
-                df_yt_display[col] = df_yt_display[col].apply(
-                    lambda v: f"R$ {v:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    if col == 'CPV' and pd.notna(v) else (
-                        f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        if pd.notna(v) and v > 0 else "-"
-                    )
-                )
-        # Formata percentuais
-        for col in ['Video View Rate (%)', '% Assistido 25', '% Assistido 50',
-                    '% Assistido 75', '% Assistido 100', 'Taxa de Interação (%)']:
-            if col in df_yt_display.columns:
-                df_yt_display[col] = df_yt_display[col].apply(
-                    lambda v: f"{v:.2f}%" if pd.notna(v) else "-"
-                )
-        for col in ['Freq Méd Imp/Usuário']:
-            if col in df_yt_display.columns:
-                df_yt_display[col] = df_yt_display[col].apply(
-                    lambda v: f"{v:.2f}" if pd.notna(v) and v > 0 else "-"
-                )
-        st.dataframe(df_yt_display, use_container_width=True, hide_index=True)
+        _mostrar_youtube_visual(df_video, label)
 
     # ── DEMAIS CAMPANHAS (Search, PMax, Display) ─────────────────────────────
     if not df_outros.empty:
@@ -1885,16 +2962,135 @@ def _mostrar_tabelas_google_ads(df_google, label):
         st.dataframe(df_std_display, use_container_width=True, hide_index=True)
 
 
+def _fmt_brl(v, decimais=2):
+    """Formata valor para R$ brasileiro."""
+    if pd.isna(v) or v == 0:
+        return "-"
+    fmt = f"R$ {v:,.{decimais}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return fmt
+
+
+def _fmt_pct(v, decimais=2):
+    if pd.isna(v):
+        return "-"
+    return f"{v:.{decimais}f}%"
+
+
+def _fmt_num(v):
+    if pd.isna(v) or v == 0:
+        return "-"
+    if v >= 1_000_000:
+        return f"{v / 1_000_000:.1f}M"
+    if v >= 1_000:
+        return f"{v / 1_000:.1f}k"
+    return f"{v:,.0f}".replace(",", ".")
+
+
+def _mostrar_youtube_visual(df_video, label):
+    """Exibe campanhas YouTube com layout visual por pilares: Alcance, Retenção, Engajamento."""
+    st.markdown(f"##### 📺 Campanhas YouTube — {label}")
+
+    # ── VISÃO GERAL (métricas consolidadas) ──────────────────────────────
+    total_imp = df_video['Impressões'].sum()
+    total_unique = df_video['Usuários Exclusivos'].sum()
+    total_custo = df_video['Custo'].sum()
+    cpm_medio = (total_custo / total_imp * 1000) if total_imp > 0 else 0
+
+    st.markdown(f"###### VISÃO GERAL (TOTAL DAS {len(df_video)} CAMPANHAS)")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Impressões", _fmt_num(total_imp))
+    c2.metric("Usuários únicos", _fmt_num(total_unique))
+    c3.metric("Custo total", _fmt_brl(total_custo))
+    c4.metric("CPM médio", _fmt_brl(cpm_medio))
+    st.markdown("---")
+
+    # ── TABELA 1: ALCANCE ────────────────────────────────────────────────
+    st.markdown("###### ALCANCE")
+    df_alcance = pd.DataFrame({
+        'CAMPANHA': df_video['Campanha'],
+        'ORÇAM./DIA': df_video['Custo'].apply(lambda v: _fmt_brl(v / 7 if v > 0 else 0, 0)),
+        'IMPR.': df_video['Impressões'].apply(lambda v: f"{v:,.0f}".replace(",", ".")),
+        'USUÁRIOS EXCL.': df_video['Usuários Exclusivos'].apply(lambda v: f"{v:,.0f}".replace(",", ".")),
+        'FREQ. 7D': df_video['Freq Méd Imp/Usuário'].apply(lambda v: f"{v:.1f}" if v > 0 else "-"),
+        'CPM MÉD.': df_video['CPM'].apply(lambda v: _fmt_brl(v)),
+    })
+    st.dataframe(df_alcance, use_container_width=True, hide_index=True)
+
+    # ── TABELA 2: RETENÇÃO DE VÍDEO ─────────────────────────────────────
+    st.markdown("###### RETENÇÃO DE VÍDEO")
+    df_retencao = pd.DataFrame({
+        'CAMPANHA': df_video['Campanha'],
+        'VIEW RATE': df_video['Video View Rate (%)'].apply(lambda v: _fmt_pct(v)),
+        '25%': df_video['% Assistido 25'].apply(lambda v: _fmt_pct(v, 1)),
+        '50%': df_video['% Assistido 50'].apply(lambda v: _fmt_pct(v, 1)),
+        '75%': df_video['% Assistido 75'].apply(lambda v: _fmt_pct(v, 1)),
+        '100%': df_video['% Assistido 100'].apply(lambda v: _fmt_pct(v, 1)),
+    })
+    st.dataframe(df_retencao, use_container_width=True, hide_index=True)
+
+    # Gráfico de retenção (curvas por campanha)
+    if len(df_video) > 0:
+        fig = go.Figure()
+        quartis = ['25%', '50%', '75%', '100%']
+        x_labels = ['25%', '50%', '75%', '100%']
+        cores = px.colors.qualitative.Set1
+        for i, (_, row) in enumerate(df_video.iterrows()):
+            nome = row['Campanha']
+            if len(nome) > 30:
+                nome = nome[:30] + "..."
+            vals = [row['% Assistido 25'], row['% Assistido 50'], row['% Assistido 75'], row['% Assistido 100']]
+            fig.add_trace(go.Scatter(
+                x=x_labels, y=vals, mode='lines+markers',
+                name=nome, line=dict(width=2, color=cores[i % len(cores)]),
+                marker=dict(size=8),
+            ))
+        fig.update_layout(
+            title="Curva de Retenção de Vídeo",
+            xaxis_title="Quartil do vídeo",
+            yaxis_title="% Audiência retida",
+            yaxis=dict(range=[0, 100], ticksuffix="%"),
+            height=350, margin=dict(t=40, b=40),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.35, xanchor="center", x=0.5),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ── TABELA 3: ENGAJAMENTO ────────────────────────────────────────────
+    st.markdown("###### ENGAJAMENTO")
+    df_eng = pd.DataFrame({
+        'CAMPANHA': df_video['Campanha'],
+        'CPV MÉD.': df_video['CPV'].apply(lambda v: _fmt_brl(v, 2)),
+        'CPC MÉD.': df_video['CPC'].apply(lambda v: _fmt_brl(v)),
+        'INTERAÇÕES': df_video['Engajamentos'].apply(lambda v: f"{v:,.0f}".replace(",", ".")),
+        'TAXA DE INTER.': df_video['Taxa de Interação (%)'].apply(lambda v: _fmt_pct(v)),
+        'VISUALIZAÇÕES': df_video['Video Views'].apply(lambda v: _fmt_num(v)),
+    })
+    st.dataframe(df_eng, use_container_width=True, hide_index=True)
+
+
 def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
-    """Coleta dados das APIs, exibe métricas e salva no session_state para análise posterior."""
+    """Coleta dados das APIs para o período selecionado E para o período anterior (WoW),
+    exibe métricas e salva no session_state para análise posterior."""
     start_str = start_date.strftime('%Y-%m-%d')
     end_str = end_date.strftime('%Y-%m-%d')
     data_ref = start_str if start_str == end_str else f"{start_str}_a_{end_str}"
+
+    # Calcula período anterior (mesma duração, imediatamente antes)
+    duracao = (end_date - start_date).days + 1
+    prev_end_date = start_date - timedelta(days=1)
+    prev_start_date = prev_end_date - timedelta(days=duracao - 1)
+    prev_start_str = prev_start_date.strftime('%Y-%m-%d')
+    prev_end_str = prev_end_date.strftime('%Y-%m-%d')
 
     df_google_degrau = pd.DataFrame()
     df_google_central = pd.DataFrame()
     df_facebook = pd.DataFrame()
     df_facebook_central = pd.DataFrame()
+
+    # DataFrames do período anterior
+    prev_google_degrau = pd.DataFrame()
+    prev_google_central = pd.DataFrame()
+    prev_facebook = pd.DataFrame()
+    prev_facebook_central = pd.DataFrame()
 
     if "Google Ads (Degrau)" in contas:
         with st.spinner("🔄 Buscando Google Ads (Degrau)..."):
@@ -1905,6 +3101,7 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
                 except Exception:
                     customer_id = "4934481887"
                 df_google_degrau = get_google_ads_data(client_degrau, customer_id, start_str, end_str)
+                prev_google_degrau = get_google_ads_data(client_degrau, customer_id, prev_start_str, prev_end_str)
             else:
                 st.warning("⚠️ Não foi possível conectar ao Google Ads (Degrau)")
 
@@ -1917,6 +3114,7 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
                 except Exception:
                     customer_id_c = "1646681121"
                 df_google_central = get_google_ads_data(client_central, customer_id_c, start_str, end_str)
+                prev_google_central = get_google_ads_data(client_central, customer_id_c, prev_start_str, prev_end_str)
             else:
                 st.warning("⚠️ Não foi possível conectar ao Google Ads (Central)")
 
@@ -1925,6 +3123,7 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
             fb_account = init_facebook_api()
             if fb_account:
                 df_facebook = get_facebook_data(fb_account, start_str, end_str)
+                prev_facebook = get_facebook_data(fb_account, prev_start_str, prev_end_str)
             else:
                 st.warning("⚠️ Não foi possível conectar ao Meta Ads (Degrau)")
 
@@ -1933,6 +3132,7 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
             fb_account_central = init_facebook_api_central()
             if fb_account_central:
                 df_facebook_central = get_facebook_data(fb_account_central, start_str, end_str)
+                prev_facebook_central = get_facebook_data(fb_account_central, prev_start_str, prev_end_str)
             else:
                 st.warning("⚠️ Não foi possível conectar ao Meta Ads (Central)")
 
@@ -1964,7 +3164,13 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key):
     dados_consolidados = formatar_dados_para_claude(
         df_google_degrau, df_google_central, df_facebook, janela_dias,
         df_facebook_central=df_facebook_central,
-        start_date=start_date, end_date=end_date
+        start_date=start_date, end_date=end_date,
+        prev_google_degrau=prev_google_degrau,
+        prev_google_central=prev_google_central,
+        prev_facebook=prev_facebook,
+        prev_facebook_central=prev_facebook_central,
+        prev_start_date=prev_start_date,
+        prev_end_date=prev_end_date,
     )
 
     st.session_state[session_key] = {
@@ -1991,7 +3197,7 @@ def _enviar_para_ia(session_key, system_prompt, tipo):
 
     icone = "🚨" if tipo == "alerta" else "🤖"
     st.subheader(f"{icone} Análise do Claude")
-    st.markdown(analise)
+    _renderizar_analise(analise, tipo)
 
     filepath = salvar_relatorio(analise, dados_consolidados, data_ref, tipo)
     if filepath == "db":
@@ -1999,14 +3205,14 @@ def _enviar_para_ia(session_key, system_prompt, tipo):
     else:
         st.success("✅ Relatório salvo localmente!")
 
-    pdf_bytes = gerar_pdf_relatorio(analise, dados_consolidados, data_ref, tipo)
+    html_bytes = gerar_html_relatorio(analise, dados_consolidados, data_ref, tipo)
     st.download_button(
-        label="📥 Exportar para PDF",
-        data=pdf_bytes,
-        file_name=f"relatorio_{tipo}_{data_ref}.pdf",
-        mime="application/pdf",
+        label="📥 Exportar Relatório HTML",
+        data=html_bytes,
+        file_name=f"relatorio_{tipo}_{data_ref}.html",
+        mime="text/html",
         use_container_width=True,
-        key=f"btn_pdf_{tipo}_{data_ref}",
+        key=f"btn_html_{tipo}_{data_ref}",
     )
     with st.expander("📋 Ver dados brutos enviados ao Claude"):
         st.code(dados_consolidados, language="text")
