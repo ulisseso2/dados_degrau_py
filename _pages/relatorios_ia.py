@@ -2445,7 +2445,7 @@ def _get_anthropic_client():
 
     api_key = None
     try:
-        api_key = st.secrets["ANTHROPIC_API_KEY"]
+        api_key = st.secrets["antropic"]["ANTHROPIC_API_KEY"]
     except (st.errors.StreamlitAPIException, KeyError, FileNotFoundError):
         pass
     if not api_key:
