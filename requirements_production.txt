@@ -71,4 +71,4 @@ gunicorn==21.2.0
 
 # === DEPENDÊNCIAS REMOVIDAS PARA PRODUÇÃO ===
 # pandasai==2.0.21  # Muito pesada - remover se não usar IA
-# openai==1.37.0    # Só incluir se realmente usar OpenAI
+openai==1.37.0

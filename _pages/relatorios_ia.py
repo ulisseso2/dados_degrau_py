@@ -2446,10 +2446,7 @@ def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="
             with client.messages.stream(
                 model="claude-opus-4-6",
                 max_tokens=64000,
-                thinking={
-                    "type": "adaptive",
-                    "budget_tokens": 32000
-                },
+                thinking={"type": "adaptive"},
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_msg}]
             ) as stream:

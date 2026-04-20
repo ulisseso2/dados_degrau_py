@@ -1,11 +1,13 @@
-import os
-import re
 import json
 import logging
-from typing import Dict, List, Optional, Tuple
+import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import anthropic
+from typing import Dict, List, Optional, Tuple
+
+import openai
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -316,17 +318,14 @@ def verificar_avaliabilidade(filtro: Dict, agent_name: str = '') -> Tuple[bool, 
 
 class ChatIAAnalyzer:
     def __init__(self):
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.client = anthropic.Anthropic(api_key=self.api_key) if self.api_key else None
-        self.model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
-        self.temperature = float(os.getenv("CLAUDE_TEMPERATURE", "0.2"))
-        self.max_tokens = int(os.getenv("CLAUDE_MAX_TOKENS", "4096"))
-        self.max_input_chars = int(os.getenv("CLAUDE_MAX_INPUT_CHARS", "25000"))
-        # Workers: default 1 para tiers baixos (8k tokens/min).
-        # Suba para 3-5 se seu tier permitir (40k+ tokens/min).
-        self.max_workers = int(os.getenv("CLAUDE_MAX_WORKERS", "1"))
-        # Segundos entre requests (respeitando rate limit)
-        self.throttle_seconds = float(os.getenv("CLAUDE_THROTTLE_SECONDS", "8"))
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.model = os.getenv("OPENAI_MODEL_AVALIACAO", os.getenv("OPENAI_MODEL", "gpt-5.3-chat-latest"))
+        self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
+        self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS_AVALIACAO", os.getenv("OPENAI_MAX_TOKENS", "8000")))
+        self.max_input_chars = int(os.getenv("OPENAI_MAX_INPUT_CHARS", "25000"))
+        self.max_workers = int(os.getenv("OPENAI_MAX_WORKERS", "3"))
+        self.throttle_seconds = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0"))
         import threading
         self._throttle_lock = threading.Lock()
         self._last_request_time = 0.0
@@ -399,45 +398,42 @@ class ChatIAAnalyzer:
             contexto_extra=ctx
         )
 
-    # ── chamada unitária ao Sonnet (classificação + avaliação em 1 call) ─────
+    # ── chamada unitária à OpenAI (classificação + avaliação em 1 call) ──────
 
-    def _call_sonnet(self, chat_text: str, contexto_adicional: Optional[Dict] = None) -> Dict:
-        """Faz UMA chamada ao Sonnet que classifica E avalia. Inclui throttle e retry para 429."""
+    def _call_openai(self, chat_text: str, contexto_adicional: Optional[Dict] = None) -> Dict:
+        """Faz UMA chamada à OpenAI que classifica E avalia. Inclui throttle e retry para 429."""
         import time as _time
 
         prompt = self._build_prompt(chat_text, contexto_adicional)
 
-        for tentativa in range(3):  # 3 tentativas (extra pra 429)
-            # Throttle: espera tempo mínimo entre requests
+        for tentativa in range(3):
             with self._throttle_lock:
                 now = _time.time()
                 elapsed = now - self._last_request_time
-                if elapsed < self.throttle_seconds:
+                if self.throttle_seconds > 0 and elapsed < self.throttle_seconds:
                     _time.sleep(self.throttle_seconds - elapsed)
                 self._last_request_time = _time.time()
 
             try:
-                response = self.client.messages.create(
+                response = self.client.chat.completions.create(
                     model=self.model,
-                    max_tokens=self.max_tokens,
                     temperature=self.temperature,
-                    system=[{
-                        "type": "text",
-                        "text": _SYSTEM_PROMPT,
-                        "cache_control": {"type": "ephemeral"}
-                    }],
-                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=self.max_tokens,
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
                 )
 
-                stop_reason = response.stop_reason
-                content = (response.content[0].text if response.content else "").strip()
+                finish_reason = response.choices[0].finish_reason
+                content = (response.choices[0].message.content or "").strip()
 
                 if not content:
                     if tentativa < 2:
                         continue
                     return {'erro': 'Resposta vazia após retentativas'}
 
-                if stop_reason == 'max_tokens' and tentativa < 2:
+                if finish_reason == 'length' and tentativa < 2:
                     continue
 
                 content = self._limpar_markdown(content)
@@ -447,9 +443,8 @@ class ChatIAAnalyzer:
                 if tentativa < 2:
                     continue
                 return {'erro': f'JSON inválido: {e}'}
-            except anthropic.RateLimitError as e:
-                # 429: esperar e tentar de novo
-                wait = min(2 ** (tentativa + 2), 60)  # 4s, 8s, 16s...
+            except openai.RateLimitError as e:
+                wait = min(2 ** (tentativa + 2), 60)
                 logger.warning("Rate limit (429) na tentativa %d. Aguardando %ds...", tentativa + 1, wait)
                 _time.sleep(wait)
                 if tentativa == 2:
@@ -497,10 +492,10 @@ class ChatIAAnalyzer:
         # Camada 3: Sonnet faz classificação + avaliação (1 call)
         if not self.client:
             resultado['classificacao'] = 'outros'
-            resultado['motivo'] = 'Anthropic não inicializado'
+            resultado['motivo'] = 'OpenAI não inicializado'
             return resultado
 
-        ai_result = self._call_sonnet(transcricao_limpa, contexto_adicional)
+        ai_result = self._call_openai(transcricao_limpa, contexto_adicional)
 
         if 'erro' in ai_result and ai_result.get('erro'):
             resultado['erro'] = ai_result['erro']
@@ -591,12 +586,12 @@ class ChatIAAnalyzer:
         return resultados
 
     # ══════════════════════════════════════════════════════════════════════════
-    # BATCH API (modo assíncrono, 50% desconto, até 10k chats)
+    # BATCH API (modo assíncrono, 50% desconto, OpenAI Batch API)
     # ══════════════════════════════════════════════════════════════════════════
 
     def criar_batch(self, chats: List[Dict]) -> Optional[str]:
         """
-        Envia chats para a Message Batches API da Anthropic.
+        Envia chats para a OpenAI Batch API (50% de desconto, até 24h de processamento).
         Retorna batch_id para consulta posterior.
 
         Args:
@@ -606,46 +601,54 @@ class ChatIAAnalyzer:
         Returns:
             batch_id (str) ou None se falhar
         """
+        import io
         if not self.client:
-            logger.error("Anthropic não inicializado")
+            logger.error("OpenAI não inicializado")
             return None
 
-        requests = []
+        linhas = []
         for chat_data in chats:
             chat_id = chat_data.get('chat_id', '')
-
-            # Pré-processar (filtrar bot + verificar avaliabilidade)
             filtro = filtrar_mensagens_bot(chat_data.get('transcript', ''))
-            avaliavel, motivo = verificar_avaliabilidade(
-                filtro, chat_data.get('agent_name', '')
-            )
+            avaliavel, _ = verificar_avaliabilidade(filtro, chat_data.get('agent_name', ''))
             if not avaliavel:
-                # Não inclui no batch — será tratado localmente
                 continue
 
             prompt = self._build_prompt(
                 filtro['transcricao_limpa'],
                 chat_data.get('contexto_adicional')
             )
-
-            requests.append({
+            linhas.append(json.dumps({
                 "custom_id": chat_id,
-                "params": {
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
                     "model": self.model,
-                    "max_tokens": self.max_tokens,
                     "temperature": self.temperature,
-                    "system": [{"type": "text", "text": _SYSTEM_PROMPT}],
-                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": self.max_tokens,
+                    "messages": [
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
                 }
-            })
+            }, ensure_ascii=False))
 
-        if not requests:
+        if not linhas:
             logger.info("Nenhum chat apto para batch")
             return None
 
         try:
-            batch = self.client.messages.batches.create(requests=requests)
-            logger.info("Batch criado: %s (%d requests)", batch.id, len(requests))
+            jsonl_bytes = "\n".join(linhas).encode("utf-8")
+            file_obj = self.client.files.create(
+                file=("batch_input.jsonl", io.BytesIO(jsonl_bytes), "application/jsonl"),
+                purpose="batch",
+            )
+            batch = self.client.batches.create(
+                input_file_id=file_obj.id,
+                endpoint="/v1/chat/completions",
+                completion_window="24h",
+            )
+            logger.info("Batch criado: %s (%d requests)", batch.id, len(linhas))
             return batch.id
         except Exception as e:
             logger.error("Erro ao criar batch: %s", e)
@@ -654,22 +657,22 @@ class ChatIAAnalyzer:
     def consultar_batch(self, batch_id: str) -> Dict:
         """
         Consulta status de um batch.
-        Returns: dict com processing_status, request_counts, etc.
+        Returns: dict com status, request_counts, etc.
         """
         try:
-            batch = self.client.messages.batches.retrieve(batch_id)
+            batch = self.client.batches.retrieve(batch_id)
             return {
                 'id': batch.id,
-                'processing_status': batch.processing_status,
+                'processing_status': batch.status,
                 'request_counts': {
-                    'succeeded': batch.request_counts.succeeded,
-                    'errored': batch.request_counts.errored,
-                    'canceled': batch.request_counts.canceled,
-                    'expired': batch.request_counts.expired,
-                    'processing': batch.request_counts.processing,
+                    'total': batch.request_counts.total,
+                    'completed': batch.request_counts.completed,
+                    'failed': batch.request_counts.failed,
                 },
-                'ended_at': str(batch.ended_at) if batch.ended_at else None,
+                'output_file_id': batch.output_file_id,
+                'error_file_id': batch.error_file_id,
                 'created_at': str(batch.created_at) if batch.created_at else None,
+                'completed_at': str(batch.completed_at) if batch.completed_at else None,
             }
         except Exception as e:
             return {'erro': str(e)}
@@ -681,8 +684,17 @@ class ChatIAAnalyzer:
         """
         resultados = []
         try:
-            for entry in self.client.messages.batches.results(batch_id):
-                chat_id = entry.custom_id
+            batch = self.client.batches.retrieve(batch_id)
+            if batch.status != 'completed' or not batch.output_file_id:
+                logger.warning("Batch %s ainda não concluído (status: %s)", batch_id, batch.status)
+                return resultados
+
+            content = self.client.files.content(batch.output_file_id).text
+            for linha in content.strip().split("\n"):
+                if not linha.strip():
+                    continue
+                entry = json.loads(linha)
+                chat_id = entry.get('custom_id', '')
                 resultado = {
                     'chat_id': chat_id,
                     'classificacao': None, 'motivo': '', 'deve_avaliar': False,
@@ -691,12 +703,13 @@ class ChatIAAnalyzer:
                     'vendedor_disclaimer': None, 'lead_disclaimer': None,
                 }
 
-                if entry.result.type == 'succeeded':
-                    content = (entry.result.message.content[0].text
-                               if entry.result.message.content else "").strip()
-                    content = self._limpar_markdown(content)
+                resp = (entry.get('response') or {})
+                if resp.get('status_code') == 200:
+                    body = resp.get('body') or {}
+                    raw = (body.get('choices') or [{}])[0].get('message', {}).get('content', '')
+                    raw = self._limpar_markdown((raw or '').strip())
                     try:
-                        ai_result = json.loads(content)
+                        ai_result = json.loads(raw)
                         tipo = ai_result.get('tipo', 'outros')
                         resultado['classificacao'] = tipo
                         resultado['motivo'] = ai_result.get('motivo', '')
@@ -712,7 +725,7 @@ class ChatIAAnalyzer:
                         resultado['erro'] = f'JSON inválido: {e}'
                         resultado['classificacao'] = 'falha_avaliacao'
                 else:
-                    resultado['erro'] = f'Batch entry failed: {entry.result.type}'
+                    resultado['erro'] = f"Batch entry falhou: status {resp.get('status_code')}"
                     resultado['classificacao'] = 'falha_avaliacao'
 
                 resultados.append(resultado)
