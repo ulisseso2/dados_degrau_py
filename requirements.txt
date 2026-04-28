@@ -29,8 +29,8 @@ toml==0.10.2
 reportlab==4.4.6
 python-docx==1.2.0
 
-# OpenAI para análise de transcrições
-openai==1.58.1
+# OpenAI para análise de transcrições e Responses API (GPT-5.5)
+openai==2.32.0
 
 # Anthropic (Claude) para relatórios IA
 anthropic==0.89.0

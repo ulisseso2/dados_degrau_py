@@ -4,6 +4,8 @@ SELECT
     c.octa_created_at as data_chat,
     c.created_at as data_criacao_sistema,
     CASE 
+        WHEN c.octa_origin LIKE '%2139701015%' OR c.octa_origin LIKE '%Degrau%' THEN 'Degrau'
+        WHEN c.octa_origin LIKE '%1130178800%' OR c.octa_origin LIKE '%Central%' THEN 'Central'
         WHEN i.school_id = 1 THEN 'Degrau' 
         WHEN i.school_id IS NOT NULL THEN 'Central'
         ELSE 'Degrau'

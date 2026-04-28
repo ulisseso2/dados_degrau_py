@@ -22,15 +22,16 @@ CONFIGURAÇÃO:
      python3 octadesk_sync_cron.py --max-messages 500  # Limita qtd de chats para buscar msgs
 """
 
+import argparse
+import json
+import logging
 import os
 import sys
-import json
 import time
-import logging
-import argparse
-import requests
+from datetime import datetime, timedelta
 from pathlib import Path
-from datetime import datetime
+
+import requests
 from dotenv import load_dotenv
 
 # Garante que o diretório do projeto está no path
@@ -38,6 +39,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import octadesk_db
+from utils.octadesk_mysql_writer import (log_sync_mysql, save_chats_mysql,
+                                         save_messages_mysql)
 
 # ==============================================================================
 # CONFIGURAÇÃO DE LOGGING
@@ -111,23 +114,74 @@ def _normalize_list_response(data):
     return []
 
 
-def fetch_all_chats(token, base_url, max_pages=120, limit=100):
-    """Busca TODOS os chats disponíveis na API e salva no cache."""
+def _api_request_with_retry(url, headers, params=None, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=30)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response else None
+            if status_code in {429, 500, 502, 503, 504} and attempt < max_retries - 1:
+                wait_seconds = 2 ** (attempt + 1)
+                logger.warning("Erro HTTP %s em %s. Nova tentativa em %ss.", status_code, url, wait_seconds)
+                time.sleep(wait_seconds)
+                continue
+            raise
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                wait_seconds = 2 ** (attempt + 1)
+                logger.warning("Falha de conexão em %s. Nova tentativa em %ss.", url, wait_seconds)
+                time.sleep(wait_seconds)
+                continue
+            raise
+    return None
+
+
+def _build_updated_since(last_sync):
+    if not last_sync:
+        return None
+    try:
+        last_sync_dt = datetime.fromisoformat(str(last_sync).replace('Z', '+00:00'))
+        return (last_sync_dt - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S')
+    except Exception:
+        return None
+
+
+def fetch_all_chats(token, base_url, max_pages=120, limit=100, updated_since=None):
+    """Busca chats na API usando paginação e filtro incremental por updatedAt."""
     url = f"{base_url}/chat"
     headers = {"accept": "application/json", "X-API-KEY": token}
     
     total_saved = 0
     page = 1
+    pages_processed = 0
     
-    logger.info(f"Iniciando busca de chats (máx {max_pages} páginas)...")
+    if updated_since:
+        logger.info("Iniciando busca incremental de chats (updatedAt >= %s, máx %d páginas)...", updated_since, max_pages)
+    else:
+        logger.info("Iniciando busca completa de chats (máx %d páginas)...", max_pages)
     
     while page <= max_pages:
-        params = {"page": page, "limit": limit}
+        params = {
+            "page": page,
+            "limit": limit,
+            "sort[property]": "createdAt",
+            "sort[direction]": "desc",
+        }
+        if updated_since:
+            params["filters[0][property]"] = "updatedAt"
+            params["filters[0][operator]"] = "ge"
+            params["filters[0][value]"] = updated_since
+
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=30)
-            response.raise_for_status()
+            response = _api_request_with_retry(url, headers, params)
+            if response is None:
+                logger.error("Falha após retentativas na página %d", page)
+                break
             data = response.json()
             items = _normalize_list_response(data)
+            pages_processed += 1
             
             if not items:
                 logger.info(f"Página {page}: vazia — fim dos dados")
@@ -135,9 +189,11 @@ def fetch_all_chats(token, base_url, max_pages=120, limit=100):
             
             saved = octadesk_db.save_chats(items)
             total_saved += saved
-            
-            if page % 10 == 0:
-                logger.info(f"Página {page}/{max_pages} — {total_saved} chats salvos até agora")
+            mysql_saved = save_chats_mysql(items)
+            logger.info(
+                "Página %d: %d chats → SQLite(%d) MySQL(%d)",
+                page, len(items), saved, mysql_saved,
+            )
             
             if len(items) < limit:
                 logger.info(f"Página {page}: {len(items)} itens (< {limit}) — última página")
@@ -148,24 +204,58 @@ def fetch_all_chats(token, base_url, max_pages=120, limit=100):
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Erro na página {page}: {e}")
-            time.sleep(2)
-            # Tenta mais uma vez
-            try:
-                response = requests.get(url, params=params, headers=headers, timeout=30)
-                response.raise_for_status()
+            logger.error(f"Falha definitiva na página {page}. Parando busca de chats.")
+            break
+    
+    logger.info(f"Fase 1 concluída: {total_saved} chats salvos em {pages_processed} páginas")
+    return total_saved, pages_processed
+
+
+def _fetch_messages_paginated(headers, base_url, chat_id, max_pages=20, limit=100):
+    endpoints = [
+        f"{base_url}/chat/{chat_id}/messages",
+        f"{base_url}/chat/{chat_id}/message",
+    ]
+
+    for url in endpoints:
+        all_messages = []
+        page = 1
+        try:
+            while page <= max_pages:
+                response = _api_request_with_retry(
+                    url,
+                    headers,
+                    {"page": page, "limit": limit},
+                )
+                if response is None:
+                    break
+                if response.status_code == 404:
+                    break
                 data = response.json()
                 items = _normalize_list_response(data)
-                if items:
-                    saved = octadesk_db.save_chats(items)
-                    total_saved += saved
+
+                if not items:
+                    break
+
+                all_messages.extend(items)
+                if len(items) < limit:
+                    break
+
                 page += 1
-                time.sleep(0.5)
-            except Exception:
-                logger.error(f"Falha definitiva na página {page}. Parando busca de chats.")
-                break
-    
-    logger.info(f"Fase 1 concluída: {total_saved} chats salvos em {page} páginas")
-    return total_saved, page
+                time.sleep(0.2)
+        except requests.exceptions.HTTPError as exc:
+            if exc.response and exc.response.status_code == 404:
+                continue
+            logger.warning("Erro ao paginar mensagens do chat %s em %s: %s", chat_id, url, exc)
+            continue
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Erro de rede ao buscar mensagens do chat %s em %s: %s", chat_id, url, exc)
+            continue
+
+        if all_messages:
+            return all_messages
+
+    return []
 
 
 def fetch_missing_messages(token, base_url, max_messages=None):
@@ -190,30 +280,13 @@ def fetch_missing_messages(token, base_url, max_messages=None):
     for idx, chat_id in enumerate(chats_missing):
         if (idx + 1) % 50 == 0:
             logger.info(f"Progresso: {idx+1}/{len(chats_missing)} — {total_msgs_saved} msgs salvas — {errors} erros")
-        
-        endpoints = [
-            f"{base_url}/chat/{chat_id}/messages",
-            f"{base_url}/chat/{chat_id}/message",
-        ]
-        
-        msgs = []
-        for url in endpoints:
-            try:
-                response = requests.get(url, headers=headers, timeout=30)
-                if response.status_code == 404:
-                    continue
-                response.raise_for_status()
-                data = response.json()
-                msgs = _normalize_list_response(data)
-                break
-            except requests.exceptions.RequestException:
-                continue
-            except Exception:
-                continue
+
+        msgs = _fetch_messages_paginated(headers, base_url, chat_id)
         
         if msgs:
             saved = octadesk_db.save_messages(chat_id, msgs)
             total_msgs_saved += saved
+            save_messages_mysql(chat_id, msgs)
         else:
             errors += 1
             # Salva registro vazio para marcar que já tentou (evita re-tentativa infinita)
@@ -244,12 +317,19 @@ def main():
     logger.info("=" * 60)
     logger.info("OCTADESK SYNC — Início")
     logger.info("=" * 60)
+
+    purged = octadesk_db.purge_placeholder_messages()
+    if purged:
+        logger.info("Placeholders inválidos removidos do cache: %d", purged)
     
     token, base_url = _load_config()
     
     # Stats antes
     stats_before = octadesk_db.get_cache_stats()
     logger.info(f"Cache atual: {stats_before['total_chats']} chats, {stats_before['total_messages']} msgs")
+    updated_since = _build_updated_since(stats_before.get('last_sync')) if not args.only_messages else None
+    if updated_since:
+        logger.info("Modo incremental ativo. Filtro de chats por updatedAt >= %s", updated_since)
     
     start_time = time.time()
     total_chats = 0
@@ -258,7 +338,12 @@ def main():
     
     # Fase 1: Chats
     if not args.only_messages:
-        total_chats, pages_fetched = fetch_all_chats(token, base_url, max_pages=args.max_pages)
+        total_chats, pages_fetched = fetch_all_chats(
+            token,
+            base_url,
+            max_pages=args.max_pages,
+            updated_since=updated_since,
+        )
     
     # Fase 2: Mensagens
     if not args.only_chats:
@@ -272,6 +357,14 @@ def main():
         pages_fetched=pages_fetched,
         chats_saved=total_chats,
         messages_saved=total_msgs
+    )
+    log_sync_mysql(
+        sync_type='cron',
+        source='api',
+        pages_fetched=pages_fetched,
+        chats_saved=total_chats,
+        messages_saved=total_msgs,
+        duration_seconds=elapsed,
     )
     
     # Stats depois

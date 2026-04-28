@@ -30,7 +30,7 @@ mkdocs==1.5.3
 
 # === AI/ML DEVELOPMENT (OPCIONAL) ===
 pandasai==2.0.21
-openai==1.37.0
+openai==2.32.0
 
 # === SECURITY ANALYSIS ===
 safety==2.3.5

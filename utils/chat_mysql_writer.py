@@ -1,6 +1,8 @@
-from typing import Optional, Tuple
-from sqlalchemy import text
 import json
+from typing import Optional, Tuple
+
+from sqlalchemy import text
+
 from conexao.mysql_connector import conectar_mysql_writer
 
 _migration_nullable_done = False
@@ -35,7 +37,7 @@ def salvar_avaliacao_chat(
     chat_id: str,
     classification: str,
     classification_reason: str,
-    ai_evaluation: dict,
+    ai_evaluation: Optional[dict],
     transcript: Optional[str] = None,
     lead_score: Optional[int] = None,
     vendor_score: Optional[int] = None,
@@ -207,5 +209,7 @@ def salvar_avaliacao_chat(
             )
         return True, None
     except Exception as e:
+        return False, str(e)
+
         return False, str(e)
 

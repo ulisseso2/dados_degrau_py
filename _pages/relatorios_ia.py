@@ -1122,7 +1122,7 @@ def get_facebook_data(account, start_date, end_date):
 
 def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook, janela_dias, df_facebook_central=None, start_date=None, end_date=None,
                                prev_google_degrau=None, prev_google_central=None, prev_facebook=None, prev_facebook_central=None,
-                               prev_start_date=None, prev_end_date=None):
+                               prev_start_date=None, prev_end_date=None, empresa=None):
     """Formata os dados organizados por MARCA (Central vs Degrau) e dentro de cada marca por
     plataforma, conforme exigido pelo system prompt v2.6.
     Quando dados do período anterior são fornecidos, inclui seção WoW para comparativo."""
@@ -1143,6 +1143,8 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
     linhas.append(f"Janela: {janela_real} dias")
     linhas.append(f"Tipo de relatório: {'Alerta diário' if janela_real == 1 else 'Análise completa'}")
     linhas.append(f"Data de hoje: {hoje.strftime('%d/%m/%Y')} ({dia_semana})")
+    if empresa:
+        linhas.append(f"Empresa: {empresa}")
     linhas.append("")
 
     def _bloco_campanhas(df, origem_label):
@@ -1241,62 +1243,72 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
     def _soma(df, col):
         return df[col].sum() if df is not None and not df.empty and col in df.columns else 0
 
+    incluir_central = empresa is None or empresa == "Central de Concursos"
+    incluir_degrau  = empresa is None or empresa == "Degrau Cultural"
+
     # ─── CENTRAL DE CONCURSOS ───────────────────────────────────────────────
-    linhas.append("=" * 60)
-    linhas.append("MARCA: CENTRAL DE CONCURSOS (São Paulo)")
-    linhas.append("=" * 60)
+    if incluir_central:
+        linhas.append("=" * 60)
+        linhas.append("MARCA: CENTRAL DE CONCURSOS (São Paulo)")
+        linhas.append("=" * 60)
 
-    custo_gc  = _soma(df_google_central, 'Custo')
-    custo_fbc = _soma(df_facebook_central, 'Custo')
-    conv_gc   = _soma(df_google_central, 'Conversões')
+        custo_gc  = _soma(df_google_central, 'Custo')
+        custo_fbc = _soma(df_facebook_central, 'Custo')
+        conv_gc   = _soma(df_google_central, 'Conversões')
 
-    # CPL primário: apenas campanhas com objetivo LEADS (exclui TRÁFEGO/VENDAS — regra 4.4.1 v2.6)
-    df_leads_fbc = df_facebook_central[df_facebook_central['Objetivo'] == 'LEADS'] if (df_facebook_central is not None and not df_facebook_central.empty and 'Objetivo' in df_facebook_central.columns) else pd.DataFrame()
-    custo_leads_fbc = _soma(df_leads_fbc, 'Custo')
-    leads_fbc = _soma(df_leads_fbc, 'Resultado Presencial + Live')
-    cpl_fbc   = custo_leads_fbc / leads_fbc if leads_fbc > 0 else 0
+        # CPL primário: apenas campanhas com objetivo LEADS (exclui TRÁFEGO/VENDAS — regra 4.4.1 v2.6)
+        df_leads_fbc = df_facebook_central[df_facebook_central['Objetivo'] == 'LEADS'] if (df_facebook_central is not None and not df_facebook_central.empty and 'Objetivo' in df_facebook_central.columns) else pd.DataFrame()
+        custo_leads_fbc = _soma(df_leads_fbc, 'Custo')
+        leads_fbc = _soma(df_leads_fbc, 'Resultado Presencial + Live')
+        cpl_fbc   = custo_leads_fbc / leads_fbc if leads_fbc > 0 else 0
 
-    linhas.append(f"Investimento total Central: R${(custo_gc + custo_fbc):.2f}")
-    linhas.append(f"  Google Ads (Central): R${custo_gc:.2f} | Conversões: {int(conv_gc)}")
-    linhas.append(f"  Meta Ads (Central):   R${custo_fbc:.2f} | Resultado Presencial + Live: {int(leads_fbc)}" +
-                  (f" | CPL: R${cpl_fbc:.2f}" if leads_fbc > 0 else ""))
-    linhas.append("")
+        linhas.append(f"Investimento total Central: R${(custo_gc + custo_fbc):.2f}")
+        linhas.append(f"  Google Ads (Central): R${custo_gc:.2f} | Conversões: {int(conv_gc)}")
+        linhas.append(f"  Meta Ads (Central):   R${custo_fbc:.2f} | Resultado Presencial + Live: {int(leads_fbc)}" +
+                      (f" | CPL: R${cpl_fbc:.2f}" if leads_fbc > 0 else ""))
+        linhas.append("")
 
-    linhas.extend(_bloco_campanhas(df_google_central, "Google Ads (Central)"))
-    linhas.extend(_bloco_campanhas(df_facebook_central, "Meta Ads (Central)"))
+        linhas.extend(_bloco_campanhas(df_google_central, "Google Ads (Central)"))
+        linhas.extend(_bloco_campanhas(df_facebook_central, "Meta Ads (Central)"))
+    else:
+        custo_gc = custo_fbc = conv_gc = leads_fbc = 0
 
     # ─── DEGRAU CULTURAL ────────────────────────────────────────────────────
-    linhas.append("=" * 60)
-    linhas.append("MARCA: DEGRAU CULTURAL (Rio de Janeiro)")
-    linhas.append("=" * 60)
+    if incluir_degrau:
+        linhas.append("=" * 60)
+        linhas.append("MARCA: DEGRAU CULTURAL (Rio de Janeiro)")
+        linhas.append("=" * 60)
 
-    custo_gd  = _soma(df_google_degrau, 'Custo')
-    custo_fb  = _soma(df_facebook, 'Custo')
-    conv_gd   = _soma(df_google_degrau, 'Conversões')
+        custo_gd  = _soma(df_google_degrau, 'Custo')
+        custo_fb  = _soma(df_facebook, 'Custo')
+        conv_gd   = _soma(df_google_degrau, 'Conversões')
 
-    # CPL primário: apenas campanhas com objetivo LEADS (regra 4.4.1 v2.6)
-    df_leads_fb = df_facebook[df_facebook['Objetivo'] == 'LEADS'] if (df_facebook is not None and not df_facebook.empty and 'Objetivo' in df_facebook.columns) else pd.DataFrame()
-    custo_leads_fb = _soma(df_leads_fb, 'Custo')
-    leads_fb = _soma(df_leads_fb, 'Resultado Presencial + Live')
-    cpl_fb    = custo_leads_fb / leads_fb if leads_fb > 0 else 0
+        # CPL primário: apenas campanhas com objetivo LEADS (regra 4.4.1 v2.6)
+        df_leads_fb = df_facebook[df_facebook['Objetivo'] == 'LEADS'] if (df_facebook is not None and not df_facebook.empty and 'Objetivo' in df_facebook.columns) else pd.DataFrame()
+        custo_leads_fb = _soma(df_leads_fb, 'Custo')
+        leads_fb = _soma(df_leads_fb, 'Resultado Presencial + Live')
+        cpl_fb    = custo_leads_fb / leads_fb if leads_fb > 0 else 0
 
-    linhas.append(f"Investimento total Degrau: R${(custo_gd + custo_fb):.2f}")
-    linhas.append(f"  Google Ads (Degrau): R${custo_gd:.2f} | Conversões: {int(conv_gd)}")
-    linhas.append(f"  Meta Ads (Degrau):   R${custo_fb:.2f} | Resultado Presencial + Live: {int(leads_fb)}" +
-                  (f" | CPL: R${cpl_fb:.2f}" if leads_fb > 0 else ""))
-    linhas.append("")
+        linhas.append(f"Investimento total Degrau: R${(custo_gd + custo_fb):.2f}")
+        linhas.append(f"  Google Ads (Degrau): R${custo_gd:.2f} | Conversões: {int(conv_gd)}")
+        linhas.append(f"  Meta Ads (Degrau):   R${custo_fb:.2f} | Resultado Presencial + Live: {int(leads_fb)}" +
+                      (f" | CPL: R${cpl_fb:.2f}" if leads_fb > 0 else ""))
+        linhas.append("")
 
-    linhas.extend(_bloco_campanhas(df_google_degrau, "Google Ads (Degrau)"))
-    linhas.extend(_bloco_campanhas(df_facebook, "Meta Ads (Degrau)"))
+        linhas.extend(_bloco_campanhas(df_google_degrau, "Google Ads (Degrau)"))
+        linhas.extend(_bloco_campanhas(df_facebook, "Meta Ads (Degrau)"))
+    else:
+        custo_gd = custo_fb = conv_gd = leads_fb = 0
 
-    # ─── TOTAIS CONSOLIDADOS ────────────────────────────────────────────────
-    custo_all = custo_gc + custo_fbc + custo_gd + custo_fb
-    conv_all  = int(conv_gc + conv_gd)
-    leads_all = int(leads_fbc + leads_fb)
-    linhas.append("=" * 60)
-    linhas.append("TOTAIS CONSOLIDADOS (ambas as marcas)")
-    linhas.append("=" * 60)
-    linhas.append(f"Custo total: R${custo_all:.2f} | Conversões Google: {conv_all} | Resultado Presencial + Live (Meta): {leads_all}")
+    # ─── TOTAIS CONSOLIDADOS (apenas quando ambas as marcas estão presentes) ─
+    if incluir_central and incluir_degrau:
+        custo_all = custo_gc + custo_fbc + custo_gd + custo_fb
+        conv_all  = int(conv_gc + conv_gd)
+        leads_all = int(leads_fbc + leads_fb)
+        linhas.append("=" * 60)
+        linhas.append("TOTAIS CONSOLIDADOS (ambas as marcas)")
+        linhas.append("=" * 60)
+        linhas.append(f"Custo total: R${custo_all:.2f} | Conversões Google: {conv_all} | Resultado Presencial + Live (Meta): {leads_all}")
 
     # ─── DADOS DO PERÍODO ANTERIOR (comparativo WoW) ───────────────────────
     if tem_prev:
@@ -1307,53 +1319,55 @@ def formatar_dados_para_claude(df_google_degrau, df_google_central, df_facebook,
         linhas.append("Os dados abaixo são do período anterior, para comparativo período a período.")
         linhas.append("")
 
-        # Central - período anterior
-        linhas.append("-" * 40)
-        linhas.append("MARCA: CENTRAL DE CONCURSOS (Período Anterior)")
-        linhas.append("-" * 40)
+        if incluir_central:
+            # Central - período anterior
+            linhas.append("-" * 40)
+            linhas.append("MARCA: CENTRAL DE CONCURSOS (Período Anterior)")
+            linhas.append("-" * 40)
 
-        prev_custo_gc  = _soma(prev_google_central, 'Custo')
-        prev_custo_fbc = _soma(prev_facebook_central, 'Custo')
-        prev_conv_gc   = _soma(prev_google_central, 'Conversões')
+            prev_custo_gc  = _soma(prev_google_central, 'Custo')
+            prev_custo_fbc = _soma(prev_facebook_central, 'Custo')
+            prev_conv_gc   = _soma(prev_google_central, 'Conversões')
 
-        # CPL primário anterior: apenas LEADS (regra 4.4.1 v2.6)
-        prev_df_leads_fbc = prev_facebook_central[prev_facebook_central['Objetivo'] == 'LEADS'] if (prev_facebook_central is not None and not prev_facebook_central.empty and 'Objetivo' in prev_facebook_central.columns) else pd.DataFrame()
-        prev_custo_leads_fbc = _soma(prev_df_leads_fbc, 'Custo')
-        prev_leads_fbc = _soma(prev_df_leads_fbc, 'Resultado Presencial + Live')
-        prev_cpl_fbc   = prev_custo_leads_fbc / prev_leads_fbc if prev_leads_fbc > 0 else 0
+            # CPL primário anterior: apenas LEADS (regra 4.4.1 v2.6)
+            prev_df_leads_fbc = prev_facebook_central[prev_facebook_central['Objetivo'] == 'LEADS'] if (prev_facebook_central is not None and not prev_facebook_central.empty and 'Objetivo' in prev_facebook_central.columns) else pd.DataFrame()
+            prev_custo_leads_fbc = _soma(prev_df_leads_fbc, 'Custo')
+            prev_leads_fbc = _soma(prev_df_leads_fbc, 'Resultado Presencial + Live')
+            prev_cpl_fbc   = prev_custo_leads_fbc / prev_leads_fbc if prev_leads_fbc > 0 else 0
 
-        linhas.append(f"Investimento total Central: R${(prev_custo_gc + prev_custo_fbc):.2f}")
-        linhas.append(f"  Google Ads (Central): R${prev_custo_gc:.2f} | Conversões: {int(prev_conv_gc)}")
-        linhas.append(f"  Meta Ads (Central):   R${prev_custo_fbc:.2f} | Resultado Presencial + Live: {int(prev_leads_fbc)}" +
-                      (f" | CPL: R${prev_cpl_fbc:.2f}" if prev_leads_fbc > 0 else ""))
-        linhas.append("")
+            linhas.append(f"Investimento total Central: R${(prev_custo_gc + prev_custo_fbc):.2f}")
+            linhas.append(f"  Google Ads (Central): R${prev_custo_gc:.2f} | Conversões: {int(prev_conv_gc)}")
+            linhas.append(f"  Meta Ads (Central):   R${prev_custo_fbc:.2f} | Resultado Presencial + Live: {int(prev_leads_fbc)}" +
+                          (f" | CPL: R${prev_cpl_fbc:.2f}" if prev_leads_fbc > 0 else ""))
+            linhas.append("")
 
-        linhas.extend(_bloco_campanhas(prev_google_central, "Google Ads (Central) — Período Anterior"))
-        linhas.extend(_bloco_campanhas(prev_facebook_central, "Meta Ads (Central) — Período Anterior"))
+            linhas.extend(_bloco_campanhas(prev_google_central, "Google Ads (Central) — Período Anterior"))
+            linhas.extend(_bloco_campanhas(prev_facebook_central, "Meta Ads (Central) — Período Anterior"))
 
-        # Degrau - período anterior
-        linhas.append("-" * 40)
-        linhas.append("MARCA: DEGRAU CULTURAL (Período Anterior)")
-        linhas.append("-" * 40)
+        if incluir_degrau:
+            # Degrau - período anterior
+            linhas.append("-" * 40)
+            linhas.append("MARCA: DEGRAU CULTURAL (Período Anterior)")
+            linhas.append("-" * 40)
 
-        prev_custo_gd  = _soma(prev_google_degrau, 'Custo')
-        prev_custo_fb  = _soma(prev_facebook, 'Custo')
-        prev_conv_gd   = _soma(prev_google_degrau, 'Conversões')
+            prev_custo_gd  = _soma(prev_google_degrau, 'Custo')
+            prev_custo_fb  = _soma(prev_facebook, 'Custo')
+            prev_conv_gd   = _soma(prev_google_degrau, 'Conversões')
 
-        # CPL primário anterior: apenas LEADS (regra 4.4.1 v2.6)
-        prev_df_leads_fb = prev_facebook[prev_facebook['Objetivo'] == 'LEADS'] if (prev_facebook is not None and not prev_facebook.empty and 'Objetivo' in prev_facebook.columns) else pd.DataFrame()
-        prev_custo_leads_fb = _soma(prev_df_leads_fb, 'Custo')
-        prev_leads_fb = _soma(prev_df_leads_fb, 'Resultado Presencial + Live')
-        prev_cpl_fb    = prev_custo_leads_fb / prev_leads_fb if prev_leads_fb > 0 else 0
+            # CPL primário anterior: apenas LEADS (regra 4.4.1 v2.6)
+            prev_df_leads_fb = prev_facebook[prev_facebook['Objetivo'] == 'LEADS'] if (prev_facebook is not None and not prev_facebook.empty and 'Objetivo' in prev_facebook.columns) else pd.DataFrame()
+            prev_custo_leads_fb = _soma(prev_df_leads_fb, 'Custo')
+            prev_leads_fb = _soma(prev_df_leads_fb, 'Resultado Presencial + Live')
+            prev_cpl_fb    = prev_custo_leads_fb / prev_leads_fb if prev_leads_fb > 0 else 0
 
-        linhas.append(f"Investimento total Degrau: R${(prev_custo_gd + prev_custo_fb):.2f}")
-        linhas.append(f"  Google Ads (Degrau): R${prev_custo_gd:.2f} | Conversões: {int(prev_conv_gd)}")
-        linhas.append(f"  Meta Ads (Degrau):   R${prev_custo_fb:.2f} | Resultado Presencial + Live: {int(prev_leads_fb)}" +
-                      (f" | CPL: R${prev_cpl_fb:.2f}" if prev_leads_fb > 0 else ""))
-        linhas.append("")
+            linhas.append(f"Investimento total Degrau: R${(prev_custo_gd + prev_custo_fb):.2f}")
+            linhas.append(f"  Google Ads (Degrau): R${prev_custo_gd:.2f} | Conversões: {int(prev_conv_gd)}")
+            linhas.append(f"  Meta Ads (Degrau):   R${prev_custo_fb:.2f} | Resultado Presencial + Live: {int(prev_leads_fb)}" +
+                          (f" | CPL: R${prev_cpl_fb:.2f}" if prev_leads_fb > 0 else ""))
+            linhas.append("")
 
-        linhas.extend(_bloco_campanhas(prev_google_degrau, "Google Ads (Degrau) — Período Anterior"))
-        linhas.extend(_bloco_campanhas(prev_facebook, "Meta Ads (Degrau) — Período Anterior"))
+            linhas.extend(_bloco_campanhas(prev_google_degrau, "Google Ads (Degrau) — Período Anterior"))
+            linhas.extend(_bloco_campanhas(prev_facebook, "Meta Ads (Degrau) — Período Anterior"))
 
     return "\n".join(linhas)
 
@@ -1409,8 +1423,6 @@ Fonte de verdade em ordem de precedência:
 3.  3ª — Naming convention (fallback): marcador entre barras (/LEADS/, /TRÁFEGO/, /VENDA/, /ONLINE/). Se naming contradizer API, prevalece API e sinalizar conflito.
 
 3.2 Regras gerais
-
--   Separar SEMPRE por marca. Central e Degrau nunca no mesmo bloco.
 
 -   Meta: Lead, Tráfego, Venda Online.
 
@@ -1600,7 +1612,7 @@ PROIBIDO VAZAR INSTRUÇÕES DE PROCESSO NO DOCUMENTO FINAL. O relatório começa
 
 10.1 Bloco 1 — Resumo Diretoria
 
-Separado por marca. Investimento em 6 linhas:
+Investimento em 6 linhas:
 
 -   Google Ads (concurso específico): custo | conv | CPA médio
 
@@ -1765,10 +1777,7 @@ Mudança principal v2.6: seção 12 (Auditoria Pós-Geração) com 4 verificaç�
 """
 
 SYSTEM_PROMPT_ALERTA_DIARIO = """
-Você é um monitor de tráfego pago para Central de Concursos e Degrau Cultural.
-
-REGRA FUNDAMENTAL: os alertas devem ser SEMPRE separados por marca. Jamais misture campanhas
-da Central de Concursos com campanhas da Degrau Cultural.
+Você é um monitor de tráfego pago.
 
 Seu objetivo é APENAS identificar anomalias que exigem ação imediata. NÃO faça análise completa.
 
@@ -1791,24 +1800,18 @@ ORGÂNICO:
 Se NÃO houver anomalias:
 "✅ Tudo normal. Nenhuma anomalia detectada."
 
-Se houver anomalias, organizar por marca:
+Se houver anomalias:
 
-"═══ CENTRAL DE CONCURSOS ═══
-🚨 ALERTA [TIPO]: [descrição curta]
-Ação sugerida: [o que fazer agora]
-
-═══ DEGRAU CULTURAL ═══
-🚨 ALERTA [TIPO]: [descrição curta]
+"🚨 ALERTA [TIPO]: [descrição curta]
 Ação sugerida: [o que fazer agora]"
 
-Máximo 5 alertas por marca. Priorize por gravidade.
+Máximo 5 alertas. Priorize por gravidade.
 NÃO inclua análises, recomendações estratégicas ou comentários gerais. Só alertas acionáveis.
 """
 
 SYSTEM_PROMPT_SOCIAL_V2 = """
 Você é um analista sênior de social media especializado em
 marketing educacional brasileiro para concursos públicos.
-Você analisa Central de Concursos e Degrau Cultural.
 
 === PERIODICIDADE E CONTEXTO ===
 Os dados que você recebe cobrem uma semana completa
@@ -2420,7 +2423,12 @@ def _get_anthropic_client():
         return None, "❌ API Key do Claude não configurada. Defina ANTHROPIC_API_KEY no .env ou Streamlit Secrets."
 
     # max_retries: o SDK faz retry automático com backoff exponencial para 529 (overloaded)
-    return anthropic.Anthropic(api_key=api_key, max_retries=5), None
+    # timeout alto para respostas longas (ex.: 15 dias de dados com thinking)
+    return anthropic.Anthropic(
+        api_key=api_key,
+        max_retries=5,
+        timeout=600.0,
+    ), None
 
 def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="completo_ads"):
     """Envia dados para o Claude e retorna a análise usando o prompt correto."""
@@ -2470,6 +2478,14 @@ def analisar_com_claude(dados_consolidados, system_prompt=None, tipo_relatorio="
                     return f"❌ API do Claude sobrecarregada após {max_tentativas} tentativas. Tente novamente em alguns minutos."
             else:
                 return f"❌ Erro na API do Claude ({e.status_code}): {e.message}"
+
+        except (_anthropic.APIConnectionError, ConnectionError) as e:
+            espera = 2 ** tentativa
+            print(f"[Claude API] Conexão interrompida na tentativa {tentativa}: {e}. Aguardando {espera}s...")
+            if tentativa < max_tentativas:
+                time.sleep(espera)
+            else:
+                return f"❌ Conexão com o Claude falhou após {max_tentativas} tentativas. Verifique sua rede e tente novamente."
 
         except Exception as e:
             return f"❌ Erro inesperado ao chamar o Claude: {e}"
@@ -2607,10 +2623,18 @@ def run_page():
     hoje = datetime.now().date()
     ontem = hoje - timedelta(days=1)
 
+    empresas = ["Degrau Cultural", "Central de Concursos"]
+    empresa_selecionada = st.sidebar.radio("Selecione a empresa:", empresas, key="ria_empresa")
+
+    if empresa_selecionada == "Degrau Cultural":
+        contas_options = ["Google Ads (Degrau)", "Meta Ads (Degrau)"]
+    else:
+        contas_options = ["Google Ads (Central)", "Meta Ads (Central)"]
+
     contas = st.sidebar.multiselect(
         "Contas para incluir:",
-        ["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads (Degrau)", "Meta Ads (Central)"],
-        default=["Google Ads (Degrau)", "Google Ads (Central)", "Meta Ads (Degrau)", "Meta Ads (Central)"],
+        contas_options,
+        default=contas_options,
         key="ria_contas"
     )
 
@@ -2670,7 +2694,7 @@ def run_page():
         st.info(info_periodo)
 
         if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_ads_buscar"):
-            _coletar_dados(contas, start_date, end_date, janela_dias, "ads_dados", prev_start_custom, prev_end_custom)
+            _coletar_dados(contas, start_date, end_date, janela_dias, "ads_dados", prev_start_custom, prev_end_custom, empresa=empresa_selecionada)
         dados_ads_prontos = "ads_dados" in st.session_state
         if st.button(
             "🤖 Analisar com IA",
@@ -2699,7 +2723,7 @@ def run_page():
         st.info(f"📅 Verificando dados de ontem: **{start_alerta.strftime('%d/%m/%Y')}**")
 
         if st.button("🔍 Buscar Dados", type="primary", use_container_width=True, key="btn_alerta_buscar"):
-            _coletar_dados(contas, start_alerta, end_alerta, 1, "alerta_dados")
+            _coletar_dados(contas, start_alerta, end_alerta, 1, "alerta_dados", empresa=empresa_selecionada)
         dados_alerta_prontos = "alerta_dados" in st.session_state
         if st.button(
             "🚨 Analisar com IA",
@@ -3062,7 +3086,7 @@ def _mostrar_youtube_visual(df_video, label):
     st.dataframe(df_eng, use_container_width=True, hide_index=True)
 
 
-def _coletar_dados(contas, start_date, end_date, janela_dias, session_key, prev_start_override=None, prev_end_override=None):
+def _coletar_dados(contas, start_date, end_date, janela_dias, session_key, prev_start_override=None, prev_end_override=None, empresa=None):
     """Coleta dados das APIs para o período selecionado E para o período anterior (WoW),
     exibe métricas e salva no session_state para análise posterior.
     Se prev_start_override e prev_end_override forem fornecidos, usa como período de comparação."""
@@ -3171,6 +3195,7 @@ def _coletar_dados(contas, start_date, end_date, janela_dias, session_key, prev_
         prev_facebook_central=prev_facebook_central,
         prev_start_date=prev_start_date,
         prev_end_date=prev_end_date,
+        empresa=empresa,
     )
 
     st.session_state[session_key] = {

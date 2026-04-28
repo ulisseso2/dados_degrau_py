@@ -5,11 +5,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
-import openai
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 
-load_dotenv()
+_ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(_ENV_PATH)
 
 logger = logging.getLogger(__name__)
 
@@ -318,14 +318,18 @@ def verificar_avaliabilidade(filtro: Dict, agent_name: str = '') -> Tuple[bool, 
 
 class ChatIAAnalyzer:
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
-        self.model = os.getenv("OPENAI_MODEL_AVALIACAO", os.getenv("OPENAI_MODEL", "gpt-5.3-chat-latest"))
-        self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
-        self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS_AVALIACAO", os.getenv("OPENAI_MAX_TOKENS", "8000")))
-        self.max_input_chars = int(os.getenv("OPENAI_MAX_INPUT_CHARS", "25000"))
-        self.max_workers = int(os.getenv("OPENAI_MAX_WORKERS", "3"))
-        self.throttle_seconds = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0"))
+        load_dotenv(_ENV_PATH, override=True)
+        self.api_key = os.getenv("OCTADESK_OPENAI_API_KEY")
+        self.client: Optional[OpenAI] = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.model = os.getenv("OCTADESK_OPENAI_MODEL", "gpt-5.4")
+        self.temperature = float(os.getenv("OCTADESK_OPENAI_TEMPERATURE", "0.2"))
+        self.max_tokens = int(os.getenv("OCTADESK_OPENAI_MAX_OUTPUT_TOKENS", "8000"))
+        self.max_input_chars = int(os.getenv("OCTADESK_OPENAI_MAX_INPUT_CHARS", "25000"))
+        self.max_workers = int(os.getenv("OCTADESK_OPENAI_MAX_WORKERS", "3"))
+        self.throttle_seconds = float(os.getenv("OCTADESK_OPENAI_THROTTLE_SECONDS", "0"))
+        self.reasoning_effort = os.getenv("OCTADESK_OPENAI_REASONING_EFFORT", "low").strip().lower()
+        if self.reasoning_effort not in {"none", "low", "medium", "high", "xhigh"}:
+            self.reasoning_effort = "low"
         import threading
         self._throttle_lock = threading.Lock()
         self._last_request_time = 0.0
@@ -398,11 +402,91 @@ class ChatIAAnalyzer:
             contexto_extra=ctx
         )
 
+    @staticmethod
+    def _extract_response_text(response) -> str:
+        output_text = getattr(response, 'output_text', None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        output = getattr(response, 'output', None) or []
+        chunks = []
+        for item in output:
+            content = getattr(item, 'content', None) or []
+            for part in content:
+                if getattr(part, 'type', None) == 'output_text':
+                    text = getattr(part, 'text', None)
+                    if isinstance(text, str) and text.strip():
+                        chunks.append(text.strip())
+        return "\n".join(chunks).strip()
+
+    @staticmethod
+    def _extract_response_text_from_payload(payload: Dict) -> str:
+        output_text = payload.get('output_text')
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        chunks = []
+        for item in payload.get('output', []) or []:
+            for part in item.get('content', []) or []:
+                if part.get('type') == 'output_text':
+                    text = part.get('text')
+                    if isinstance(text, str) and text.strip():
+                        chunks.append(text.strip())
+        return "\n".join(chunks).strip()
+
+    @staticmethod
+    def _extract_chat_completion_text(response) -> str:
+        choices = getattr(response, 'choices', None) or []
+        if not choices:
+            return ""
+        message = getattr(choices[0], 'message', None)
+        content = getattr(message, 'content', None) if message else None
+        return content.strip() if isinstance(content, str) else ""
+
+    @staticmethod
+    def _extract_chat_completion_text_from_payload(payload: Dict) -> str:
+        choices = payload.get('choices') or []
+        if not choices:
+            return ""
+        message = choices[0].get('message', {}) or {}
+        content = message.get('content')
+        return content.strip() if isinstance(content, str) else ""
+
+    @staticmethod
+    def _client_supports_responses(client) -> bool:
+        return hasattr(client, 'responses') and getattr(client, 'responses', None) is not None
+
+    def _call_openai_responses(self, client, prompt: str):
+        request_kwargs = {
+            'model': self.model,
+            'instructions': _SYSTEM_PROMPT,
+            'input': prompt,
+            'max_output_tokens': self.max_tokens,
+        }
+        if self.reasoning_effort:
+            request_kwargs['reasoning'] = {'effort': self.reasoning_effort}
+        return client.responses.create(**request_kwargs)
+
+    def _call_openai_chat_completions(self, client, prompt: str):
+        return client.chat.completions.create(
+            model=self.model,
+            max_completion_tokens=self.max_tokens,
+            response_format={'type': 'json_object'},
+            messages=[
+                {'role': 'system', 'content': _SYSTEM_PROMPT},
+                {'role': 'user', 'content': prompt},
+            ],
+        )
+
     # ── chamada unitária à OpenAI (classificação + avaliação em 1 call) ──────
 
     def _call_openai(self, chat_text: str, contexto_adicional: Optional[Dict] = None) -> Dict:
-        """Faz UMA chamada à OpenAI que classifica E avalia. Inclui throttle e retry para 429."""
+        """Faz UMA chamada à OpenAI, usando Responses API quando disponível."""
         import time as _time
+
+        client = self.client
+        if client is None:
+            return {'erro': 'OpenAI não inicializado'}
 
         prompt = self._build_prompt(chat_text, contexto_adicional)
 
@@ -415,40 +499,80 @@ class ChatIAAnalyzer:
                 self._last_request_time = _time.time()
 
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    messages=[
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                )
+                if self._client_supports_responses(client):
+                    response = self._call_openai_responses(client, prompt)
+                    status = getattr(response, 'status', None)
+                    incomplete_details = getattr(response, 'incomplete_details', None)
+                    incomplete_reason = getattr(incomplete_details, 'reason', None) if incomplete_details else None
+                    content = self._extract_response_text(response)
 
-                finish_reason = response.choices[0].finish_reason
-                content = (response.choices[0].message.content or "").strip()
+                    usage = getattr(response, 'usage', None)
+                    input_tokens = getattr(usage, 'input_tokens', None)
+                    output_tokens = getattr(usage, 'output_tokens', None)
+                    total_tokens = getattr(usage, 'total_tokens', None)
+                else:
+                    response = self._call_openai_chat_completions(client, prompt)
+                    status = 'completed'
+                    incomplete_reason = None
+                    content = self._extract_chat_completion_text(response)
+
+                    usage = getattr(response, 'usage', None)
+                    input_tokens = getattr(usage, 'prompt_tokens', None)
+                    output_tokens = getattr(usage, 'completion_tokens', None)
+                    total_tokens = getattr(usage, 'total_tokens', None)
+                logger.info(
+                    "[OpenAI] modelo=%s | tokens entrada=%s saída=%s total=%s | status=%s | incomplete_reason=%s",
+                    self.model,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens if total_tokens is not None else (input_tokens or 0) + (output_tokens or 0),
+                    status,
+                    incomplete_reason,
+                )
 
                 if not content:
                     if tentativa < 2:
+                        logger.warning("[OpenAI] Resposta vazia na tentativa %d, retentando...", tentativa + 1)
                         continue
                     return {'erro': 'Resposta vazia após retentativas'}
 
-                if finish_reason == 'length' and tentativa < 2:
-                    continue
+                if incomplete_reason == 'max_output_tokens':
+                    logger.warning("[OpenAI] incomplete_reason=max_output_tokens na tentativa %d", tentativa + 1)
+                    if tentativa < 2:
+                        continue
+                    return {'erro': 'Resposta truncada (max_output_tokens atingido) após retentativas'}
 
                 content = self._limpar_markdown(content)
+
+                if not content:
+                    if tentativa < 2:
+                        logger.warning("[OpenAI] Conteúdo vazio após limpeza de markdown na tentativa %d", tentativa + 1)
+                        continue
+                    return {'erro': 'Conteúdo vazio após limpeza de markdown'}
+
                 return json.loads(content)
 
             except json.JSONDecodeError as e:
+                logger.warning(
+                    "[OpenAI] JSONDecodeError na tentativa %d: %s | início do conteúdo: %r",
+                    tentativa + 1, e, content[:200] if content else "(vazio)",
+                )
                 if tentativa < 2:
                     continue
                 return {'erro': f'JSON inválido: {e}'}
-            except openai.RateLimitError as e:
+            except RateLimitError as e:
                 wait = min(2 ** (tentativa + 2), 60)
                 logger.warning("Rate limit (429) na tentativa %d. Aguardando %ds...", tentativa + 1, wait)
                 _time.sleep(wait)
                 if tentativa == 2:
                     return {'erro': f'Rate limit excedido após 3 tentativas: {e}'}
+            except (APIConnectionError, APIStatusError) as e:
+                logger.error("Erro na avaliação (tentativa %d): %s", tentativa + 1, e)
+                if tentativa < 2:
+                    wait = min(2 ** (tentativa + 1), 10)
+                    _time.sleep(wait)
+                    continue
+                return {'erro': str(e)}
             except Exception as e:
                 logger.error("Erro na avaliação (tentativa %d): %s", tentativa + 1, e)
                 return {'erro': str(e)}
@@ -463,7 +587,7 @@ class ChatIAAnalyzer:
         Pipeline completo:
           1. Filtra bot (Python, 0 API calls)
           2. Verifica avaliabilidade (Python, 0 API calls)
-          3. Classifica + avalia com Sonnet (1 API call)
+                    3. Classifica + avalia com GPT-5.5 (1 API call)
         """
         filtro = filtrar_mensagens_bot(chat_text)
         transcricao_limpa = filtro['transcricao_limpa']
@@ -489,7 +613,7 @@ class ChatIAAnalyzer:
             resultado['motivo'] = motivo
             return resultado
 
-        # Camada 3: Sonnet faz classificação + avaliação (1 call)
+        # Camada 3: GPT-5.5 faz classificação + avaliação (1 call)
         if not self.client:
             resultado['classificacao'] = 'outros'
             resultado['motivo'] = 'OpenAI não inicializado'
@@ -544,7 +668,7 @@ class ChatIAAnalyzer:
             lista de dicts com resultado + chat_id
         """
         workers = max_workers or self.max_workers
-        resultados = [None] * len(chats)
+        resultados: List[Optional[Dict]] = [None] * len(chats)
 
         def _process(idx, chat_data):
             chat_id = chat_data.get('chat_id', f'chat_{idx}')
@@ -583,7 +707,7 @@ class ChatIAAnalyzer:
                     except Exception:
                         pass
 
-        return resultados
+        return [resultado for resultado in resultados if resultado is not None]
 
     # ══════════════════════════════════════════════════════════════════════════
     # BATCH API (modo assíncrono, 50% desconto, OpenAI Batch API)
@@ -602,11 +726,13 @@ class ChatIAAnalyzer:
             batch_id (str) ou None se falhar
         """
         import io
-        if not self.client:
+        client = self.client
+        if client is None:
             logger.error("OpenAI não inicializado")
             return None
 
         linhas = []
+        use_responses_api = self._client_supports_responses(client)
         for chat_data in chats:
             chat_id = chat_data.get('chat_id', '')
             filtro = filtrar_mensagens_bot(chat_data.get('transcript', ''))
@@ -618,19 +744,33 @@ class ChatIAAnalyzer:
                 filtro['transcricao_limpa'],
                 chat_data.get('contexto_adicional')
             )
-            linhas.append(json.dumps({
-                "custom_id": chat_id,
-                "method": "POST",
-                "url": "/v1/chat/completions",
-                "body": {
+            if use_responses_api:
+                body = {
                     "model": self.model,
-                    "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
+                    "instructions": _SYSTEM_PROMPT,
+                    "input": prompt,
+                    "max_output_tokens": self.max_tokens,
+                }
+                if self.reasoning_effort:
+                    body["reasoning"] = {"effort": self.reasoning_effort}
+                endpoint = "/v1/responses"
+            else:
+                body = {
+                    "model": self.model,
+                    "max_completion_tokens": self.max_tokens,
+                    "response_format": {"type": "json_object"},
                     "messages": [
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
                     ],
                 }
+                endpoint = "/v1/chat/completions"
+
+            linhas.append(json.dumps({
+                "custom_id": chat_id,
+                "method": "POST",
+                "url": endpoint,
+                "body": body,
             }, ensure_ascii=False))
 
         if not linhas:
@@ -639,13 +779,13 @@ class ChatIAAnalyzer:
 
         try:
             jsonl_bytes = "\n".join(linhas).encode("utf-8")
-            file_obj = self.client.files.create(
+            file_obj = client.files.create(
                 file=("batch_input.jsonl", io.BytesIO(jsonl_bytes), "application/jsonl"),
                 purpose="batch",
             )
-            batch = self.client.batches.create(
+            batch = client.batches.create(
                 input_file_id=file_obj.id,
-                endpoint="/v1/chat/completions",
+                endpoint=endpoint,
                 completion_window="24h",
             )
             logger.info("Batch criado: %s (%d requests)", batch.id, len(linhas))
@@ -660,14 +800,23 @@ class ChatIAAnalyzer:
         Returns: dict com status, request_counts, etc.
         """
         try:
-            batch = self.client.batches.retrieve(batch_id)
+            client = self.client
+            if client is None:
+                return {'erro': 'OpenAI não inicializado'}
+
+            batch = client.batches.retrieve(batch_id)
+            counts = getattr(batch, 'request_counts', None)
+            total = getattr(counts, 'total', 0) if counts else 0
+            completed = getattr(counts, 'completed', 0) if counts else 0
+            failed = getattr(counts, 'failed', 0) if counts else 0
             return {
                 'id': batch.id,
                 'processing_status': batch.status,
                 'request_counts': {
-                    'total': batch.request_counts.total,
-                    'completed': batch.request_counts.completed,
-                    'failed': batch.request_counts.failed,
+                    'total': total,
+                    'completed': completed,
+                    'failed': failed,
+                    'pending': max(total - completed - failed, 0),
                 },
                 'output_file_id': batch.output_file_id,
                 'error_file_id': batch.error_file_id,
@@ -684,12 +833,17 @@ class ChatIAAnalyzer:
         """
         resultados = []
         try:
-            batch = self.client.batches.retrieve(batch_id)
+            client = self.client
+            if client is None:
+                logger.error("OpenAI não inicializado")
+                return resultados
+
+            batch = client.batches.retrieve(batch_id)
             if batch.status != 'completed' or not batch.output_file_id:
                 logger.warning("Batch %s ainda não concluído (status: %s)", batch_id, batch.status)
                 return resultados
 
-            content = self.client.files.content(batch.output_file_id).text
+            content = client.files.content(batch.output_file_id).text
             for linha in content.strip().split("\n"):
                 if not linha.strip():
                     continue
@@ -706,7 +860,10 @@ class ChatIAAnalyzer:
                 resp = (entry.get('response') or {})
                 if resp.get('status_code') == 200:
                     body = resp.get('body') or {}
-                    raw = (body.get('choices') or [{}])[0].get('message', {}).get('content', '')
+                    if 'output' in body or 'output_text' in body:
+                        raw = self._extract_response_text_from_payload(body)
+                    else:
+                        raw = self._extract_chat_completion_text_from_payload(body)
                     raw = self._limpar_markdown((raw or '').strip())
                     try:
                         ai_result = json.loads(raw)
@@ -725,7 +882,10 @@ class ChatIAAnalyzer:
                         resultado['erro'] = f'JSON inválido: {e}'
                         resultado['classificacao'] = 'falha_avaliacao'
                 else:
-                    resultado['erro'] = f"Batch entry falhou: status {resp.get('status_code')}"
+                    body = resp.get('body') or {}
+                    err = body.get('error') or {}
+                    err_msg = err.get('message') if isinstance(err, dict) else None
+                    resultado['erro'] = err_msg or f"Batch entry falhou: status {resp.get('status_code')}"
                     resultado['classificacao'] = 'falha_avaliacao'
 
                 resultados.append(resultado)

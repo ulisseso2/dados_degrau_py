@@ -2,9 +2,9 @@
 # Armazena TODOS os chats e mensagens para preservar histórico
 # (a API só retém ~30 dias de dados) e evitar chamadas repetidas.
 
-import sqlite3
 import json
 import os
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +12,20 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent
 DB_DIR = str(_PROJECT_ROOT / "data_cache")
 DB_FILE = str(_PROJECT_ROOT / "data_cache" / "octadesk_cache.db")
+_PLACEHOLDER_LIKE_PATTERNS = ('%"type": "placeholder"%', '%"type":"placeholder"%')
+
+
+def _placeholder_sql(alias: str = "") -> str:
+    prefix = f"{alias}." if alias else ""
+    return f"({prefix}raw_json LIKE ? OR {prefix}raw_json LIKE ?)"
+
+
+def _is_placeholder_message(msg) -> bool:
+    if not isinstance(msg, dict):
+        return False
+    if str(msg.get('type') or '').lower() != 'placeholder':
+        return False
+    return not any(str(msg.get(field) or '').strip() for field in ('body', 'text', 'content', 'message'))
 
 
 def _get_connection():
@@ -122,10 +136,13 @@ def save_messages(chat_id, messages_list):
     """Salva mensagens de um chat no banco. Retorna quantidade salva."""
     if not messages_list:
         return 0
+    valid_messages = [msg for msg in messages_list if not _is_placeholder_message(msg)]
+    if not valid_messages:
+        return 0
     init_db()
     saved = 0
     with _get_connection() as conn:
-        for idx, msg in enumerate(messages_list):
+        for idx, msg in enumerate(valid_messages):
             msg_id = msg.get('id') or msg.get('_id') or f"{chat_id}_{idx}"
             try:
                 conn.execute(
@@ -186,8 +203,8 @@ def get_cached_messages(chat_id):
     init_db()
     with _get_connection() as conn:
         cursor = conn.execute(
-            "SELECT raw_json FROM octadesk_messages WHERE chat_id = ? ORDER BY cached_at",
-            (chat_id,)
+            f"SELECT raw_json FROM octadesk_messages WHERE chat_id = ? AND NOT {_placeholder_sql()} ORDER BY cached_at",
+            (chat_id, *_PLACEHOLDER_LIKE_PATTERNS)
         )
         results = []
         for row in cursor.fetchall():
@@ -198,13 +215,36 @@ def get_cached_messages(chat_id):
         return results
 
 
+def get_cached_messages_batch(chat_ids):
+    """Retorna mensagens de múltiplos chats em uma única query SQLite.
+    Retorna dict: {chat_id: [lista de mensagens]}
+    """
+    if not chat_ids:
+        return {}
+    init_db()
+    placeholders = ",".join("?" * len(chat_ids))
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            f"SELECT chat_id, raw_json FROM octadesk_messages WHERE chat_id IN ({placeholders}) AND NOT {_placeholder_sql()} ORDER BY chat_id, cached_at",
+            [*chat_ids, *_PLACEHOLDER_LIKE_PATTERNS],
+        )
+        result = {}
+        for chat_id, raw in cursor.fetchall():
+            try:
+                msg = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            result.setdefault(chat_id, []).append(msg)
+        return result
+
+
 def has_cached_messages(chat_id):
     """Verifica se já existem mensagens em cache para um chat."""
     init_db()
     with _get_connection() as conn:
         cursor = conn.execute(
-            "SELECT COUNT(*) FROM octadesk_messages WHERE chat_id = ?",
-            (chat_id,)
+            f"SELECT COUNT(*) FROM octadesk_messages WHERE chat_id = ? AND NOT {_placeholder_sql()}",
+            (chat_id, *_PLACEHOLDER_LIKE_PATTERNS)
         )
         return cursor.fetchone()[0] > 0
 
@@ -215,9 +255,10 @@ def get_chats_without_messages():
     with _get_connection() as conn:
         cursor = conn.execute(
             "SELECT c.id FROM octadesk_chats c "
-            "LEFT JOIN octadesk_messages m ON c.id = m.chat_id "
+            f"LEFT JOIN octadesk_messages m ON c.id = m.chat_id AND NOT {_placeholder_sql('m')} "
             "WHERE m.id IS NULL "
-            "ORDER BY c.created_at DESC"
+            "ORDER BY c.created_at DESC",
+            _PLACEHOLDER_LIKE_PATTERNS,
         )
         return [row[0] for row in cursor.fetchall()]
 
@@ -228,10 +269,23 @@ def count_chats_without_messages():
     with _get_connection() as conn:
         cursor = conn.execute(
             "SELECT COUNT(*) FROM octadesk_chats c "
-            "LEFT JOIN octadesk_messages m ON c.id = m.chat_id "
-            "WHERE m.id IS NULL"
+            f"LEFT JOIN octadesk_messages m ON c.id = m.chat_id AND NOT {_placeholder_sql('m')} "
+            "WHERE m.id IS NULL",
+            _PLACEHOLDER_LIKE_PATTERNS,
         )
         return cursor.fetchone()[0]
+
+
+def purge_placeholder_messages():
+    """Remove mensagens placeholder antigas que contaminam o cache local."""
+    init_db()
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            f"DELETE FROM octadesk_messages WHERE {_placeholder_sql()}",
+            _PLACEHOLDER_LIKE_PATTERNS,
+        )
+        conn.commit()
+        return max(cursor.rowcount or 0, 0)
 
 
 def log_sync(sync_type, pages_fetched, chats_saved, messages_saved=0, oldest_date=None, newest_date=None):
@@ -261,13 +315,17 @@ def get_cache_stats():
         cursor = conn.execute("SELECT COUNT(*) FROM octadesk_chats WHERE status = 'closed'")
         stats['closed_chats'] = cursor.fetchone()[0]
 
-        cursor = conn.execute("SELECT COUNT(*) FROM octadesk_messages")
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM octadesk_messages WHERE NOT {_placeholder_sql()}",
+            _PLACEHOLDER_LIKE_PATTERNS,
+        )
         stats['total_messages'] = cursor.fetchone()[0]
 
         cursor = conn.execute(
             "SELECT COUNT(*) FROM octadesk_chats c "
-            "LEFT JOIN octadesk_messages m ON c.id = m.chat_id "
-            "WHERE m.id IS NULL"
+            f"LEFT JOIN octadesk_messages m ON c.id = m.chat_id AND NOT {_placeholder_sql('m')} "
+            "WHERE m.id IS NULL",
+            _PLACEHOLDER_LIKE_PATTERNS,
         )
         stats['chats_without_messages'] = cursor.fetchone()[0]
 
