@@ -249,7 +249,10 @@ def run_page():
     # 7. RELATÓRIO CONSOLIDADO DE TURMA
     # ==========================================================================
     st.header("📋 Relatório Consolidado de Turma")
-    st.markdown("Os filtros abaixo impactam apenas o relatório consolidado, permitindo uma análise mais detalhada por turma.")
+    st.markdown(
+        "Análise gerencial e pedagógica por turma, com foco em progresso da grade, "
+        "conexões entre turmas (compartilhamento de aulas) e resultado financeiro."
+    )
 
     # DataFrame base: mesma empresa selecionada no filtro da página
     df_consolidado_base = df[df['empresa'] == empresa_selecionada].copy()
@@ -257,35 +260,23 @@ def run_page():
     # Carregar matrículas por turma
     df_matriculas = carregar_dados("consultas/turmas/matriculas_turma.sql")
     df_matriculas['valor'] = pd.to_numeric(df_matriculas['valor'], errors='coerce')
+    df_matriculas['data_pagamento'] = pd.to_datetime(df_matriculas['data_pagamento'], errors='coerce')
     df_matriculas = df_matriculas[df_matriculas['empresa'] == empresa_selecionada]
-    df_mat_turma = (
-        df_matriculas
-        .groupby('turma_id', dropna=False)
-        .agg(matriculas=('order_id', 'nunique'), faturado=('valor', 'sum'))
-        .reset_index()
-    )
+    status_pagamento_list = sorted(df_matriculas['status_pagamento'].dropna().unique())
 
     # Carregar valor para iniciar por turma
     df_valor_iniciar = carregar_dados("consultas/turmas/curso_valor_iniciar.sql")
     df_valor_iniciar['valor_iniciar'] = pd.to_numeric(df_valor_iniciar['valor_iniciar'], errors='coerce')
     df_valor_iniciar = df_valor_iniciar[['turma_id', 'valor_iniciar']].drop_duplicates()
 
-    # --- Filtros independentes ---
+    # --- Filtros independentes do consolidado ---
     col_f1, col_f2 = st.columns(2)
-
     with col_f1:
-        # Filtro de data baseado em inicio_grade (padrão: mês atual)
-        df_com_grade = df_consolidado_base.dropna(subset=['inicio_grade'])
-        data_min_cons = df_com_grade['inicio_grade'].min().date() if not df_com_grade.empty else hoje_aware
-        data_max_cons = df_com_grade['inicio_grade'].max().date() if not df_com_grade.empty else hoje_aware
-        primeiro_dia_mes = hoje_aware.replace(day=1)
-        data_inicio_cons_padrao = max(primeiro_dia_mes, data_min_cons)
-
-        periodo_cons = st.date_input(
-            "Período (Início da Grade):",
-            value=[data_inicio_cons_padrao, data_max_cons],
-            min_value=data_min_cons,
-            key="cons_date_range"
+        tipo_recorte_tempo = st.radio(
+            "Recorte Temporal da Análise:",
+            ["Abrangente (sem recorte)", "Por Início da Grade", "Por Data da Aula"],
+            index=0,
+            key="cons_tipo_recorte"
         )
 
     with col_f2:
@@ -294,19 +285,58 @@ def run_page():
             "Possui Grade:", possui_grade_list, default=possui_grade_list, key="cons_possui_grade"
         )
 
-    try:
-        inicio_cons_aware = pd.Timestamp(periodo_cons[0], tz=TIMEZONE)
-        fim_cons_aware = pd.Timestamp(periodo_cons[1], tz=TIMEZONE) + pd.Timedelta(days=1)
-    except IndexError:
-        st.warning("👈 Por favor, selecione um período de datas para o relatório consolidado.")
-        st.stop()
+    status_pagamento_sel = st.multiselect(
+        "Status do Pagamento:",
+        status_pagamento_list,
+        default=status_pagamento_list,
+        key="cons_status_pagamento"
+    )
 
-    # Aplica filtro de data e possui_grade primeiro para alimentar os demais filtros
-    df_cons_pre = df_consolidado_base[
-        (df_consolidado_base['inicio_grade'] >= inicio_cons_aware) &
-        (df_consolidado_base['inicio_grade'] < fim_cons_aware) &
-        (df_consolidado_base['possui_grade'].isin(possui_grade_sel))
-    ]
+    periodo_cons = None
+    inicio_cons_aware = None
+    fim_cons_aware = None
+    coluna_recorte = None
+
+    if tipo_recorte_tempo != "Abrangente (sem recorte)":
+        coluna_recorte = 'inicio_grade' if tipo_recorte_tempo == "Por Início da Grade" else 'data_aula'
+        df_datas = df_consolidado_base.dropna(subset=[coluna_recorte])
+        data_min_cons = df_datas[coluna_recorte].min().date() if not df_datas.empty else hoje_aware
+        data_max_cons = df_datas[coluna_recorte].max().date() if not df_datas.empty else hoje_aware
+
+        periodo_cons = st.date_input(
+            f"Período ({'Início da Grade' if coluna_recorte == 'inicio_grade' else 'Data da Aula'}):",
+            value=[data_min_cons, data_max_cons],
+            min_value=data_min_cons,
+            max_value=data_max_cons,
+            key="cons_date_range"
+        )
+
+        try:
+            inicio_cons_aware = pd.Timestamp(periodo_cons[0], tz=TIMEZONE)
+            fim_cons_aware = pd.Timestamp(periodo_cons[1], tz=TIMEZONE) + pd.Timedelta(days=1)
+        except IndexError:
+            st.warning("👈 Por favor, selecione um período de datas para o relatório consolidado.")
+            st.stop()
+
+    aplicar_periodo_no_pagamento = st.checkbox(
+        "Aplicar recorte temporal também no pagamento (data_pagamento)",
+        value=False,
+        key="cons_aplicar_periodo_pagamento"
+    )
+
+    # Base inicial do consolidado
+    df_cons_pre = df_consolidado_base[df_consolidado_base['possui_grade'].isin(possui_grade_sel)].copy()
+
+    if coluna_recorte is not None:
+        df_cons_pre = df_cons_pre[
+            df_cons_pre[coluna_recorte].notna() &
+            (df_cons_pre[coluna_recorte] >= inicio_cons_aware) &
+            (df_cons_pre[coluna_recorte] < fim_cons_aware)
+        ]
+
+    if df_cons_pre.empty:
+        st.warning("Não há dados para os filtros principais do relatório consolidado.")
+        st.stop()
 
     col_f3, col_f4, col_f5 = st.columns(3)
 
@@ -355,26 +385,66 @@ def run_page():
         st.warning("Não há dados para os filtros selecionados no relatório consolidado.")
         st.stop()
 
-    # --- Montar coluna turma_compartilhada ---
-    # Para cada aula (aula_id), descobrir todas as turmas que a compartilham
+    # Matrículas/faturamento para as turmas filtradas
+    turma_ids_filtradas = df_cons['turma_id'].dropna().unique()
+    df_matriculas_filtrado = df_matriculas[
+        df_matriculas['status_pagamento'].isin(status_pagamento_sel) &
+        df_matriculas['turma_id'].isin(turma_ids_filtradas)
+    ].copy()
+
+    if (
+        aplicar_periodo_no_pagamento and
+        coluna_recorte is not None and
+        inicio_cons_aware is not None and
+        fim_cons_aware is not None
+    ):
+        inicio_pagamento = inicio_cons_aware.tz_localize(None)
+        fim_pagamento = fim_cons_aware.tz_localize(None)
+        df_matriculas_filtrado = df_matriculas_filtrado[
+            df_matriculas_filtrado['data_pagamento'].notna() &
+            (df_matriculas_filtrado['data_pagamento'] >= inicio_pagamento) &
+            (df_matriculas_filtrado['data_pagamento'] < fim_pagamento)
+        ]
+
+    # A query de matrículas pode repetir o mesmo pedido por item; deduplicamos por pedido/turma.
+    df_matriculas_filtrado = df_matriculas_filtrado.drop_duplicates(subset=['order_id', 'turma_id'])
+
+    df_mat_turma = (
+        df_matriculas_filtrado
+        .groupby('turma_id', dropna=False)
+        .agg(matriculas=('order_id', 'nunique'), faturado=('valor', 'sum'))
+        .reset_index()
+    )
+
+    # --- Montar conexões entre turmas por compartilhamento de aulas ---
     aula_turmas = (
-        df_consolidado_base[['aula_id', 'turma_nome']]
-        .dropna(subset=['aula_id'])
+        df_consolidado_base[['aula_id', 'turma_id', 'turma_nome']]
+        .dropna(subset=['aula_id', 'turma_id'])
         .drop_duplicates()
     )
-    # Para cada turma, juntar as turmas que compartilham pelo menos uma aula
-    turma_aulas = df_cons[['turma_id', 'turma_nome', 'aula_id']].dropna(subset=['aula_id']).drop_duplicates()
+    turma_aulas = (
+        df_cons[['turma_id', 'turma_nome', 'aula_id']]
+        .dropna(subset=['aula_id', 'turma_id'])
+        .drop_duplicates()
+    )
     merged = turma_aulas.merge(aula_turmas, on='aula_id', suffixes=('', '_comp'))
-    # Remover a própria turma da lista de compartilhadas
-    merged = merged[merged['turma_nome'] != merged['turma_nome_comp']]
+    merged = merged[merged['turma_id'] != merged['turma_id_comp']]
+
     turma_compartilhada_map = (
-        merged.groupby('turma_nome')['turma_nome_comp']
+        merged.groupby('turma_id')['turma_nome_comp']
         .apply(lambda x: ', '.join(sorted(x.unique())))
         .reset_index()
         .rename(columns={'turma_nome_comp': 'turma_compartilhada'})
     )
 
-    # --- Colunas auxiliares para aulas dadas e não compartilhadas ---
+    ligacoes_map = (
+        merged.groupby('turma_id')['turma_id_comp']
+        .nunique()
+        .reset_index()
+        .rename(columns={'turma_id_comp': 'qtd_turmas_ligadas'})
+    )
+
+    # --- Colunas auxiliares para progresso da grade ---
     hoje_ts = pd.Timestamp.now(tz=TIMEZONE)
     df_cons['aula_dada'] = df_cons['data_aula'] <= hoje_ts
     df_cons['aula_exclusiva'] = df_cons['turmas_compartilhadas'] == 1
@@ -388,6 +458,7 @@ def run_page():
             tipo_turma=('tipo_turma', 'first'),
             inicio_grade=('inicio_grade', 'first'),
             turno=('turno', 'first'),
+            possui_grade=('possui_grade', 'first'),
             total_aulas=('aula_id', 'nunique'),
             aulas_dadas=('aula_dada', 'sum'),
             aulas_nao_compartilhadas=('aula_exclusiva', 'sum'),
@@ -396,12 +467,13 @@ def run_page():
         )
         .reset_index()
     )
-    df_cons_turma['aulas_dadas'] = df_cons_turma['aulas_dadas'].astype(int)
-    df_cons_turma['aulas_nao_compartilhadas'] = df_cons_turma['aulas_nao_compartilhadas'].astype(int)
-    df_cons_turma = df_cons_turma.merge(turma_compartilhada_map, on='turma_nome', how='left')
-    df_cons_turma['turma_compartilhada'] = df_cons_turma['turma_compartilhada'].fillna('')
 
-    # Merge com matrículas
+    df_cons_turma = df_cons_turma.merge(turma_compartilhada_map, on='turma_id', how='left')
+    df_cons_turma = df_cons_turma.merge(ligacoes_map, on='turma_id', how='left')
+    df_cons_turma['turma_compartilhada'] = df_cons_turma['turma_compartilhada'].fillna('')
+    df_cons_turma['qtd_turmas_ligadas'] = df_cons_turma['qtd_turmas_ligadas'].fillna(0).astype(int)
+
+    # Merge com matrículas/faturamento
     df_cons_turma = df_cons_turma.merge(df_mat_turma, on='turma_id', how='left')
     df_cons_turma['matriculas'] = df_cons_turma['matriculas'].fillna(0).astype(int)
     df_cons_turma['faturado'] = df_cons_turma['faturado'].fillna(0)
@@ -409,15 +481,54 @@ def run_page():
     # Merge com valor para iniciar
     df_cons_turma = df_cons_turma.merge(df_valor_iniciar, on='turma_id', how='left')
 
+    # Indicadores gerenciais
+    df_cons_turma['aulas_dadas'] = df_cons_turma['aulas_dadas'].astype(int)
+    df_cons_turma['aulas_nao_compartilhadas'] = df_cons_turma['aulas_nao_compartilhadas'].astype(int)
+    df_cons_turma['aulas_restantes'] = (df_cons_turma['total_aulas'] - df_cons_turma['aulas_dadas']).clip(lower=0)
+    total_aulas_base = df_cons_turma['total_aulas'].where(df_cons_turma['total_aulas'] != 0)
+    df_cons_turma['progresso_grade_pct'] = (
+        df_cons_turma['aulas_dadas'] / total_aulas_base * 100
+    ).fillna(0).round(1)
     df_cons_turma['resultado'] = df_cons_turma['faturado'] - df_cons_turma['custo_previsto']
+    faturado_base = df_cons_turma['faturado'].where(df_cons_turma['faturado'] != 0)
+    df_cons_turma['margem_pct'] = (
+        df_cons_turma['resultado'] / faturado_base * 100
+    ).fillna(0).round(1)
+    matriculas_base = df_cons_turma['matriculas'].where(df_cons_turma['matriculas'] != 0)
+    df_cons_turma['custo_por_matricula'] = (
+        df_cons_turma['custo_previsto'] / matriculas_base
+    ).fillna(0)
+    df_cons_turma['ticket_medio'] = (
+        df_cons_turma['faturado'] / matriculas_base
+    ).fillna(0)
+    df_cons_turma['status_conexao'] = df_cons_turma['qtd_turmas_ligadas'].apply(
+        lambda x: 'Conectada' if x > 0 else 'Isolada'
+    )
+    df_cons_turma['status_financeiro'] = df_cons_turma['resultado'].apply(
+        lambda x: 'Déficit' if x < 0 else ('Superávit' if x > 0 else 'Equilíbrio')
+    )
 
     colunas_cons = [
-        'turma_nome', 'data_prevista', 'curso', 'tipo_turma', 'valor_iniciar', 'inicio_grade',
-        'turno', 'turma_compartilhada', 'total_aulas', 'aulas_dadas',
-        'aulas_nao_compartilhadas', 'total_horas', 'custo_previsto',
-        'matriculas', 'faturado', 'resultado'
+        'turma_nome', 'curso', 'tipo_turma', 'unidade', 'turno', 'possui_grade',
+        'inicio_grade', 'data_prevista', 'status_conexao', 'qtd_turmas_ligadas',
+        'turma_compartilhada', 'total_aulas', 'aulas_dadas', 'aulas_restantes',
+        'progresso_grade_pct', 'total_horas', 'matriculas', 'valor_iniciar',
+        'custo_previsto', 'faturado', 'resultado', 'margem_pct',
+        'custo_por_matricula', 'ticket_medio', 'status_financeiro'
     ]
-    df_cons_exib = df_cons_turma[colunas_cons].sort_values(by='turma_nome')
+
+    # unidade vem de df_cons (não de df_cons_turma), então trazemos o primeiro valor por turma
+    unidade_map = (
+        df_cons.groupby('turma_id', dropna=False)['unidade']
+        .first()
+        .reset_index()
+    )
+    df_cons_turma = df_cons_turma.merge(unidade_map, on='turma_id', how='left')
+
+    df_cons_exib = df_cons_turma[colunas_cons].sort_values(
+        by=['data_prevista', 'inicio_grade', 'turma_nome'],
+        ascending=[False, False, True]
+    )
 
     st.dataframe(
         df_cons_exib,
@@ -425,28 +536,37 @@ def run_page():
         hide_index=True,
         column_config={
             "turma_nome": st.column_config.TextColumn("Turma", width="small"),
-            "data_prevista": st.column_config.DateColumn("Data\nPrevista", format="DD/MM/YYYY"),
             "curso": st.column_config.TextColumn("Curso", width="medium"),
             "tipo_turma": st.column_config.TextColumn("Tipo\nTurma", width="small"),
-            "valor_iniciar": st.column_config.NumberColumn("Valor\nIniciar (R$)", format="R$ %.2f"),
-            "inicio_grade": st.column_config.DatetimeColumn("Início\nGrade", format="DD/MM/YYYY"),
+            "unidade": st.column_config.TextColumn("Unidade", width="small"),
             "turno": st.column_config.TextColumn("Turno", width="small"),
-            "turma_compartilhada": st.column_config.TextColumn("Turmas\nCompartilhadas", width="medium"),
+            "possui_grade": st.column_config.TextColumn("Possui\nGrade", width="small"),
+            "inicio_grade": st.column_config.DatetimeColumn("Início\nGrade", format="DD/MM/YYYY"),
+            "data_prevista": st.column_config.DateColumn("Data\nPrevista", format="DD/MM/YYYY"),
+            "status_conexao": st.column_config.TextColumn("Status\nConexão", width="small"),
+            "qtd_turmas_ligadas": st.column_config.NumberColumn("Turmas\nLigadas"),
+            "turma_compartilhada": st.column_config.TextColumn("Turmas\nConectadas", width="large"),
             "total_aulas": st.column_config.NumberColumn("Total\nAulas"),
             "aulas_dadas": st.column_config.NumberColumn("Aulas\nDadas"),
-            "aulas_nao_compartilhadas": st.column_config.NumberColumn("Aulas Não\nCompart."),
+            "aulas_restantes": st.column_config.NumberColumn("Aulas\nRestantes"),
+            "progresso_grade_pct": st.column_config.NumberColumn("Progresso\nGrade", format="%.1f%%"),
             "total_horas": st.column_config.NumberColumn("Total\nHoras", format="%.2f"),
-            "custo_previsto": st.column_config.NumberColumn("Custo\nPrevisto (R$)", format="R$ %.2f"),
             "matriculas": st.column_config.NumberColumn("Matrículas"),
+            "valor_iniciar": st.column_config.NumberColumn("Valor\nIniciar (R$)", format="R$ %.2f"),
+            "custo_previsto": st.column_config.NumberColumn("Custo\nPrevisto (R$)", format="R$ %.2f"),
             "faturado": st.column_config.NumberColumn("Faturado\n(R$)", format="R$ %.2f"),
-            "resultado": st.column_config.NumberColumn("Resultado\n(R$)", format="R$ %.2f")
+            "resultado": st.column_config.NumberColumn("Resultado\n(R$)", format="R$ %.2f"),
+            "margem_pct": st.column_config.NumberColumn("Margem\n(%)", format="%.1f%%"),
+            "custo_por_matricula": st.column_config.NumberColumn("Custo/\nMatrícula", format="R$ %.2f"),
+            "ticket_medio": st.column_config.NumberColumn("Ticket\nMédio", format="R$ %.2f"),
+            "status_financeiro": st.column_config.TextColumn("Status\nFinanceiro", width="small")
         }
     )
 
     # Exportar consolidado
     df_cons_export = df_cons_exib.copy()
     if 'inicio_grade' in df_cons_export.columns:
-        df_cons_export['inicio_grade'] = df_cons_export['inicio_grade'].dt.tz_localize(None)
+        df_cons_export['inicio_grade'] = pd.to_datetime(df_cons_export['inicio_grade'], errors='coerce').dt.tz_localize(None)
     buffer_cons = io.BytesIO()
     with pd.ExcelWriter(buffer_cons, engine='xlsxwriter') as writer:
         df_cons_export.to_excel(writer, index=False, sheet_name='Consolidado por Turma')
@@ -462,164 +582,237 @@ def run_page():
     st.divider()
 
     # ==========================================================================
-    # 8. RELATÓRIO AGRUPADO DE TURMAS COMPARTILHADAS (AGGRID)
+    # 8. VISÃO GERAL DE CLUSTERS + DETALHAMENTO
     # ==========================================================================
-    st.header("🗂️ Visão Agrupada de Turmas Compartilhadas (Clusters)")
-    st.markdown("Cria agrupamentos dinâmicos das turmas com base no compartilhamento das grades.")
-    
-    # Montar grafo de compartilhamentos para criar os Clusters
-    adj = {}
-    todas_turmas_cons = df_cons_turma['turma_nome'].dropna().unique()
-    for t in todas_turmas_cons:
-        adj[t] = set()
-        
-    for index, row in merged.iterrows():
-        t1 = row['turma_nome']
-        t2 = row['turma_nome_comp']
+    st.header("🗂️ Visão Geral de Clusters de Turmas")
+    st.markdown(
+        "Agrupa turmas conectadas por compartilhamento de aulas para leitura executiva do cenário geral "
+        "(pedagógico e financeiro)."
+    )
+
+    # Montar grafo de compartilhamentos para criar os clusters
+    adj = {tid: set() for tid in df_cons_turma['turma_id'].dropna().unique()}
+    for _, row in merged.iterrows():
+        t1 = row['turma_id']
+        t2 = row['turma_id_comp']
         if t1 in adj and t2 in adj:
             adj[t1].add(t2)
             adj[t2].add(t1)
-            
+
     visited = set()
-    clusters = {}
+    cluster_map = {}
     cluster_idx = 1
-    
-    for t in sorted(adj.keys()): # Ordenado para garantir consistência dos índices
-        if t not in visited:
-            comp = set()
-            stack = [t]
-            while stack:
-                curr = stack.pop()
-                if curr not in visited:
-                    visited.add(curr)
-                    comp.add(curr)
-                    stack.extend(adj[curr] - visited)
-            
-            # Buscar cursos das turmas nesse componente
-            cursos_comp = df_cons_turma[df_cons_turma['turma_nome'].isin(comp)]['curso'].dropna().unique()
-            cursos_str = " / ".join(sorted(cursos_comp)) if len(cursos_comp) > 0 else "Sem Curso definido"
-            
-            if len(comp) > 1:
-                cluster_name = f"Grupo_{cluster_idx} - {cursos_str}"
-                cluster_idx += 1
-            else:
-                cluster_name = f"Isolada - {list(comp)[0]}"
-                
-            for member in comp:
-                clusters[member] = cluster_name
-                
+
+    for tid in sorted(adj.keys()):
+        if tid in visited:
+            continue
+
+        comp = set()
+        stack = [tid]
+        while stack:
+            curr = stack.pop()
+            if curr in visited:
+                continue
+            visited.add(curr)
+            comp.add(curr)
+            stack.extend(adj[curr] - visited)
+
+        cursos_cluster = (
+            df_cons_turma[df_cons_turma['turma_id'].isin(comp)]['curso']
+            .dropna()
+            .astype(str)
+            .sort_values()
+            .unique()
+            .tolist()
+        )
+        if len(cursos_cluster) == 1:
+            base_nome_cluster = cursos_cluster[0]
+        elif len(cursos_cluster) > 1:
+            base_nome_cluster = " / ".join(cursos_cluster)
+        else:
+            base_nome_cluster = "Sem Curso"
+
+        if len(comp) > 1:
+            cluster_nome = f"{base_nome_cluster} (Cluster {cluster_idx:02d} - {len(comp)} turmas)"
+        else:
+            cluster_nome = f"{base_nome_cluster} (Turma Isolada)"
+        cluster_idx += 1
+
+        for member in comp:
+            cluster_map[member] = cluster_nome
+
     df_aggrid = df_cons_turma.copy()
-    df_aggrid['cluster_agrupador'] = df_aggrid['turma_nome'].map(clusters)
-    
-    # Preparar as colunas a serem exibidas (adequando tipos numéricos pro grid usar as funções de agregação) 
+    df_aggrid['cluster_agrupador'] = df_aggrid['turma_id'].map(cluster_map).fillna('Turma Isolada')
+
+    # Métricas executivas do cenário geral
+    total_turmas_cons = int(df_aggrid['turma_id'].nunique())
+    turmas_conectadas = int((df_aggrid['qtd_turmas_ligadas'] > 0).sum())
+    turmas_deficit = int((df_aggrid['status_financeiro'] == 'Déficit').sum())
+    resultado_total = float(df_aggrid['resultado'].sum())
+
+    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+    col_k1.metric("Turmas no Recorte", f"{total_turmas_cons}")
+    col_k2.metric("Turmas Conectadas", f"{turmas_conectadas}")
+    col_k3.metric("Turmas em Déficit", f"{turmas_deficit}")
+    col_k4.metric("Resultado Total", formatar_reais(resultado_total))
+
+    # Resumo executivo por cluster
+    cluster_turmas = (
+        df_aggrid.groupby('cluster_agrupador')['turma_nome']
+        .apply(lambda x: ', '.join(sorted(x.dropna().unique())))
+        .reset_index()
+        .rename(columns={'turma_nome': 'turmas'})
+    )
+    cluster_cursos = (
+        df_aggrid.groupby('cluster_agrupador')['curso']
+        .apply(lambda x: ' / '.join(sorted(x.dropna().unique())))
+        .reset_index()
+        .rename(columns={'curso': 'cursos'})
+    )
+
+    df_cluster_resumo = (
+        df_aggrid
+        .groupby('cluster_agrupador', dropna=False)
+        .agg(
+            data_prevista_mais_recente=('data_prevista', 'max'),
+            inicio_grade_mais_recente=('inicio_grade', 'max'),
+            qtd_turmas=('turma_id', 'nunique'),
+            total_aulas=('total_aulas', 'sum'),
+            aulas_dadas=('aulas_dadas', 'sum'),
+            aulas_restantes=('aulas_restantes', 'sum'),
+            matriculas=('matriculas', 'sum'),
+            custo_previsto=('custo_previsto', 'sum'),
+            faturado=('faturado', 'sum'),
+            resultado=('resultado', 'sum'),
+            turmas_deficit=('status_financeiro', lambda x: (x == 'Déficit').sum())
+        )
+        .reset_index()
+    )
+    total_aulas_cluster_base = df_cluster_resumo['total_aulas'].where(df_cluster_resumo['total_aulas'] != 0)
+    df_cluster_resumo['progresso_grade_pct'] = (
+        df_cluster_resumo['aulas_dadas'] / total_aulas_cluster_base * 100
+    ).fillna(0).round(1)
+    faturado_cluster_base = df_cluster_resumo['faturado'].where(df_cluster_resumo['faturado'] != 0)
+    df_cluster_resumo['margem_pct'] = (
+        df_cluster_resumo['resultado'] / faturado_cluster_base * 100
+    ).fillna(0).round(1)
+    matriculas_cluster_base = df_cluster_resumo['matriculas'].where(df_cluster_resumo['matriculas'] != 0)
+    df_cluster_resumo['custo_por_matricula'] = (
+        df_cluster_resumo['custo_previsto'] / matriculas_cluster_base
+    ).fillna(0)
+    df_cluster_resumo['ticket_medio'] = (
+        df_cluster_resumo['faturado'] / matriculas_cluster_base
+    ).fillna(0)
+    df_cluster_resumo['status_cluster'] = df_cluster_resumo.apply(
+        lambda r: 'Crítico' if (r['resultado'] < 0 and r['progresso_grade_pct'] > 70)
+        else ('Atenção' if r['resultado'] < 0 else 'Saudável'),
+        axis=1
+    )
+
+    df_cluster_resumo = df_cluster_resumo.merge(cluster_turmas, on='cluster_agrupador', how='left')
+    df_cluster_resumo = df_cluster_resumo.merge(cluster_cursos, on='cluster_agrupador', how='left')
+    df_cluster_resumo = df_cluster_resumo.sort_values(
+        by=['data_prevista_mais_recente', 'inicio_grade_mais_recente', 'cluster_agrupador'],
+        ascending=[False, False, True]
+    )
+    df_cluster_resumo = df_cluster_resumo.drop(
+        columns=['data_prevista_mais_recente', 'inicio_grade_mais_recente'],
+        errors='ignore'
+    )
+
+    st.subheader("Resumo Executivo por Cluster")
+    st.dataframe(
+        df_cluster_resumo,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "cluster_agrupador": st.column_config.TextColumn("Cluster", width="small"),
+            "status_cluster": st.column_config.TextColumn("Status", width="small"),
+            "qtd_turmas": st.column_config.NumberColumn("Qtd. Turmas"),
+            "cursos": st.column_config.TextColumn("Cursos", width="medium"),
+            "turmas": st.column_config.TextColumn("Turmas", width="large"),
+            "total_aulas": st.column_config.NumberColumn("Total Aulas"),
+            "aulas_dadas": st.column_config.NumberColumn("Aulas Dadas"),
+            "aulas_restantes": st.column_config.NumberColumn("Aulas Restantes"),
+            "progresso_grade_pct": st.column_config.NumberColumn("Progresso Grade", format="%.1f%%"),
+            "matriculas": st.column_config.NumberColumn("Matrículas"),
+            "custo_previsto": st.column_config.NumberColumn("Custo Previsto", format="R$ %.2f"),
+            "faturado": st.column_config.NumberColumn("Faturado", format="R$ %.2f"),
+            "resultado": st.column_config.NumberColumn("Resultado", format="R$ %.2f"),
+            "margem_pct": st.column_config.NumberColumn("Margem", format="%.1f%%"),
+            "custo_por_matricula": st.column_config.NumberColumn("Custo/Matrícula", format="R$ %.2f"),
+            "ticket_medio": st.column_config.NumberColumn("Ticket Médio", format="R$ %.2f"),
+            "turmas_deficit": st.column_config.NumberColumn("Turmas em Déficit")
+        }
+    )
+
+    # Detalhamento por turma no cluster (AgGrid)
+    st.subheader("Detalhamento por Turma dentro do Cluster")
+
+    df_aggrid = df_aggrid.sort_values(
+        by=['data_prevista', 'inicio_grade', 'turma_nome'],
+        ascending=[False, False, True]
+    )
+
     df_aggrid['total_aulas'] = pd.to_numeric(df_aggrid['total_aulas'], errors='coerce').fillna(0)
     df_aggrid['aulas_dadas'] = pd.to_numeric(df_aggrid['aulas_dadas'], errors='coerce').fillna(0)
-    df_aggrid['aulas_nao_compartilhadas'] = pd.to_numeric(df_aggrid['aulas_nao_compartilhadas'], errors='coerce').fillna(0)
+    df_aggrid['aulas_restantes'] = pd.to_numeric(df_aggrid['aulas_restantes'], errors='coerce').fillna(0)
     df_aggrid['total_horas'] = pd.to_numeric(df_aggrid['total_horas'], errors='coerce').fillna(0)
     df_aggrid['matriculas'] = pd.to_numeric(df_aggrid['matriculas'], errors='coerce').fillna(0)
-    
-    # Configuração da UI do AgGrid
+    df_aggrid['progresso_grade_pct'] = pd.to_numeric(df_aggrid['progresso_grade_pct'], errors='coerce').fillna(0)
+
     gb = GridOptionsBuilder.from_dataframe(df_aggrid)
-    
-    # Configura o cluster_agrupador
-    gb.configure_column(
-        field="cluster_agrupador",
-        header_name="Grupo / Cluster",
-        rowGroup=True,
-        hide=True
-    )
-    
-    # Esconder turma_id e turma_compartilhada do grid
+    gb.configure_column(field="cluster_agrupador", header_name="Cluster", rowGroup=True, hide=True)
+
     if 'turma_id' in df_aggrid.columns:
         gb.configure_column(field="turma_id", hide=True)
-    if 'turma_compartilhada' in df_aggrid.columns:
-        gb.configure_column(field="turma_compartilhada", hide=True)
-        
-    gb.configure_column(field="turma_nome", header_name="Turma", minWidth=200)
-    gb.configure_column(field="curso", header_name="Curso")
-    gb.configure_column(field="tipo_turma", header_name="Tipo")
-    gb.configure_column(field="turno", header_name="Turno")
-    
-    gb.configure_column(
-        field="data_prevista", 
-        header_name="Data Prevista",
-        type=["dateColumnFilter", "customDateTimeFormat"],
-        custom_format_string='dd/MM/yyyy',
-        minWidth=150
-    )
-    gb.configure_column(
-        field="inicio_grade", 
-        header_name="Início Grade",
-        type=["dateColumnFilter", "customDateTimeFormat"],
-        custom_format_string='dd/MM/yyyy',
-        minWidth=150
-    )
 
-    # Métricas Quantitativas (Sum)
+    gb.configure_column(field="turma_nome", header_name="Turma", minWidth=180)
+    gb.configure_column(field="curso", header_name="Curso", minWidth=140)
+    gb.configure_column(field="tipo_turma", header_name="Tipo", minWidth=100)
+    gb.configure_column(field="turno", header_name="Turno", minWidth=100)
+    gb.configure_column(field="status_financeiro", header_name="Status Financeiro", minWidth=140)
+    gb.configure_column(field="qtd_turmas_ligadas", header_name="Turmas Ligadas", type=["numericColumn"], aggFunc="sum")
+    gb.configure_column(field="progresso_grade_pct", header_name="Progresso Grade (%)", type=["numericColumn"], aggFunc="avg")
     gb.configure_column(field="total_aulas", header_name="Tot. Aulas", type=["numericColumn"], aggFunc="sum")
     gb.configure_column(field="aulas_dadas", header_name="Aulas Dadas", type=["numericColumn"], aggFunc="sum")
-    gb.configure_column(field="aulas_nao_compartilhadas", header_name="Aulas Não Comp.", type=["numericColumn"], aggFunc="sum")
-    gb.configure_column(field="total_horas", header_name="Tot. Horas", type=["numericColumn"], aggFunc="sum", valueFormatter=JsCode("function(params) { if(params.value == null) return ''; return params.value.toFixed(2); }"))
+    gb.configure_column(field="aulas_restantes", header_name="Aulas Restantes", type=["numericColumn"], aggFunc="sum")
+    gb.configure_column(
+        field="total_horas",
+        header_name="Tot. Horas",
+        type=["numericColumn"],
+        aggFunc="sum",
+        valueFormatter=JsCode("function(params){ if(params.value == null) return ''; return params.value.toFixed(2); }")
+    )
     gb.configure_column(field="matriculas", header_name="Matrículas", type=["numericColumn"], aggFunc="sum")
 
-    # Métricas Financeiras
     formata_moeda_js = JsCode("""
         function(params) {
             if (params.value === undefined || params.value === null) return '';
             return 'R$ ' + params.value.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         }
     """)
-    
-    gb.configure_column(
-        field="valor_iniciar",
-        header_name="Valor Iniciar",
-        type=["numericColumn"],
-        aggFunc="max",  # usamos MAX porque somar valor do curso por turmas agrupadas pode gerar distorção.
-        valueFormatter=formata_moeda_js
-    )
-    
-    gb.configure_column(
-        field="custo_previsto",
-        header_name="Custo Previsto",
-        type=["numericColumn"],
-        aggFunc="sum",
-        valueFormatter=formata_moeda_js
-    )
-    
-    gb.configure_column(
-        field="faturado",
-        header_name="Faturado",
-        type=["numericColumn"],
-        aggFunc="sum",
-        valueFormatter=formata_moeda_js
-    )
-    
-    gb.configure_column(
-        field="resultado",
-        header_name="Resultado",
-        type=["numericColumn"],
-        aggFunc="sum",
-        valueFormatter=formata_moeda_js
-    )
-    
+
+    gb.configure_column(field="valor_iniciar", header_name="Valor Iniciar", type=["numericColumn"], aggFunc="max", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="custo_previsto", header_name="Custo Previsto", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="faturado", header_name="Faturado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="resultado", header_name="Resultado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+
     grid_options = gb.build()
-    
     grid_options["autoGroupColumnDef"] = {
         "headerName": "Clusters / Turmas",
-        "minWidth": 350,
-        "cellRendererParams": {
-            "suppressCount": False,
-        }
+        "minWidth": 320,
+        "cellRendererParams": {"suppressCount": False}
     }
     grid_options["groupDisplayType"] = "groupRow"
-    grid_options["groupDefaultExpanded"] = 0 # Recolhidos por padrão
+    grid_options["groupDefaultExpanded"] = 0
     grid_options["groupIncludeFooter"] = True
     grid_options["groupIncludeTotalFooter"] = True
-    
+
     AgGrid(
         df_aggrid,
         gridOptions=grid_options,
-        height=600,
+        height=620,
         width='100%',
         theme='streamlit',
         enable_enterprise_modules=True,
