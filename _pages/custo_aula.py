@@ -260,6 +260,7 @@ def run_page():
     # Carregar matrículas por turma
     df_matriculas = carregar_dados("consultas/turmas/matriculas_turma.sql")
     df_matriculas['valor'] = pd.to_numeric(df_matriculas['valor'], errors='coerce')
+    df_matriculas['valor_pago'] = pd.to_numeric(df_matriculas['valor_pago'], errors='coerce')
     df_matriculas['data_pagamento'] = pd.to_datetime(df_matriculas['data_pagamento'], errors='coerce')
     df_matriculas = df_matriculas[df_matriculas['empresa'] == empresa_selecionada]
     status_pagamento_list = sorted(df_matriculas['status_pagamento'].dropna().unique())
@@ -267,7 +268,7 @@ def run_page():
     # Carregar valor para iniciar por turma
     df_valor_iniciar = carregar_dados("consultas/turmas/curso_valor_iniciar.sql")
     df_valor_iniciar['valor_iniciar'] = pd.to_numeric(df_valor_iniciar['valor_iniciar'], errors='coerce')
-    df_valor_iniciar = df_valor_iniciar[['turma_id', 'valor_iniciar']].drop_duplicates()
+    df_valor_iniciar = df_valor_iniciar[['turma_id', 'valor_iniciar']].drop_duplicates() 
 
     # --- Filtros independentes do consolidado ---
     col_f1, col_f2 = st.columns(2)
@@ -412,7 +413,11 @@ def run_page():
     df_mat_turma = (
         df_matriculas_filtrado
         .groupby('turma_id', dropna=False)
-        .agg(matriculas=('order_id', 'nunique'), faturado=('valor', 'sum'))
+        .agg(
+            matriculas=('order_id', 'nunique'),
+            fat_canc=('valor', 'sum'),
+            fat_total=('valor_pago', 'sum')
+        )
         .reset_index()
     )
 
@@ -476,7 +481,8 @@ def run_page():
     # Merge com matrículas/faturamento
     df_cons_turma = df_cons_turma.merge(df_mat_turma, on='turma_id', how='left')
     df_cons_turma['matriculas'] = df_cons_turma['matriculas'].fillna(0).astype(int)
-    df_cons_turma['faturado'] = df_cons_turma['faturado'].fillna(0)
+    df_cons_turma['fat_canc'] = df_cons_turma['fat_canc'].fillna(0)
+    df_cons_turma['fat_total'] = df_cons_turma['fat_total'].fillna(0)
 
     # Merge com valor para iniciar
     df_cons_turma = df_cons_turma.merge(df_valor_iniciar, on='turma_id', how='left')
@@ -489,17 +495,17 @@ def run_page():
     df_cons_turma['progresso_grade_pct'] = (
         df_cons_turma['aulas_dadas'] / total_aulas_base * 100
     ).fillna(0).round(1)
-    df_cons_turma['resultado'] = df_cons_turma['faturado'] - df_cons_turma['custo_previsto']
-    faturado_base = df_cons_turma['faturado'].where(df_cons_turma['faturado'] != 0)
+    df_cons_turma['resultado'] = df_cons_turma['fat_canc'] - df_cons_turma['custo_previsto']
+    fat_canc_base = df_cons_turma['fat_canc'].where(df_cons_turma['fat_canc'] != 0)
     df_cons_turma['margem_pct'] = (
-        df_cons_turma['resultado'] / faturado_base * 100
+        df_cons_turma['resultado'] / fat_canc_base * 100
     ).fillna(0).round(1)
     matriculas_base = df_cons_turma['matriculas'].where(df_cons_turma['matriculas'] != 0)
     df_cons_turma['custo_por_matricula'] = (
         df_cons_turma['custo_previsto'] / matriculas_base
     ).fillna(0)
     df_cons_turma['ticket_medio'] = (
-        df_cons_turma['faturado'] / matriculas_base
+        df_cons_turma['fat_canc'] / matriculas_base
     ).fillna(0)
     df_cons_turma['status_conexao'] = df_cons_turma['qtd_turmas_ligadas'].apply(
         lambda x: 'Conectada' if x > 0 else 'Isolada'
@@ -513,7 +519,7 @@ def run_page():
         'inicio_grade', 'data_prevista', 'status_conexao', 'qtd_turmas_ligadas',
         'turma_compartilhada', 'total_aulas', 'aulas_dadas', 'aulas_restantes',
         'progresso_grade_pct', 'total_horas', 'matriculas', 'valor_iniciar',
-        'custo_previsto', 'faturado', 'resultado', 'margem_pct',
+        'custo_previsto', 'fat_canc', 'fat_total', 'resultado', 'margem_pct',
         'custo_por_matricula', 'ticket_medio', 'status_financeiro'
     ]
 
@@ -554,7 +560,8 @@ def run_page():
             "matriculas": st.column_config.NumberColumn("Matrículas"),
             "valor_iniciar": st.column_config.NumberColumn("Valor\nIniciar (R$)", format="R$ %.2f"),
             "custo_previsto": st.column_config.NumberColumn("Custo\nPrevisto (R$)", format="R$ %.2f"),
-            "faturado": st.column_config.NumberColumn("Faturado\n(R$)", format="R$ %.2f"),
+            "fat_canc": st.column_config.NumberColumn("Fat - Canc\n(R$)", format="R$ %.2f"),
+            "fat_total": st.column_config.NumberColumn("Fat. Total\n(R$)", format="R$ %.2f"),
             "resultado": st.column_config.NumberColumn("Resultado\n(R$)", format="R$ %.2f"),
             "margem_pct": st.column_config.NumberColumn("Margem\n(%)", format="%.1f%%"),
             "custo_por_matricula": st.column_config.NumberColumn("Custo/\nMatrícula", format="R$ %.2f"),
@@ -682,7 +689,8 @@ def run_page():
             aulas_restantes=('aulas_restantes', 'sum'),
             matriculas=('matriculas', 'sum'),
             custo_previsto=('custo_previsto', 'sum'),
-            faturado=('faturado', 'sum'),
+            fat_canc=('fat_canc', 'sum'),
+            fat_total=('fat_total', 'sum'),
             resultado=('resultado', 'sum'),
             turmas_deficit=('status_financeiro', lambda x: (x == 'Déficit').sum())
         )
@@ -692,16 +700,16 @@ def run_page():
     df_cluster_resumo['progresso_grade_pct'] = (
         df_cluster_resumo['aulas_dadas'] / total_aulas_cluster_base * 100
     ).fillna(0).round(1)
-    faturado_cluster_base = df_cluster_resumo['faturado'].where(df_cluster_resumo['faturado'] != 0)
+    fat_canc_cluster_base = df_cluster_resumo['fat_canc'].where(df_cluster_resumo['fat_canc'] != 0)
     df_cluster_resumo['margem_pct'] = (
-        df_cluster_resumo['resultado'] / faturado_cluster_base * 100
+        df_cluster_resumo['resultado'] / fat_canc_cluster_base * 100
     ).fillna(0).round(1)
     matriculas_cluster_base = df_cluster_resumo['matriculas'].where(df_cluster_resumo['matriculas'] != 0)
     df_cluster_resumo['custo_por_matricula'] = (
         df_cluster_resumo['custo_previsto'] / matriculas_cluster_base
     ).fillna(0)
     df_cluster_resumo['ticket_medio'] = (
-        df_cluster_resumo['faturado'] / matriculas_cluster_base
+        df_cluster_resumo['fat_canc'] / matriculas_cluster_base
     ).fillna(0)
     df_cluster_resumo['status_cluster'] = df_cluster_resumo.apply(
         lambda r: 'Crítico' if (r['resultado'] < 0 and r['progresso_grade_pct'] > 70)
@@ -737,7 +745,8 @@ def run_page():
             "progresso_grade_pct": st.column_config.NumberColumn("Progresso Grade", format="%.1f%%"),
             "matriculas": st.column_config.NumberColumn("Matrículas"),
             "custo_previsto": st.column_config.NumberColumn("Custo Previsto", format="R$ %.2f"),
-            "faturado": st.column_config.NumberColumn("Faturado", format="R$ %.2f"),
+            "fat_canc": st.column_config.NumberColumn("Fat - Canc", format="R$ %.2f"),
+            "fat_total": st.column_config.NumberColumn("Fat. Total", format="R$ %.2f"),
             "resultado": st.column_config.NumberColumn("Resultado", format="R$ %.2f"),
             "margem_pct": st.column_config.NumberColumn("Margem", format="%.1f%%"),
             "custo_por_matricula": st.column_config.NumberColumn("Custo/Matrícula", format="R$ %.2f"),
@@ -745,6 +754,21 @@ def run_page():
             "turmas_deficit": st.column_config.NumberColumn("Turmas em Déficit")
         }
     )
+
+    buffer_cluster_resumo = io.BytesIO()
+    df_cluster_export = df_cluster_resumo.copy()
+    with pd.ExcelWriter(buffer_cluster_resumo, engine='xlsxwriter') as writer:
+        df_cluster_export.to_excel(writer, index=False, sheet_name='Clusters Resumo')
+    buffer_cluster_resumo.seek(0)
+    st.download_button(
+        label="📥 Exportar Clusters para Excel",
+        data=buffer_cluster_resumo,
+        file_name="clusters_resumo.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_cluster_resumo"
+    )
+
+    st.divider()
 
     # Detalhamento por turma no cluster (AgGrid)
     st.subheader("Detalhamento por Turma dentro do Cluster")
@@ -795,7 +819,8 @@ def run_page():
 
     gb.configure_column(field="valor_iniciar", header_name="Valor Iniciar", type=["numericColumn"], aggFunc="max", valueFormatter=formata_moeda_js)
     gb.configure_column(field="custo_previsto", header_name="Custo Previsto", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
-    gb.configure_column(field="faturado", header_name="Faturado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="fat_canc", header_name="Fat - Canc", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="fat_total", header_name="Fat. Total", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
     gb.configure_column(field="resultado", header_name="Resultado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
 
     grid_options = gb.build()
@@ -819,4 +844,23 @@ def run_page():
         update_mode='MODEL_CHANGED',
         allow_unsafe_jscode=True,
         fit_columns_on_grid_load=False
+    )
+
+    colunas_aggrid_export = [
+        'cluster_agrupador', 'turma_nome', 'curso', 'tipo_turma', 'turno',
+        'status_financeiro', 'qtd_turmas_ligadas', 'progresso_grade_pct',
+        'total_aulas', 'aulas_dadas', 'aulas_restantes', 'total_horas',
+        'matriculas', 'valor_iniciar', 'custo_previsto', 'fat_canc', 'fat_total', 'resultado'
+    ]
+    df_aggrid_export = df_aggrid[[c for c in colunas_aggrid_export if c in df_aggrid.columns]].copy()
+    buffer_aggrid = io.BytesIO()
+    with pd.ExcelWriter(buffer_aggrid, engine='xlsxwriter') as writer:
+        df_aggrid_export.to_excel(writer, index=False, sheet_name='Detalhamento Clusters')
+    buffer_aggrid.seek(0)
+    st.download_button(
+        label="📥 Exportar Detalhamento para Excel",
+        data=buffer_aggrid,
+        file_name="detalhamento_clusters.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_aggrid_detalhamento"
     )
