@@ -261,6 +261,7 @@ def run_page():
     df_matriculas = carregar_dados("consultas/turmas/matriculas_turma.sql")
     df_matriculas['valor'] = pd.to_numeric(df_matriculas['valor'], errors='coerce')
     df_matriculas['valor_pago'] = pd.to_numeric(df_matriculas['valor_pago'], errors='coerce')
+    df_matriculas['valor_devolvido'] = pd.to_numeric(df_matriculas['valor_devolvido'], errors='coerce')
     df_matriculas['data_pagamento'] = pd.to_datetime(df_matriculas['data_pagamento'], errors='coerce')
     df_matriculas = df_matriculas[df_matriculas['empresa'] == empresa_selecionada]
     status_pagamento_list = sorted(df_matriculas['status_pagamento'].dropna().unique())
@@ -416,7 +417,8 @@ def run_page():
         .agg(
             matriculas=('order_id', 'nunique'),
             fat_canc=('valor', 'sum'),
-            fat_total=('valor_pago', 'sum')
+            fat_total=('valor_pago', 'sum'),
+            cancelado=('valor_devolvido', 'sum')
         )
         .reset_index()
     )
@@ -483,6 +485,7 @@ def run_page():
     df_cons_turma['matriculas'] = df_cons_turma['matriculas'].fillna(0).astype(int)
     df_cons_turma['fat_canc'] = df_cons_turma['fat_canc'].fillna(0)
     df_cons_turma['fat_total'] = df_cons_turma['fat_total'].fillna(0)
+    df_cons_turma['cancelado'] = df_cons_turma['cancelado'].fillna(0)
 
     # Merge com valor para iniciar
     df_cons_turma = df_cons_turma.merge(df_valor_iniciar, on='turma_id', how='left')
@@ -496,6 +499,7 @@ def run_page():
         df_cons_turma['aulas_dadas'] / total_aulas_base * 100
     ).fillna(0).round(1)
     df_cons_turma['resultado'] = df_cons_turma['fat_canc'] - df_cons_turma['custo_previsto']
+    df_cons_turma['result_bruto'] = df_cons_turma['fat_total'] - df_cons_turma['custo_previsto']
     fat_canc_base = df_cons_turma['fat_canc'].where(df_cons_turma['fat_canc'] != 0)
     df_cons_turma['margem_pct'] = (
         df_cons_turma['resultado'] / fat_canc_base * 100
@@ -519,7 +523,7 @@ def run_page():
         'inicio_grade', 'data_prevista', 'status_conexao', 'qtd_turmas_ligadas',
         'turma_compartilhada', 'total_aulas', 'aulas_dadas', 'aulas_restantes',
         'progresso_grade_pct', 'total_horas', 'matriculas', 'valor_iniciar',
-        'custo_previsto', 'fat_canc', 'fat_total', 'resultado', 'margem_pct',
+        'custo_previsto', 'fat_total', 'result_bruto', 'cancelado', 'fat_canc', 'resultado', 'margem_pct',
         'custo_por_matricula', 'ticket_medio', 'status_financeiro'
     ]
 
@@ -560,8 +564,10 @@ def run_page():
             "matriculas": st.column_config.NumberColumn("Matrículas"),
             "valor_iniciar": st.column_config.NumberColumn("Valor\nIniciar (R$)", format="R$ %.2f"),
             "custo_previsto": st.column_config.NumberColumn("Custo\nPrevisto (R$)", format="R$ %.2f"),
-            "fat_canc": st.column_config.NumberColumn("Fat - Canc\n(R$)", format="R$ %.2f"),
             "fat_total": st.column_config.NumberColumn("Fat. Total\n(R$)", format="R$ %.2f"),
+            "result_bruto": st.column_config.NumberColumn("Resut Bruto\n(R$)", format="R$ %.2f"),
+            "cancelado": st.column_config.NumberColumn("Cancelado\n(R$)", format="R$ %.2f"),
+            "fat_canc": st.column_config.NumberColumn("Fat - Canc\n(R$)", format="R$ %.2f"),
             "resultado": st.column_config.NumberColumn("Resultado\n(R$)", format="R$ %.2f"),
             "margem_pct": st.column_config.NumberColumn("Margem\n(%)", format="%.1f%%"),
             "custo_por_matricula": st.column_config.NumberColumn("Custo/\nMatrícula", format="R$ %.2f"),
@@ -689,8 +695,10 @@ def run_page():
             aulas_restantes=('aulas_restantes', 'sum'),
             matriculas=('matriculas', 'sum'),
             custo_previsto=('custo_previsto', 'sum'),
-            fat_canc=('fat_canc', 'sum'),
             fat_total=('fat_total', 'sum'),
+            result_bruto=('result_bruto', 'sum'),
+            cancelado=('cancelado', 'sum'),
+            fat_canc=('fat_canc', 'sum'),
             resultado=('resultado', 'sum'),
             turmas_deficit=('status_financeiro', lambda x: (x == 'Déficit').sum())
         )
@@ -745,8 +753,10 @@ def run_page():
             "progresso_grade_pct": st.column_config.NumberColumn("Progresso Grade", format="%.1f%%"),
             "matriculas": st.column_config.NumberColumn("Matrículas"),
             "custo_previsto": st.column_config.NumberColumn("Custo Previsto", format="R$ %.2f"),
-            "fat_canc": st.column_config.NumberColumn("Fat - Canc", format="R$ %.2f"),
             "fat_total": st.column_config.NumberColumn("Fat. Total", format="R$ %.2f"),
+            "result_bruto": st.column_config.NumberColumn("Resut Bruto", format="R$ %.2f"),
+            "cancelado": st.column_config.NumberColumn("Cancelado", format="R$ %.2f"),
+            "fat_canc": st.column_config.NumberColumn("Fat - Canc", format="R$ %.2f"),
             "resultado": st.column_config.NumberColumn("Resultado", format="R$ %.2f"),
             "margem_pct": st.column_config.NumberColumn("Margem", format="%.1f%%"),
             "custo_por_matricula": st.column_config.NumberColumn("Custo/Matrícula", format="R$ %.2f"),
@@ -819,8 +829,10 @@ def run_page():
 
     gb.configure_column(field="valor_iniciar", header_name="Valor Iniciar", type=["numericColumn"], aggFunc="max", valueFormatter=formata_moeda_js)
     gb.configure_column(field="custo_previsto", header_name="Custo Previsto", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
-    gb.configure_column(field="fat_canc", header_name="Fat - Canc", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
     gb.configure_column(field="fat_total", header_name="Fat. Total", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="result_bruto", header_name="Resut Bruto", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="cancelado", header_name="Cancelado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
+    gb.configure_column(field="fat_canc", header_name="Fat - Canc", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
     gb.configure_column(field="resultado", header_name="Resultado", type=["numericColumn"], aggFunc="sum", valueFormatter=formata_moeda_js)
 
     grid_options = gb.build()
@@ -850,7 +862,7 @@ def run_page():
         'cluster_agrupador', 'turma_nome', 'curso', 'tipo_turma', 'turno',
         'status_financeiro', 'qtd_turmas_ligadas', 'progresso_grade_pct',
         'total_aulas', 'aulas_dadas', 'aulas_restantes', 'total_horas',
-        'matriculas', 'valor_iniciar', 'custo_previsto', 'fat_canc', 'fat_total', 'resultado'
+        'matriculas', 'valor_iniciar', 'custo_previsto', 'fat_total', 'result_bruto', 'cancelado', 'fat_canc', 'resultado'
     ]
     df_aggrid_export = df_aggrid[[c for c in colunas_aggrid_export if c in df_aggrid.columns]].copy()
     buffer_aggrid = io.BytesIO()
