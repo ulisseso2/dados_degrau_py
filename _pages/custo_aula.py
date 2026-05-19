@@ -876,3 +876,180 @@ def run_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="download_aggrid_detalhamento"
     )
+
+    st.divider()
+
+    # ==========================================================================
+    # 9. ANÁLISE DE JANELAS DE COMPARTILHAMENTO DE GRADE
+    # ==========================================================================
+    st.header("📐 Análise de Janelas de Compartilhamento de Grade")
+    st.markdown(
+        "Para cada par de turmas conectadas, mostra em que posição da grade a turma entrante "
+        "começou a compartilhar aulas com a turma pioneira. "
+        "**Aulas antes do compartilhamento** são aulas que a pioneira já havia dado sozinha — "
+        "representam janelas de aproveitamento e matrícula que poderiam ter sido compartilhadas."
+    )
+
+    # Aulas por turma ordenadas por data (base filtrada por empresa + filtros da seção 7)
+    _seq = (
+        df_cons
+        .dropna(subset=['aula_id', 'turma_id', 'data_aula'])
+        [['turma_id', 'turma_nome', 'aula_id', 'data_aula', 'curso', 'unidade', 'inicio_grade', 'data_prevista']]
+        .drop_duplicates(subset=['turma_id', 'aula_id'])
+        .sort_values(['turma_id', 'data_aula'])
+    )
+    _seq['seq_na_grade'] = _seq.groupby('turma_id').cumcount() + 1
+    _total = _seq.groupby('turma_id')['aula_id'].count().reset_index(name='total_aulas_grade')
+    _seq = _seq.merge(_total, on='turma_id')
+
+    _meta = (
+        df_cons
+        .groupby('turma_id')
+        .agg(
+            turma_nome=('turma_nome', 'first'),
+            curso=('curso', 'first'),
+            unidade=('unidade', 'first'),
+            inicio_grade=('inicio_grade', 'first'),
+            data_prevista=('data_prevista', 'first'),
+        )
+        .reset_index()
+    )
+
+    # Pares de turmas que compartilham aulas (ambas dentro dos filtros ativos)
+    _aulas_filtradas = _seq[['aula_id', 'turma_id']].drop_duplicates()
+    _pares_raw = _aulas_filtradas.merge(_aulas_filtradas, on='aula_id', suffixes=('_a', '_b'))
+    _pares_raw = _pares_raw[_pares_raw['turma_id_a'] != _pares_raw['turma_id_b']]
+    _pares = _pares_raw[['turma_id_a', 'turma_id_b']].drop_duplicates()
+
+    _pares = _pares.merge(
+        _meta[['turma_id', 'inicio_grade']].rename(columns={'turma_id': 'turma_id_a', 'inicio_grade': 'ig_a'}),
+        on='turma_id_a', how='left'
+    )
+    _pares = _pares.merge(
+        _meta[['turma_id', 'inicio_grade']].rename(columns={'turma_id': 'turma_id_b', 'inicio_grade': 'ig_b'}),
+        on='turma_id_b', how='left'
+    )
+    _pares = _pares.dropna(subset=['ig_a', 'ig_b'])
+
+    # Normalizar: A é sempre a pioneira (início mais antigo); descartar duplicatas espelhadas
+    _pares[['tid_a', 'tid_b', 'ig_a_n', 'ig_b_n']] = _pares.apply(
+        lambda r: pd.Series(
+            (r['turma_id_a'], r['turma_id_b'], r['ig_a'], r['ig_b'])
+            if r['ig_a'] <= r['ig_b']
+            else (r['turma_id_b'], r['turma_id_a'], r['ig_b'], r['ig_a'])
+        ),
+        axis=1
+    )
+    _pares = (
+        _pares[['tid_a', 'tid_b', 'ig_a_n', 'ig_b_n']]
+        .rename(columns={'ig_a_n': 'ig_a', 'ig_b_n': 'ig_b'})
+        .drop_duplicates(subset=['tid_a', 'tid_b'])
+    )
+
+    # Índice: turma_id → df de aulas (aula_id como índice)
+    _aulas_idx = {
+        tid: grp.set_index('aula_id')
+        for tid, grp in _seq.groupby('turma_id')
+    }
+
+    _rows = []
+    for _, par in _pares.iterrows():
+        tid_a, tid_b = par['tid_a'], par['tid_b']
+        ig_a, ig_b = par['ig_a'], par['ig_b']
+
+        if tid_a not in _aulas_idx or tid_b not in _aulas_idx:
+            continue
+
+        df_a = _aulas_idx[tid_a][['seq_na_grade', 'data_aula', 'total_aulas_grade']]
+        aulas_b_ids = set(_aulas_idx[tid_b].index)
+        shared_in_a = df_a[df_a.index.isin(aulas_b_ids)]
+
+        if shared_in_a.empty:
+            continue
+
+        first_seq = int(shared_in_a['seq_na_grade'].min())
+        last_seq = int(shared_in_a['seq_na_grade'].max())
+        total_a = int(df_a['total_aulas_grade'].iloc[0])
+        total_shared = len(shared_in_a)
+        aulas_antes = first_seq - 1
+        pct_entrada = round(aulas_antes / total_a * 100, 1) if total_a > 0 else 0.0
+        gap_dias = int((ig_b - ig_a).days) if pd.notna(ig_a) and pd.notna(ig_b) else None
+
+        meta_a_rows = _meta[_meta['turma_id'] == tid_a]
+        meta_b_rows = _meta[_meta['turma_id'] == tid_b]
+        if meta_a_rows.empty or meta_b_rows.empty:
+            continue
+        ma, mb = meta_a_rows.iloc[0], meta_b_rows.iloc[0]
+
+        _rows.append({
+            'cluster': cluster_map.get(tid_a, cluster_map.get(tid_b, '—')),
+            'turma_pioneira': ma['turma_nome'],
+            'turma_entrante': mb['turma_nome'],
+            'curso': ma['curso'],
+            'unidade': ma['unidade'],
+            'inicio_grade_pioneira': ig_a,
+            'inicio_grade_entrante': ig_b,
+            'gap_dias': gap_dias,
+            'total_aulas_grade_pioneira': total_a,
+            'seq_entrada_na_grade': first_seq,
+            'aulas_antes_compartilhamento': aulas_antes,
+            'total_aulas_compartilhadas': total_shared,
+            'aulas_exclusivas_pos_entrada': total_a - last_seq,
+            'pct_grade_consumida_na_entrada': pct_entrada,
+            'janela_perdida': 'Sim' if aulas_antes > 0 else 'Não',
+        })
+
+    df_janelas = pd.DataFrame(_rows)
+
+    if df_janelas.empty:
+        st.info("Nenhum compartilhamento entre turmas encontrado para os filtros atuais.")
+    else:
+        df_janelas = df_janelas.sort_values(
+            by=['pct_grade_consumida_na_entrada', 'cluster'],
+            ascending=[False, True]
+        ).reset_index(drop=True)
+
+        col_j1, col_j2, col_j3, col_j4 = st.columns(4)
+        col_j1.metric("Pares Analisados", f"{len(df_janelas)}")
+        col_j2.metric("Com Janela Perdida", f"{int((df_janelas['janela_perdida'] == 'Sim').sum())}")
+        col_j3.metric("Média Aulas Antes Compartilhamento", f"{round(df_janelas['aulas_antes_compartilhamento'].mean(), 1)}")
+        col_j4.metric("% Médio da Grade Consumida na Entrada", f"{round(df_janelas['pct_grade_consumida_na_entrada'].mean(), 1)}%")
+
+        st.dataframe(
+            df_janelas,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "cluster": st.column_config.TextColumn("Cluster", width="medium"),
+                "turma_pioneira": st.column_config.TextColumn("Turma Pioneira", width="medium"),
+                "turma_entrante": st.column_config.TextColumn("Turma Entrante", width="medium"),
+                "curso": st.column_config.TextColumn("Curso", width="medium"),
+                "unidade": st.column_config.TextColumn("Unidade", width="small"),
+                "inicio_grade_pioneira": st.column_config.DatetimeColumn("Início Grade\nPioneira", format="DD/MM/YYYY"),
+                "inicio_grade_entrante": st.column_config.DatetimeColumn("Início Grade\nEntrante", format="DD/MM/YYYY"),
+                "gap_dias": st.column_config.NumberColumn("Gap (dias)"),
+                "total_aulas_grade_pioneira": st.column_config.NumberColumn("Total Aulas\nGrade Pioneira"),
+                "seq_entrada_na_grade": st.column_config.NumberColumn("Aula Nº\nEntrada"),
+                "aulas_antes_compartilhamento": st.column_config.NumberColumn("Aulas Antes do\nCompartilhamento"),
+                "total_aulas_compartilhadas": st.column_config.NumberColumn("Aulas\nCompartilhadas"),
+                "aulas_exclusivas_pos_entrada": st.column_config.NumberColumn("Aulas Exclusivas\nPós Entrada"),
+                "pct_grade_consumida_na_entrada": st.column_config.NumberColumn("% Grade Consumida\nna Entrada", format="%.1f%%"),
+                "janela_perdida": st.column_config.TextColumn("Janela\nPerdida", width="small"),
+            }
+        )
+
+        _export = df_janelas.copy()
+        for col in ['inicio_grade_pioneira', 'inicio_grade_entrante']:
+            if col in _export.columns:
+                _export[col] = pd.to_datetime(_export[col], errors='coerce').dt.tz_localize(None)
+        _buf_janelas = io.BytesIO()
+        with pd.ExcelWriter(_buf_janelas, engine='xlsxwriter') as writer:
+            _export.to_excel(writer, index=False, sheet_name='Janelas Compartilhamento')
+        _buf_janelas.seek(0)
+        st.download_button(
+            label="📥 Exportar Análise de Janelas para Excel",
+            data=_buf_janelas,
+            file_name="janelas_compartilhamento.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_janelas_compartilhamento"
+        )
