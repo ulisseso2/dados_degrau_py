@@ -55,3 +55,5 @@ LEFT JOIN seducar.shifts t ON i.shift_id = t.id
 LEFT JOIN seducar.units l ON i.unit_id = l.id
 LEFT JOIN seducar.users u ON i.user_id = u.id
 LEFT JOIN seducar.time_to_calls h ON i.time_to_call_id = h.id
+WHERE i.origin != 'upsell'
+    AND i.created_at >= '2024-06-01'

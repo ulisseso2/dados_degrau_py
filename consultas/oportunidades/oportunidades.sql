@@ -58,3 +58,4 @@ left join seducar.users u on i.user_id = u.id
 left join seducar.time_to_calls h on i.time_to_call_id = h.id
 left join seducar.customers c on i.customer_id = c.id
 where i.created_at >= '2024-06-01'
+and i.origin != 'upsell'
