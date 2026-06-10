@@ -6,7 +6,10 @@ SELECT
     t.created_at as data_transacao, 
     os.name as status,
     oi.product_category_id as categoria_id,
-    c.cpf as cpf
+    c.cpf as cpf,
+    c.full_name as nome_cliente,
+    c.email as email_cliente,
+    c.cellphone as celular_cliente
 FROM seducar.transactions t
 LEFT JOIN seducar.orders o on t.order_id = o.id
 LEFT JOIN seducar.order_status os on o.order_status_id = os.id
