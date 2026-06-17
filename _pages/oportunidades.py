@@ -117,6 +117,11 @@ def run_page():
     hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
     h_ligar_selecionada = st.sidebar.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
+    # Filtro de contatos únicos
+    st.sidebar.divider()
+    contatos_opcoes = ["Todas as oportunidades", "Contatos únicos"]
+    filtro_contatos = st.sidebar.radio("Visualização:", contatos_opcoes, index=0, key="filtro_contatos_unicos")
+
     # Filtros de pontuação
     st.sidebar.divider()
     st.sidebar.markdown("**Filtros de Pontuação**")
@@ -219,6 +224,13 @@ def run_page():
                 (df_filtrado["total_score"] <= total_score_range[1])
             )
         ]
+
+    if filtro_contatos == "Contatos únicos":
+        df_filtrado = (
+            df_filtrado
+            .sort_values("criacao", ascending=False)
+            .drop_duplicates(subset="email", keep="first")
+        )
 
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
