@@ -16,6 +16,23 @@ i.gclid as gclid,
 i.fbclid as fbclid,
 i.email_marketing as email_marketing,
 i.chat_id as msg_whatsapp,
+ip.p1_score as p1_score,
+ip.p2_score as p2_score,
+ip.total_score as total_score,
+CASE 
+    WHEN ip.p1_answer = 1 THEN 'Quero começar agora'
+    WHEN ip.p1_answer = 2 THEN 'Ainda este mês'
+    WHEN ip.p1_answer = 3 THEN 'Quando sair o edital'
+    WHEN ip.p1_answer = 4 THEN 'Só pesquisando'
+    ELSE 'Sem resposta'
+END as p1_answer,
+CASE 
+    WHEN ip.p2_answer = 1 THEN 'Já fiz ou faço curso'
+    WHEN ip.p2_answer = 2 THEN 'Estudo por conta própria'
+    WHEN ip.p2_answer = 3 THEN 'Já fiz prova, não passei'
+    WHEN ip.p2_answer = 4 THEN 'Começando do zero'
+    ELSE 'Sem resposta'
+END as p2_answer,
 s.id as id_etapa,
 s.name as etapa, 
 s.sort as ordem_etapas,
@@ -57,5 +74,6 @@ left join seducar.units l on i.unit_id = l.id
 left join seducar.users u on i.user_id = u.id
 left join seducar.time_to_calls h on i.time_to_call_id = h.id
 left join seducar.customers c on i.customer_id = c.id
+left join seducar.interested_pontuations ip on i.id = ip.interested_id
 where i.created_at >= '2024-06-01'
 and i.origin != 'upsell'

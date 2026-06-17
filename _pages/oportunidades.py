@@ -117,6 +117,32 @@ def run_page():
     hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
     h_ligar_selecionada = st.sidebar.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
+    # Filtros de pontuação
+    st.sidebar.divider()
+    st.sidebar.markdown("**Filtros de Pontuação**")
+
+    filtro_score_opcoes = ["Todos", "Com score", "Sem score"]
+    filtro_score_selecionado = st.sidebar.radio("Total Score:", filtro_score_opcoes, index=0, key="filtro_com_sem_score")
+
+    p1_answers = sorted(df_filtrado_empresa["p1_answer"].dropna().unique())
+    p1_answer_selecionada = st.sidebar.multiselect("Resposta P1 (Quando pretende começar):", p1_answers, default=p1_answers)
+
+    p2_answers = sorted(df_filtrado_empresa["p2_answer"].dropna().unique())
+    p2_answer_selecionada = st.sidebar.multiselect("Resposta P2 (Experiência):", p2_answers, default=p2_answers)
+
+    score_valores = df_filtrado_empresa["total_score"].dropna()
+    if not score_valores.empty:
+        score_min, score_max = int(score_valores.min()), int(score_valores.max())
+        if score_min < score_max:
+            total_score_range = st.sidebar.slider(
+                "Range de Score:", min_value=score_min, max_value=score_max,
+                value=(score_min, score_max), key="total_score_range"
+            )
+        else:
+            total_score_range = (score_min, score_max)
+    else:
+        total_score_range = None
+
     # 2. Inicia com o DataFrame completo
     df_filtrado = df
 
@@ -173,6 +199,26 @@ def run_page():
 
     if h_ligar_selecionada:
         df_filtrado = df_filtrado[df_filtrado["h_ligar"].isin(h_ligar_selecionada) | df_filtrado["h_ligar"].isna()]
+
+    if filtro_score_selecionado == "Com score":
+        df_filtrado = df_filtrado[df_filtrado["total_score"].notna()]
+    elif filtro_score_selecionado == "Sem score":
+        df_filtrado = df_filtrado[df_filtrado["total_score"].isna()]
+
+    if p1_answer_selecionada:
+        df_filtrado = df_filtrado[df_filtrado["p1_answer"].isin(p1_answer_selecionada) | df_filtrado["p1_answer"].isna()]
+
+    if p2_answer_selecionada:
+        df_filtrado = df_filtrado[df_filtrado["p2_answer"].isin(p2_answer_selecionada) | df_filtrado["p2_answer"].isna()]
+
+    if total_score_range is not None:
+        df_filtrado = df_filtrado[
+            df_filtrado["total_score"].isna() |
+            (
+                (df_filtrado["total_score"] >= total_score_range[0]) &
+                (df_filtrado["total_score"] <= total_score_range[1])
+            )
+        ]
 
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
@@ -628,7 +674,7 @@ def run_page():
         if concursos_filtro_tabela:
             df_tabela = df_tabela[df_tabela['concurso'].isin(concursos_filtro_tabela)]
 
-        tabela_oportunidades_lista = df_tabela[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'utm_source', 'utm_medium', 'utm_campaign', 'name', 'email', 'telefone', 'gclid', 'fbclid', 'tiktok', 'email_marketing']].copy()
+        tabela_oportunidades_lista = df_tabela[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'utm_source', 'utm_medium', 'utm_campaign', 'name', 'email', 'telefone', 'gclid', 'fbclid', 'tiktok', 'email_marketing', 'total_score', 'p1_score', 'p2_score', 'p1_answer', 'p2_answer']].copy()
         
         # Remover informações de fuso horário das colunas de data e hora
         for col in tabela_oportunidades_lista.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
@@ -651,6 +697,76 @@ def run_page():
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     
+    # ==============================================================================
+    # ANÁLISE DE PONTUAÇÃO DE OPORTUNIDADES
+    # ==============================================================================
+    st.divider()
+    st.header("📊 Análise de Pontuação de Oportunidades")
+
+    df_com_score = df_filtrado[df_filtrado["total_score"].notna()].copy()
+    df_sem_score = df_filtrado[df_filtrado["total_score"].isna()]
+
+    col_score1, col_score2, col_score3 = st.columns(3)
+    with col_score1:
+        st.metric("Com pontuação", len(df_com_score))
+    with col_score2:
+        st.metric("Sem pontuação", len(df_sem_score))
+    with col_score3:
+        if not df_com_score.empty:
+            st.metric("Score médio", f"{df_com_score['total_score'].mean():.1f}")
+        else:
+            st.metric("Score médio", "—")
+
+    if not df_com_score.empty:
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            # Distribuição de p1_answer
+            df_p1 = df_com_score["p1_answer"].value_counts().reset_index()
+            df_p1.columns = ["Resposta", "Quantidade"]
+            fig_p1 = px.bar(
+                df_p1.sort_values("Quantidade", ascending=True),
+                x="Quantidade", y="Resposta", orientation="h",
+                title="P1 — Quando pretende começar?",
+                text="Quantidade",
+                color="Quantidade",
+                color_continuous_scale="Blues",
+            )
+            fig_p1.update_traces(textposition="outside")
+            fig_p1.update_layout(coloraxis_showscale=False, yaxis_title=None)
+            st.plotly_chart(fig_p1, use_container_width=True)
+
+        with col_b:
+            # Distribuição de p2_answer
+            df_p2 = df_com_score["p2_answer"].value_counts().reset_index()
+            df_p2.columns = ["Resposta", "Quantidade"]
+            fig_p2 = px.bar(
+                df_p2.sort_values("Quantidade", ascending=True),
+                x="Quantidade", y="Resposta", orientation="h",
+                title="P2 — Qual é sua experiência?",
+                text="Quantidade",
+                color="Quantidade",
+                color_continuous_scale="Greens",
+            )
+            fig_p2.update_traces(textposition="outside")
+            fig_p2.update_layout(coloraxis_showscale=False, yaxis_title=None)
+            st.plotly_chart(fig_p2, use_container_width=True)
+
+        # Distribuição do total_score
+        fig_score = px.histogram(
+            df_com_score,
+            x="total_score",
+            nbins=10,
+            title="Distribuição do Total Score",
+            labels={"total_score": "Total Score", "count": "Quantidade"},
+            color_discrete_sequence=["#457B9D"],
+        )
+        fig_score.update_layout(bargap=0.1, yaxis_title="Quantidade")
+        st.plotly_chart(fig_score, use_container_width=True)
+
+    else:
+        st.info("Nenhuma oportunidade com pontuação no período selecionado.")
+
     # ==============================================================================
     # SEÇÃO DE VALIDAÇÃO - COMPARAÇÃO ENTRE CAMPOS ORIGINAIS E TRATADOS
     # ==============================================================================
