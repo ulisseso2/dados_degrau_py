@@ -1,10 +1,10 @@
 SELECT
     ot.id                   AS transcricao_id,
     ot.transcript           AS transcricao,
-    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.agente'))   AS agente,
-    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.duracao'))  AS duracao,
-    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.telefone')) AS telefone,
-    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.tipo'))     AS tipo,
+    COALESCE(ot.agent,    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.agente')))   AS agente,
+    COALESCE(ot.duration, JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.duracao'))) AS duracao,
+    COALESCE(ot.phone,    JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.telefone'))) AS telefone,
+    COALESCE(ot.type,     JSON_UNQUOTE(JSON_EXTRACT(ot.original_transcript, '$.tipo')))    AS tipo,
     tais.ai_insight         AS insight_ia,
     tais.vendedor_disclaimer AS vendedor_disclaimer,
     tais.lead_disclaimer     AS lead_disclaimer

@@ -4,7 +4,6 @@ SELECT
     ot.date                 AS data_ligacao,
     ot.time                 AS hora_ligacao,
     ot.opportunity_id       AS oportunidade,
-    ot.transcript           AS transcricao,
     CASE WHEN ot.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS empresa,
     c.full_name             AS nome_lead,
     c.cellphone             AS telefone_lead,

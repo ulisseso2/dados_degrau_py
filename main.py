@@ -13,7 +13,7 @@ try:
         vendedores, madureira, madureira_cancelamento, campogrande,
         campogrande_cancelamento, niteroi, niteroi_cancelamento, centro,
         centro_cancelamento, analise_ga, analise_facebook, gads_face_combinado,
-        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, analise_ligacoes_sp, chat_oportunidades, analise_chats, relatorios_ia, analise_geral, analise_consumo_individual, turmas, gerentes, avaliacao_global #fbclid_dashboard, #diagnostico_facebook
+        octadesk, custo_aula, analise_ga_central, analise_disciplinas, oportunidades_sp, matriculas_sp, tendencias_sp, vendedores_sp, cancelamentos_sp, analise_mensal, analise_ead, backup_central_consys, nfe_sp, modelo_msg, transcricoes, analise_transcricoes, analise_ligacoes_sp, chat_oportunidades, analise_chats, relatorios_ia, analise_geral, analise_consumo_individual, turmas, gerentes, avaliacao_global, notas_bling, reconciliacao_bling #fbclid_dashboard, #diagnostico_facebook
     )
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
@@ -28,7 +28,7 @@ except ImportError as e:
         'vendedores', 'madureira', 'madureira_cancelamento', 'campogrande',
         'campogrande_cancelamento', 'niteroi', 'niteroi_cancelamento', 'centro',
         'centro_cancelamento', 'analise_ga', 'analise_facebook', 'gads_face_combinado',
-        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'analise_ligacoes_sp', 'chat_oportunidades', 'analise_chats', 'relatorios_ia', 'analise_geral', 'analise_consumo_individual', 'turmas', 'gerentes', 'avaliacao_global' #'fbclid_dashboard', #'diagnostico_facebook'
+        'octadesk', 'custo_aula', 'analise_ga_central', 'analise_disciplinas', 'oportunidades_sp', 'matriculas_sp', 'tendencias_sp', 'vendedores_sp', 'cancelamentos_sp', 'analise_mensal', 'analise_ead', 'backup_central_consys', 'nfe_sp', 'modelo_msg', 'transcricoes', 'analise_transcricoes', 'analise_ligacoes_sp', 'chat_oportunidades', 'analise_chats', 'relatorios_ia', 'analise_geral', 'analise_consumo_individual', 'turmas', 'gerentes', 'avaliacao_global', 'notas_bling', 'reconciliacao_bling' #'fbclid_dashboard', #'diagnostico_facebook'
     ]
     
     for module_name in modules:
@@ -89,6 +89,8 @@ PAGES = {
     "📞 Análise de Ligações": analise_transcricoes,
     "📞 Análise de Ligações SP": analise_ligacoes_sp,
     "📊 Avaliação Global IA": avaliacao_global,
+    "🧾 Notas Bling": notas_bling,
+    "🔍 Reconciliação Bling": reconciliacao_bling,
     #"FBCLID Dashboard": fbclid_dashboard,
     #"Diagnóstico Facebook": diagnostico_facebook
 }

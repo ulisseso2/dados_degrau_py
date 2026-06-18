@@ -35,6 +35,8 @@ from _pages.relatorios_ia import (
     init_google_ads_client_central,
     salvar_relatorio,
 )
+from utils.analise_helpers import _safe_pct, _top_items
+from utils.cats_vendedor import _CATS_VENDEDOR, _CATS_LEGACY
 
 
 TIMEZONE = 'America/Sao_Paulo'
@@ -60,27 +62,6 @@ EMPRESAS = {
     },
 }
 
-_CATS_VENDEDOR = {
-    'rapport_conexao_0_10': ('Rapport e Conexão', 10),
-    'qualificacao_leitura_contexto_0_15': ('Qualificação / Leitura', 15),
-    'construcao_valor_diferenciacao_0_30': ('Construção de Valor', 30),
-    'persuasao_etica_0_10': ('Persuasão Ética', 10),
-    'objecoes_0_10': ('Tratamento de Objeções', 10),
-    'conducao_fechamento_0_20': ('Condução ao Fechamento', 20),
-    'clareza_compliance_0_5': ('Clareza / Compliance', 5),
-}
-
-_CATS_LEGACY = {
-    'abertura_rapport_0_10': 'rapport_conexao_0_10',
-    'investigacao_spin_0_30': 'qualificacao_leitura_contexto_0_15',
-    'valor_capacidade_0_20': 'construcao_valor_diferenciacao_0_30',
-    'compromisso_prox_passos_0_15': 'conducao_fechamento_0_20',
-    'clareza_compliance_whatsapp_0_5': 'clareza_compliance_0_5',
-}
-
-
-def _safe_pct(num, den):
-    return (num / den * 100) if den else 0.0
 
 
 def _format_brl(value):
@@ -128,21 +109,6 @@ def _parse_json_payload(raw_value):
         return {}
 
 
-def _split_items(series: pd.Series, sep=';'):
-    items = []
-    if series is None or series.empty:
-        return items
-    for value in series.fillna(''):
-        for item in str(value).split(sep):
-            clean = item.strip()
-            if clean:
-                items.append(clean)
-    return items
-
-
-def _top_items(series: pd.Series, limit=10):
-    counter = Counter(_split_items(series))
-    return counter.most_common(limit)
 
 
 def _mode_value(series: pd.Series):

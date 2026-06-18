@@ -175,7 +175,7 @@ def get_google_ads_campaign_performance(client, customer_id, start_date, end_dat
     except GoogleAdsException as ex:
         error_messages = []
         for error in ex.failure.errors:
-            error_messages.append(f"Erro {error.error_code.error_code}: {error.message}")
+            error_messages.append(f"Erro {error.error_code}: {error.message}")
         st.error("\n".join(error_messages))
         return pd.DataFrame()
     

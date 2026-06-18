@@ -327,8 +327,7 @@ class TranscricaoAnalyzer:
         self.max_input_chars = int(os.getenv("CLAUDE_MAX_INPUT_CHARS", "25000"))
         self.max_workers = int(os.getenv("CLAUDE_MAX_WORKERS", "1"))
         self.throttle_seconds = float(os.getenv("CLAUDE_THROTTLE_SECONDS", "8"))
-        self._throttle_lock = threading.Lock()
-        self._last_request_time = 0.0
+        self._thread_local = threading.local()
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -355,12 +354,11 @@ class TranscricaoAnalyzer:
         prompt = self._build_prompt(transcricao, contexto_adicional)
 
         for tentativa in range(3):
-            with self._throttle_lock:
-                now = _time.time()
-                elapsed = now - self._last_request_time
-                if elapsed < self.throttle_seconds:
-                    _time.sleep(self.throttle_seconds - elapsed)
-                self._last_request_time = _time.time()
+            last = getattr(self._thread_local, 'last_request_time', 0.0)
+            elapsed = _time.time() - last
+            if elapsed < self.throttle_seconds:
+                _time.sleep(self.throttle_seconds - elapsed)
+            self._thread_local.last_request_time = _time.time()
 
             try:
                 response = self.client.messages.create(

@@ -11,6 +11,8 @@ import json
 from utils.sql_loader import carregar_dados
 from utils.transcricao_analyzer import TranscricaoAnalyzer
 from utils.transcricao_mysql_writer import atualizar_avaliacao_transcricao
+from utils.analise_helpers import _cor_nota
+from utils.transcricoes_loader import carregar_detalhe_transcricao
 
 TIMEZONE = 'America/Sao_Paulo'
 
@@ -59,31 +61,6 @@ def carregar_transcricoes_base():
 # CACHE: detalhe individual (transcrição + agente/duração/tipo)
 # ──────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
-def carregar_detalhe_transcricao(transcricao_id: int) -> dict:
-    """Carrega transcrição, agente, duração e tipo de uma única linha via JSON_EXTRACT."""
-    from conexao.mysql_connector import conectar_mysql
-    from pathlib import Path
-    engine = conectar_mysql()
-    if not engine:
-        return {}
-    sql = Path("consultas/transcricoes/transcricao_detalhe.sql").read_text()
-    sql = sql.replace("{ids}", str(int(transcricao_id)))
-    try:
-        df = pd.read_sql(sql, engine)
-        if df.empty:
-            return {}
-        row = df.iloc[0]
-        return {
-            "transcricao": row.get("transcricao", ""),
-            "agente": row.get("agente") or "Não identificado",
-            "duracao": row.get("duracao"),
-            "telefone": row.get("telefone"),
-            "tipo": row.get("tipo") or "N/Informado",
-            "insight_ia": row.get("insight_ia"),
-        }
-    except Exception as e:
-        return {"erro": str(e)}
-
 
 # ──────────────────────────────────────────────
 # HELPERS
@@ -98,17 +75,6 @@ def _formatar_duracao(segundos) -> str:
     h, m = divmod(m, 60)
     return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
-
-def _cor_nota(nota) -> str:
-    try:
-        n = float(nota)
-    except (TypeError, ValueError):
-        return ""
-    if n >= 75:
-        return "🟢"
-    if n >= 50:
-        return "🟡"
-    return "🔴"
 
 
 def _renderizar_transcricao(transcricao: str):
@@ -170,7 +136,8 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
         row_list = df_base[df_base['transcricao_id'] == tid]
         row_data = row_list.iloc[0] if not row_list.empty else {}
         nome = row_data.get('nome_lead', f'ID {tid}') if not row_list.empty else f'ID {tid}'
-        tx = str(row_data.get('transcricao', '') or '') if not row_list.empty else ''
+        detalhe = carregar_detalhe_transcricao(tid)
+        tx = detalhe.get('transcricao', '') or ''
         tasks.append((tid, nome, tx, row_data if not row_list.empty else {}))
 
     def _avaliar_uma(task):
@@ -246,7 +213,7 @@ def _executar_avaliacoes(df_base: pd.DataFrame, ids_selecionados: list):
             st.error(msg)
 
     if sucesso_count[0]:
-        st.cache_data.clear()  # Limpa cache de ambas as páginas (transcrições + análise)
+        carregar_transcricoes_base.clear()
         st.success(f"✅ {sucesso_count[0]} avaliação(ões) concluída(s).")
         if erros_count[0]:
             st.warning(f"⚠️ {erros_count[0]} erro(s).")
@@ -289,7 +256,8 @@ def _executar_reavaliacao(df_avaliadas: pd.DataFrame):
     for _, row in df_avaliadas.iterrows():
         tid = row.get('transcricao_id')
         nome = row.get('nome_lead', f'ID {tid}')
-        tx = str(row.get('transcricao', '') or '')
+        detalhe = carregar_detalhe_transcricao(tid)
+        tx = detalhe.get('transcricao', '') or ''
         insight_existente = str(row.get('insight_ia', '') or '')
         tasks.append((tid, nome, tx, insight_existente, row))
 
@@ -370,7 +338,7 @@ def _executar_reavaliacao(df_avaliadas: pd.DataFrame):
             st.error(msg)
 
     if sucesso_count[0]:
-        st.cache_data.clear()
+        carregar_transcricoes_base.clear()
         st.success(
             f"✅ Reavaliação concluída: **{sucesso_count[0]}** processada(s)\n\n"
             f"- 🔄 Reavaliadas via IA: **{sucesso_count[0] - na_count[0]}**\n"
@@ -567,12 +535,11 @@ def run_page():
             # ── tabela compacta ──
             df_tabela = fatia[[
                 'transcricao_id', 'data_ligacao', 'nome_lead', 'agente', 'etapa',
-                'avaliavel', 'avaliada', 'motivo_nao_avaliacao', 'observacao_whatsapp', 'transcricao'
+                'avaliavel', 'avaliada', 'motivo_nao_avaliacao', 'observacao_whatsapp',
             ]].copy()
             df_tabela['data_ligacao'] = fatia['data_ligacao'].dt.strftime('%d/%m/%Y %H:%M')
             df_tabela['Status'] = fatia['avaliada'].apply(lambda x: '✅' if x else '⏳')
             df_tabela['Avaliável'] = fatia['avaliavel'].apply(lambda x: '🟢' if x else '🔴')
-            df_tabela['transcricao'] = fatia['transcricao'].fillna('').astype(str)
             df_tabela = df_tabela.rename(columns={
                 'transcricao_id': 'ID',
                 'data_ligacao': 'Data',
@@ -581,7 +548,6 @@ def run_page():
                 'etapa': 'Etapa',
                 'motivo_nao_avaliacao': 'Motivo da não avaliação',
                 'observacao_whatsapp': 'Obs. WhatsApp',
-                'transcricao': 'Transcrição',
             }).drop(columns=['avaliavel', 'avaliada'])
 
             st.dataframe(
@@ -598,11 +564,6 @@ def run_page():
                         'Obs. WhatsApp',
                         help='Registro automático quando a conversa migra para WhatsApp.',
                         width='medium',
-                    ),
-                    'Transcrição': st.column_config.TextColumn(
-                        'Transcrição',
-                        help='Clique na célula para ver a transcrição completa',
-                        width='large',
                     ),
                 },
             )
@@ -727,12 +688,11 @@ def run_page():
 
             # tabela resumo
             df_resumo = df_av[['transcricao_id', 'data_ligacao', 'nome_lead', 'agente',
-                                'evaluation_ia', 'lead_score', 'lead_classification', 'etapa', 'transcricao']].copy()
+                                'evaluation_ia', 'lead_score', 'lead_classification', 'etapa']].copy()
             df_resumo['data_ligacao'] = df_av['data_ligacao'].dt.strftime('%d/%m/%Y')
             df_resumo['Nota'] = df_av['evaluation_ia'].apply(
                 lambda x: f"{_cor_nota(x)} {int(x)}" if pd.notna(x) else "—"
             )
-            df_resumo['transcricao'] = df_av['transcricao'].fillna('').astype(str)
             df_resumo = df_resumo.rename(columns={
                 'transcricao_id': 'ID',
                 'data_ligacao': 'Data',
@@ -741,20 +701,12 @@ def run_page():
                 'lead_score': 'Score Lead',
                 'lead_classification': 'Classificação',
                 'etapa': 'Etapa',
-                'transcricao': 'Transcrição',
             }).drop(columns=['evaluation_ia'])
 
             st.dataframe(
                 df_resumo.set_index('ID'),
                 use_container_width=True,
                 height=300,
-                column_config={
-                    'Transcrição': st.column_config.TextColumn(
-                        'Transcrição',
-                        help='Clique na célula para ver a transcrição completa',
-                        width='large',
-                    ),
-                },
             )
 
             # detalhe sob demanda

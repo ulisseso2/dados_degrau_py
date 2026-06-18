@@ -13,7 +13,7 @@ SELECT
     COALESCE(c.octa_agent, u.full_name) as agente,
     o.name as origem,
     CASE WHEN c.ai_evaluation IS NOT NULL AND c.ai_evaluation != '' THEN 1 ELSE 0 END as avaliada,
-    CASE WHEN c.classification = 'venda' THEN 1 ELSE 0 END as avaliavel,
+    CASE WHEN c.transcript IS NOT NULL AND CHAR_LENGTH(c.transcript) >= 300 THEN 1 ELSE 0 END as avaliavel,
     c.vendor_score as evaluation_ia,
     c.lead_score,
     c.main_product as produto_recomendado,
@@ -29,7 +29,10 @@ SELECT
     c.octa_contact_name,
     c.octa_contact_phone
 FROM seducar.chat_ai_evaluations c
-LEFT JOIN seducar.interesteds i ON c.chat_id = i.chat_id
+LEFT JOIN (
+    SELECT chat_id, MAX(id) AS id FROM seducar.interesteds GROUP BY chat_id
+) i_latest ON c.chat_id = i_latest.chat_id
+LEFT JOIN seducar.interesteds i ON i.id = i_latest.id
 LEFT JOIN seducar.users u ON i.owner_id = u.id
 LEFT JOIN seducar.opportunity_origins o ON i.opportunity_origin_id = o.id
 ORDER BY c.octa_created_at DESC
