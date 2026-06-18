@@ -38,7 +38,8 @@ s.name as etapa,
 s.sort as ordem_etapas,
 d.full_name as dono, 
 a.name as area,
-o.name as origem, 
+o.name as origem,
+i.prelead as prelead,
 f.name as concurso, 
 l.name as unidade_original,
 m.name as modalidade_original, 
@@ -76,4 +77,4 @@ left join seducar.time_to_calls h on i.time_to_call_id = h.id
 left join seducar.customers c on i.customer_id = c.id
 left join seducar.interested_pontuations ip on i.id = ip.interested_id
 where i.created_at >= '2024-06-01'
-and i.origin != 'upsell'
+and i.opportunity_origin_id != 14

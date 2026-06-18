@@ -117,6 +117,8 @@ def run_page():
     hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
     h_ligar_selecionada = st.sidebar.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
+    incluir_prelead = st.sidebar.checkbox("Incluir Preleads", value=False)
+
     # Filtro de contatos únicos
     st.sidebar.divider()
     contatos_opcoes = ["Todas as oportunidades", "Contatos únicos"]
@@ -204,6 +206,9 @@ def run_page():
 
     if h_ligar_selecionada:
         df_filtrado = df_filtrado[df_filtrado["h_ligar"].isin(h_ligar_selecionada) | df_filtrado["h_ligar"].isna()]
+
+    if not incluir_prelead:
+        df_filtrado = df_filtrado[df_filtrado["prelead"] != True]
 
     if filtro_score_selecionado == "Com score":
         df_filtrado = df_filtrado[df_filtrado["total_score"].notna()]
