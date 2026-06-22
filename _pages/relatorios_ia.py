@@ -873,9 +873,6 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 metrics.search_budget_lost_impression_share,
                 metrics.search_rank_lost_impression_share,
                 metrics.search_impression_share,
-                metrics.video_view_rate,
-                metrics.video_views,
-                metrics.average_cpv,
                 metrics.engagements,
                 metrics.engagement_rate,
                 metrics.interaction_rate,
@@ -897,7 +894,6 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
             cpc = row.metrics.average_cpc / 1_000_000 if row.metrics.average_cpc else 0
             cpm = row.metrics.average_cpm / 1_000_000 if row.metrics.average_cpm else 0
             cpa = row.metrics.cost_per_conversion / 1_000_000 if row.metrics.cost_per_conversion else 0
-            cpv = row.metrics.average_cpv / 1_000_000 if row.metrics.average_cpv else 0
 
             # tCPA: verifica TARGET_CPA e MAXIMIZE_CONVERSIONS (com CPA-alvo)
             tcpa_target = row.campaign.target_cpa.target_cpa_micros / 1_000_000 if row.campaign.target_cpa.target_cpa_micros else 0
@@ -961,10 +957,11 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 'Taxa Conv (%)': round(row.metrics.conversions_from_interactions_rate * 100, 2) if row.metrics.conversions_from_interactions_rate else 0,
                 'Imp Lost Budget (%)': round(imp_lost_budget * 100, 1) if imp_lost_budget else None,
                 'Imp Lost Rank (%)': round(imp_lost_rank * 100, 1) if imp_lost_rank else None,
-                'Video Views': row.metrics.video_views,
-                'Video View Rate (%)': round(row.metrics.video_view_rate * 100, 2) if row.metrics.video_view_rate else 0,
+                '_campaign_id': row.campaign.id,
+                'Video Views': 0,
+                'Video View Rate (%)': 0,
                 'Taxa de Interação (%)': interaction_rate,
-                'CPV': round(cpv, 4),
+                'CPV': 0,
                 'Engajamentos': row.metrics.engagements,
                 'Engagement Rate (%)': round(row.metrics.engagement_rate * 100, 2) if row.metrics.engagement_rate else 0,
                 '% Assistido 25': q25,
@@ -972,7 +969,43 @@ def get_google_ads_data(client, customer_id, start_date, end_date):
                 '% Assistido 75': q75,
                 '% Assistido 100': q100,
             })
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
+
+        # Query separada para métricas de vídeo (incompatíveis com search impression share)
+        if not df.empty:
+            try:
+                video_query = f"""
+                    SELECT
+                        campaign.id,
+                        metrics.video_views,
+                        metrics.video_view_rate,
+                        metrics.average_cpv
+                    FROM campaign
+                    WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
+                        AND campaign.advertising_channel_type = 'VIDEO'
+                        AND metrics.cost_micros > 0
+                """
+                video_resp = ga_service.search(customer_id=customer_id, query=video_query)
+                video_map = {}
+                for vrow in video_resp:
+                    video_map[vrow.campaign.id] = {
+                        'Video Views': vrow.metrics.video_views,
+                        'Video View Rate (%)': round(vrow.metrics.video_view_rate * 100, 2) if vrow.metrics.video_view_rate else 0,
+                        'CPV': round(vrow.metrics.average_cpv / 1_000_000, 4) if vrow.metrics.average_cpv else 0,
+                    }
+                if video_map:
+                    for idx, r in df.iterrows():
+                        cid = r['_campaign_id']
+                        if cid in video_map:
+                            df.at[idx, 'Video Views'] = video_map[cid]['Video Views']
+                            df.at[idx, 'Video View Rate (%)'] = video_map[cid]['Video View Rate (%)']
+                            df.at[idx, 'CPV'] = video_map[cid]['CPV']
+            except Exception:
+                pass
+
+        if not df.empty:
+            df = df.drop(columns=['_campaign_id'])
+        return df
     except Exception as e:
         st.error(f"Erro Google Ads: {e}")
         return pd.DataFrame()

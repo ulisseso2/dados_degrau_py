@@ -32,6 +32,13 @@ def conectar_mysql():
         st.error("As credenciais do banco de dados não foram encontradas. Verifique seus Secrets ou o arquivo .env.")
         return None
 
+    print("[conectar_mysql] Credenciais carregadas:")
+    print(f"  user     = {creds.get('user')}")
+    print(f"  password = {'*' * len(str(creds.get('password', '')))}")
+    print(f"  host     = {creds.get('host')}")
+    print(f"  port     = {creds.get('port')}")
+    print(f"  db_name  = {creds.get('db_name')}")
+
     try:
         database_url = URL.create(
             drivername="mysql+mysqlconnector",
