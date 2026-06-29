@@ -1,13 +1,32 @@
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-from utils.sql_loader import carregar_dados
+from utils.sql_loader import carregar_sql
+from conexao.mysql_connector import conectar_mysql
 import io
 import re
 from pandas import ExcelWriter
 import zipfile
 import requests
 import json
+
+
+# Cache dedicado desta página: 60s (a query é pequena/leve e precisa de dados mais frescos).
+# O carregar_dados global continua com TTL de 10 min para as demais análises.
+@st.cache_data(ttl=60)
+def carregar_dados_notas(caminho_sql):
+    query = carregar_sql(caminho_sql)
+    engine = conectar_mysql()
+    if engine:
+        try:
+            return pd.read_sql(query, engine)
+        except Exception as e:
+            st.error(f"Erro ao executar a consulta: {e}")
+            return pd.DataFrame()
+    else:
+        st.error("Erro ao conectar ao banco de dados.")
+        return pd.DataFrame()
+
 
 def run_page():
 
@@ -24,7 +43,7 @@ def run_page():
         return re.sub(r'[^A-Za-z0-9_-]', '_', str(texto or ''))
 
     # --- Carregamento e Preparação dos Dados ---
-    df = carregar_dados("consultas/notas/notas.sql")
+    df = carregar_dados_notas("consultas/notas/notas.sql")
 
     # Verificar se o DataFrame está vazio ou não tem as colunas necessárias
     if df.empty:
