@@ -5,6 +5,7 @@ from utils.sql_loader import carregar_sql
 from conexao.mysql_connector import conectar_mysql
 import io
 import re
+import html
 from pandas import ExcelWriter
 import zipfile
 import requests
@@ -152,9 +153,10 @@ def run_page():
     df_display['data_emissao'] = df_display['data_emissao'].dt.strftime('%d/%m/%Y %H:%M')
     df_display['valor_formatado'] = df_display['valor_total_nota'].apply(formatar_reais)
 
-    # Criar link para PDF
+    # Criar link para PDF (URL escapada para não quebrar o href — a URL da NFSe-SP tem vários "&")
     df_display['link_pdf'] = df_display['link_nota'].apply(
-        lambda x: f'<a href="{x}" target="_blank">📄 Ver PDF</a>' if pd.notna(x) and x else ''
+        lambda x: f'<a href="{html.escape(str(x), quote=True)}" target="_blank">📄 Ver PDF</a>'
+        if pd.notna(x) and x else ''
     )
 
     # Selecionar e renomear colunas
@@ -171,6 +173,11 @@ def run_page():
     }
 
     df_tabela = df_display[list(colunas_display.keys())].rename(columns=colunas_display)
+
+    # Escapar HTML das colunas de texto (a coluna PDF já contém HTML intencional e seguro)
+    for col in df_tabela.columns:
+        if col != 'PDF':
+            df_tabela[col] = df_tabela[col].apply(lambda v: html.escape(str(v)) if pd.notna(v) else '')
 
     # Adicionar linha de total
     linha_total = pd.DataFrame([{
