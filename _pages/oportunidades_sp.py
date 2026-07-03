@@ -23,10 +23,9 @@ def run_page():
         st.stop()
 
     # Pré-filtros
-    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df["criacao"] = pd.to_datetime(df["criacao"]).dt.tz_localize(TIMEZONE, ambiguous=False, nonexistent='shift_forward')
 
-    # Filtro: empresa
-
+    # Filtro: empresa (fixa em Central nesta página)
     empresa_selecionada = "Central"
     df_filtrado_empresa = df[df["empresa"] == empresa_selecionada]
 
@@ -112,6 +111,39 @@ def run_page():
     hs_ligar = sorted(df_filtrado_empresa["h_ligar"].dropna().unique()) # Ordenado
     h_ligar_selecionada = st.sidebar.multiselect("Selecione a Hora", hs_ligar, default=hs_ligar)
 
+    incluir_prelead = st.sidebar.checkbox("Incluir Preleads", value=False)
+
+    # Filtro de contatos únicos
+    st.sidebar.divider()
+    contatos_opcoes = ["Todas as oportunidades", "Contatos únicos"]
+    filtro_contatos = st.sidebar.radio("Visualização:", contatos_opcoes, index=0, key="filtro_contatos_unicos")
+
+    # Filtros de pontuação
+    st.sidebar.divider()
+    st.sidebar.markdown("**Filtros de Pontuação**")
+
+    filtro_score_opcoes = ["Todos", "Com score", "Sem score"]
+    filtro_score_selecionado = st.sidebar.radio("Total Score:", filtro_score_opcoes, index=0, key="filtro_com_sem_score")
+
+    p1_answers = sorted(df_filtrado_empresa["p1_answer"].dropna().unique())
+    p1_answer_selecionada = st.sidebar.multiselect("Resposta P1 (Quando pretende começar):", p1_answers, default=p1_answers)
+
+    p2_answers = sorted(df_filtrado_empresa["p2_answer"].dropna().unique())
+    p2_answer_selecionada = st.sidebar.multiselect("Resposta P2 (Experiência):", p2_answers, default=p2_answers)
+
+    score_valores = df_filtrado_empresa["total_score"].dropna()
+    if not score_valores.empty:
+        score_min, score_max = int(score_valores.min()), int(score_valores.max())
+        if score_min < score_max:
+            total_score_range = st.sidebar.slider(
+                "Range de Score:", min_value=score_min, max_value=score_max,
+                value=(score_min, score_max), key="total_score_range"
+            )
+        else:
+            total_score_range = (score_min, score_max)
+    else:
+        total_score_range = None
+
     # 2. Inicia com o DataFrame completo
     df_filtrado = df
 
@@ -169,7 +201,35 @@ def run_page():
     if h_ligar_selecionada:
         df_filtrado = df_filtrado[df_filtrado["h_ligar"].isin(h_ligar_selecionada) | df_filtrado["h_ligar"].isna()]
 
+    if not incluir_prelead:
+        df_filtrado = df_filtrado[df_filtrado["prelead"] != True]
 
+    if filtro_score_selecionado == "Com score":
+        df_filtrado = df_filtrado[df_filtrado["total_score"].notna()]
+    elif filtro_score_selecionado == "Sem score":
+        df_filtrado = df_filtrado[df_filtrado["total_score"].isna()]
+
+    if p1_answer_selecionada:
+        df_filtrado = df_filtrado[df_filtrado["p1_answer"].isin(p1_answer_selecionada) | df_filtrado["p1_answer"].isna()]
+
+    if p2_answer_selecionada:
+        df_filtrado = df_filtrado[df_filtrado["p2_answer"].isin(p2_answer_selecionada) | df_filtrado["p2_answer"].isna()]
+
+    if total_score_range is not None:
+        df_filtrado = df_filtrado[
+            df_filtrado["total_score"].isna() |
+            (
+                (df_filtrado["total_score"] >= total_score_range[0]) &
+                (df_filtrado["total_score"] <= total_score_range[1])
+            )
+        ]
+
+    if filtro_contatos == "Contatos únicos":
+        df_filtrado = (
+            df_filtrado
+            .sort_values("criacao", ascending=False)
+            .drop_duplicates(subset="email", keep="first")
+        )
 
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
@@ -355,43 +415,6 @@ def run_page():
 
     st.dataframe(tabela_concurso, use_container_width=True)
 
-    st.subheader("Oportunidades por Vendedor/ Etapas")
-    # 1. Obter ordem das etapas da query (sem duplicar e mantendo a ordem)
-    ordem_etapas_dono = (
-        df_filtrado[['etapa', 'ordem_etapas']]
-        .drop_duplicates()
-        .sort_values('ordem_etapas')
-        ['etapa']
-        .tolist()
-    )
-
-    # 2. Criar a tabela pivotada
-    tabela_concurso_dono = df_filtrado.pivot_table(
-        index="dono",
-        columns="etapa",
-        values="oportunidade",
-        aggfunc="count",
-        fill_value=0
-    )
-
-    # 3. Aplicar a ordem correta (apenas colunas presentes, sem duplicatas)
-    etapas_vistas = set()
-    etapas_presentes = []
-    for etapa in ordem_etapas_dono:
-        if etapa in tabela_concurso_dono.columns and etapa not in etapas_vistas:
-            etapas_presentes.append(etapa)
-            etapas_vistas.add(etapa)
-    tabela_concurso_dono = tabela_concurso_dono[etapas_presentes]
-
-    # 4. Renomear colunas
-    tabela_concurso_dono.columns = [f"{col} (Qtd)" for col in tabela_concurso_dono.columns]
-
-    # 5. Adicionar coluna total
-    tabela_concurso_dono["Total (Qtd)"] = tabela_concurso_dono.sum(axis=1)
-
-    tabela_concurso_dono = tabela_concurso_dono.sort_values("Total (Qtd)", ascending=False)
-
-    st.dataframe(tabela_concurso_dono, use_container_width=True)
 
     st.subheader("Principais Concursos por Oportunidades")
 
@@ -492,6 +515,71 @@ def run_page():
         text_auto=True,
     )
     st.plotly_chart(oport_dono, use_container_width=True)
+
+    # Tabela de vendedores por etapas
+    st.subheader("Vendedores por Oportunidades / Etapas")
+
+    tabela_vendedor_etapas = df_filtrado.pivot_table(
+        index="dono",
+        columns="etapa",
+        values="oportunidade",
+        aggfunc="count",
+        fill_value=0
+    )
+
+    # Aplica a ordem das etapas do funil (apenas colunas presentes, sem duplicatas)
+    etapas_vistas_vendedor = set()
+    etapas_presentes_vendedor = []
+    for etapa in ordem_etapas:
+        if etapa in tabela_vendedor_etapas.columns and etapa not in etapas_vistas_vendedor:
+            etapas_presentes_vendedor.append(etapa)
+            etapas_vistas_vendedor.add(etapa)
+    tabela_vendedor_etapas = tabela_vendedor_etapas[etapas_presentes_vendedor]
+
+    tabela_vendedor_etapas["Total (Qtd)"] = tabela_vendedor_etapas.sum(axis=1)
+    tabela_vendedor_etapas = tabela_vendedor_etapas.sort_values("Total (Qtd)", ascending=False)
+
+    tabela_exibicao_vendedor = tabela_vendedor_etapas.copy()
+    tabela_exibicao_vendedor.columns = [f"{col} (Qtd)" if col != "Total (Qtd)" else col for col in tabela_exibicao_vendedor.columns]
+
+    st.dataframe(tabela_exibicao_vendedor, use_container_width=True)
+
+    # Gráfico de barras horizontais: vendedores x oportunidades, detalhado por etapa
+    df_vendedor_etapa = (
+        df_filtrado.groupby(["dono", "etapa"])["oportunidade"]
+        .count()
+        .reset_index(name="Quantidade")
+    )
+
+    if not df_vendedor_etapa.empty:
+        # Ordena os vendedores pelo total (maior no topo do gráfico)
+        ordem_vendedores = (
+            df_vendedor_etapa.groupby("dono")["Quantidade"]
+            .sum()
+            .sort_values(ascending=True)
+            .index.tolist()
+        )
+
+        fig_vendedor_etapa = px.bar(
+            df_vendedor_etapa,
+            x="Quantidade",
+            y="dono",
+            color="etapa",
+            orientation="h",
+            title="Oportunidades por Vendedor e Etapa",
+            labels={"Quantidade": "Qtd. oportunidades", "dono": "Vendedor", "etapa": "Etapa"},
+            barmode="stack",
+            text_auto=True,
+            category_orders={"dono": ordem_vendedores, "etapa": etapas_presentes_vendedor},
+        )
+        fig_vendedor_etapa.update_layout(
+            height=max(500, len(ordem_vendedores) * 35),
+            legend_title_text="Etapa",
+            yaxis_title=None,
+        )
+        st.plotly_chart(fig_vendedor_etapa, use_container_width=True)
+    else:
+        st.info("Não há dados de vendedores por etapa para os filtros selecionados.")
 
     #Tabela de oportunidade por campanha e etapas
     st.subheader("Oportunidades por Campanhas / Etapas")
@@ -643,6 +731,117 @@ def run_page():
 
     else:
         st.warning("Nenhum dado encontrado para a combinação de filtros selecionada.")
+
+    # --- 4. TABELA DETALHADA DE OPORTUNIDADES ---
+    st.subheader("Tabela Detalhada de Oportunidades")
+
+    if not df_filtrado.empty:
+        # Filtro de concurso para a tabela detalhada
+        concursos_disponiveis = sorted(df_filtrado['concurso'].dropna().unique().tolist())
+        concursos_filtro_tabela = st.multiselect(
+            "🎯 Filtrar por Concurso:",
+            options=concursos_disponiveis,
+            default=[],
+            placeholder="Todos os concursos",
+            key="filtro_concurso_tabela_detalhada"
+        )
+
+        df_tabela = df_filtrado.copy()
+        if concursos_filtro_tabela:
+            df_tabela = df_tabela[df_tabela['concurso'].isin(concursos_filtro_tabela)]
+
+        tabela_oportunidades_lista = df_tabela[['oportunidade', 'concurso', 'unidade', 'modalidade', 'etapa', 'dono', 'criacao', 'origem', 'utm_source', 'utm_medium', 'utm_campaign', 'name', 'email', 'telefone', 'gclid', 'fbclid', 'tiktok', 'email_marketing', 'total_score', 'p1_score', 'p2_score', 'p1_answer', 'p2_answer']].copy()
+        
+        # Remover informações de fuso horário das colunas de data e hora
+        for col in tabela_oportunidades_lista.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns]']).columns:
+            tabela_oportunidades_lista[col] = tabela_oportunidades_lista[col].dt.tz_localize(None)
+
+        st.dataframe(tabela_oportunidades_lista, use_container_width=True)
+    else:
+        st.info("Nenhum dado disponível para os filtros aplicados.")
+    #botão de download lista de oportunidades
+    if not df_filtrado.empty:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            tabela_oportunidades_lista.to_excel(writer, index=False, sheet_name='Oportunidades_Detalhadas')
+        buffer.seek(0)
+        
+        st.download_button(
+            label="📥 Baixar Lista Detalhada de Oportunidades",
+            data=buffer,
+            file_name="lista_oportunidades.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    # ==============================================================================
+    # ANÁLISE DE PONTUAÇÃO DE OPORTUNIDADES
+    # ==============================================================================
+    st.divider()
+    st.header("📊 Análise de Pontuação de Oportunidades")
+
+    df_com_score = df_filtrado[df_filtrado["total_score"].notna()].copy()
+    df_sem_score = df_filtrado[df_filtrado["total_score"].isna()]
+
+    col_score1, col_score2, col_score3 = st.columns(3)
+    with col_score1:
+        st.metric("Com pontuação", len(df_com_score))
+    with col_score2:
+        st.metric("Sem pontuação", len(df_sem_score))
+    with col_score3:
+        if not df_com_score.empty:
+            st.metric("Score médio", f"{df_com_score['total_score'].mean():.1f}")
+        else:
+            st.metric("Score médio", "—")
+
+    if not df_com_score.empty:
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            # Distribuição de p1_answer
+            df_p1 = df_com_score["p1_answer"].value_counts().reset_index()
+            df_p1.columns = ["Resposta", "Quantidade"]
+            fig_p1 = px.bar(
+                df_p1.sort_values("Quantidade", ascending=True),
+                x="Quantidade", y="Resposta", orientation="h",
+                title="P1 — Quando pretende começar?",
+                text="Quantidade",
+                color="Quantidade",
+                color_continuous_scale="Blues",
+            )
+            fig_p1.update_traces(textposition="outside")
+            fig_p1.update_layout(coloraxis_showscale=False, yaxis_title=None)
+            st.plotly_chart(fig_p1, use_container_width=True)
+
+        with col_b:
+            # Distribuição de p2_answer
+            df_p2 = df_com_score["p2_answer"].value_counts().reset_index()
+            df_p2.columns = ["Resposta", "Quantidade"]
+            fig_p2 = px.bar(
+                df_p2.sort_values("Quantidade", ascending=True),
+                x="Quantidade", y="Resposta", orientation="h",
+                title="P2 — Qual é sua experiência?",
+                text="Quantidade",
+                color="Quantidade",
+                color_continuous_scale="Greens",
+            )
+            fig_p2.update_traces(textposition="outside")
+            fig_p2.update_layout(coloraxis_showscale=False, yaxis_title=None)
+            st.plotly_chart(fig_p2, use_container_width=True)
+
+        # Distribuição do total_score
+        fig_score = px.histogram(
+            df_com_score,
+            x="total_score",
+            nbins=10,
+            title="Distribuição do Total Score",
+            labels={"total_score": "Total Score", "count": "Quantidade"},
+            color_discrete_sequence=["#457B9D"],
+        )
+        fig_score.update_layout(bargap=0.1, yaxis_title="Quantidade")
+        st.plotly_chart(fig_score, use_container_width=True)
+
+    else:
+        st.info("Nenhuma oportunidade com pontuação no período selecionado.")
 
     # ==============================================================================
     # SEÇÃO DE VALIDAÇÃO - COMPARAÇÃO ENTRE CAMPOS ORIGINAIS E TRATADOS
