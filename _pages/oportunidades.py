@@ -522,6 +522,71 @@ def run_page():
     )
     st.plotly_chart(oport_dono, use_container_width=True)
 
+    # Tabela de vendedores por etapas
+    st.subheader("Vendedores por Oportunidades / Etapas")
+
+    tabela_vendedor_etapas = df_filtrado.pivot_table(
+        index="dono",
+        columns="etapa",
+        values="oportunidade",
+        aggfunc="count",
+        fill_value=0
+    )
+
+    # Aplica a ordem das etapas do funil (apenas colunas presentes, sem duplicatas)
+    etapas_vistas_vendedor = set()
+    etapas_presentes_vendedor = []
+    for etapa in ordem_etapas:
+        if etapa in tabela_vendedor_etapas.columns and etapa not in etapas_vistas_vendedor:
+            etapas_presentes_vendedor.append(etapa)
+            etapas_vistas_vendedor.add(etapa)
+    tabela_vendedor_etapas = tabela_vendedor_etapas[etapas_presentes_vendedor]
+
+    tabela_vendedor_etapas["Total (Qtd)"] = tabela_vendedor_etapas.sum(axis=1)
+    tabela_vendedor_etapas = tabela_vendedor_etapas.sort_values("Total (Qtd)", ascending=False)
+
+    tabela_exibicao_vendedor = tabela_vendedor_etapas.copy()
+    tabela_exibicao_vendedor.columns = [f"{col} (Qtd)" if col != "Total (Qtd)" else col for col in tabela_exibicao_vendedor.columns]
+
+    st.dataframe(tabela_exibicao_vendedor, use_container_width=True)
+
+    # Gráfico de barras horizontais: vendedores x oportunidades, detalhado por etapa
+    df_vendedor_etapa = (
+        df_filtrado.groupby(["dono", "etapa"])["oportunidade"]
+        .count()
+        .reset_index(name="Quantidade")
+    )
+
+    if not df_vendedor_etapa.empty:
+        # Ordena os vendedores pelo total (maior no topo do gráfico)
+        ordem_vendedores = (
+            df_vendedor_etapa.groupby("dono")["Quantidade"]
+            .sum()
+            .sort_values(ascending=True)
+            .index.tolist()
+        )
+
+        fig_vendedor_etapa = px.bar(
+            df_vendedor_etapa,
+            x="Quantidade",
+            y="dono",
+            color="etapa",
+            orientation="h",
+            title="Oportunidades por Vendedor e Etapa",
+            labels={"Quantidade": "Qtd. oportunidades", "dono": "Vendedor", "etapa": "Etapa"},
+            barmode="stack",
+            text_auto=True,
+            category_orders={"dono": ordem_vendedores, "etapa": etapas_presentes_vendedor},
+        )
+        fig_vendedor_etapa.update_layout(
+            height=max(500, len(ordem_vendedores) * 35),
+            legend_title_text="Etapa",
+            yaxis_title=None,
+        )
+        st.plotly_chart(fig_vendedor_etapa, use_container_width=True)
+    else:
+        st.info("Não há dados de vendedores por etapa para os filtros selecionados.")
+
     #Tabela de oportunidade por campanha e etapas
     st.subheader("Oportunidades por Campanhas / Etapas")
     # 1. Obter ordem das etapas da query (sem duplicar e mantendo a ordem)
