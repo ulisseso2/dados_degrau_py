@@ -1,5 +1,9 @@
-SELECT 
-    i.id as oportunidade_id,
+SELECT
+    COALESCE(c.opportunity_id, i.id) as oportunidade_id,
+    ip.p1_score as p1_pontos,
+    ip.p2_score as p2_pontos,
+    ip.total_score as score_bot_total,
+    s2.name as etapa_crm,
     c.chat_id,
     c.octa_created_at as data_chat,
     c.created_at as data_criacao_sistema,
@@ -35,4 +39,7 @@ LEFT JOIN (
 LEFT JOIN seducar.interesteds i ON i.id = i_latest.id
 LEFT JOIN seducar.users u ON i.owner_id = u.id
 LEFT JOIN seducar.opportunity_origins o ON i.opportunity_origin_id = o.id
+LEFT JOIN seducar.interesteds i2 ON i2.id = COALESCE(c.opportunity_id, i.id)
+LEFT JOIN seducar.interested_pontuations ip ON ip.interested_id = i2.id
+LEFT JOIN seducar.opportunity_steps s2 ON i2.opportunity_step_id = s2.id
 ORDER BY c.octa_created_at DESC

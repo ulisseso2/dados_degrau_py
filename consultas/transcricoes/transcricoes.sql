@@ -4,6 +4,10 @@ SELECT
     ot.date                 AS data_ligacao,
     ot.time                 AS hora_ligacao,
     ot.opportunity_id       AS oportunidade,
+    ot.opportunity_id       AS oportunidade_id,
+    ip.p1_score             AS p1_pontos,
+    ip.p2_score             AS p2_pontos,
+    ip.total_score          AS score_bot_total,
     CASE WHEN ot.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS empresa,
     c.full_name             AS nome_lead,
     c.cellphone             AS telefone_lead,
@@ -35,6 +39,7 @@ SELECT
 FROM seducar.opportunity_transcripts ot
 
 LEFT JOIN seducar.interesteds i         ON ot.opportunity_id = i.id
+LEFT JOIN seducar.interested_pontuations ip ON i.id = ip.interested_id
 LEFT JOIN seducar.customers c           ON i.customer_id = c.id
 LEFT JOIN seducar.opportunity_steps os  ON i.opportunity_step_id = os.id
 LEFT JOIN seducar.opportunity_modalities om ON i.opportunity_modality_id = om.id

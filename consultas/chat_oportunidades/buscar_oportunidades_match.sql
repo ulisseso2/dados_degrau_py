@@ -9,9 +9,14 @@ SELECT
     i.created_at as criacao,
     CASE WHEN i.school_id = 1 THEN 'Degrau' ELSE 'Central' END as empresa,
     s.name as etapa,
-    d.full_name as dono
+    d.full_name as dono,
+    ip.p1_score as p1_pontos,
+    ip.p2_score as p2_pontos,
+    ip.total_score as score_bot_total,
+    s.name as etapa_crm
 FROM seducar.interesteds i
 LEFT JOIN seducar.opportunity_steps s ON i.opportunity_step_id = s.id
 LEFT JOIN seducar.users d ON i.owner_id = d.id
+LEFT JOIN seducar.interested_pontuations ip ON i.id = ip.interested_id
 WHERE i.created_at >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
 ORDER BY i.created_at DESC

@@ -6,6 +6,7 @@ SELECT
     c.start_type AS tipo_turma,
     cp_max.data_prevista as data_prevista,
     MIN(gl.date) OVER (PARTITION BY c.id) AS inicio_grade,
+    MAX(gl.date) OVER (PARTITION BY c.id) AS fim_grade,
     s.name as turno,
     CASE WHEN c.school_id = 1 THEN 'Degrau' ELSE 'Central' END AS empresa,
     cu.title AS curso,
@@ -61,4 +62,7 @@ LEFT JOIN seducar.teachers p ON gl.teacher_id = p.id
 LEFT JOIN seducar.grid_lesson_status gls ON gl.grid_lesson_status_id = gls.id
 LEFT JOIN seducar.grid_lesson_categories glc ON gl.grid_lesson_category_id = glc.id
 WHERE c.id IS NOT NULL
+AND c.created_at is not NULL
+AND c.unit_id IN (2,3,4,5,10, 22,23,24,25,26,27)
+AND c.course_id IS NOT NULL
 ORDER BY COALESCE(gxl_count.turmas_compartilhadas, 1) DESC, c.name;

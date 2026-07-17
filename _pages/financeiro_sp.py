@@ -177,9 +177,10 @@ def run_page():
     if not df_filtrado.empty:
             # Agrupa os dados conforme sua estrutura original
             tabela_agrupada = (
-                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra"])
-                .agg(valor_total=("valor_corrigido", "sum"),
-                     data_pagamento_parcela=("data_pagamento_parcela", "max"))
+                df_filtrado.groupby(["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_vencimento_parcela", "data_pagamento_parcela"])
+                .agg(
+                    valor_total=("valor_corrigido", "sum"),
+                )
                 .reset_index()
             )
 
@@ -206,7 +207,15 @@ def run_page():
                 header_name="Histórico",
                 minWidth=200
             )
-            
+
+            gb.configure_column(
+                field="data_vencimento_parcela",
+                header_name="Data de Vencimento",
+                type=["dateColumnFilter", "customDateTimeFormat"],
+                custom_format_string='dd/MM/yyyy',
+                minWidth=150
+            )
+
             gb.configure_column(
                 field="data_pagamento_parcela",
                 header_name="Data de Pagamento",
@@ -275,18 +284,20 @@ def run_page():
             tabela_export['valor_total'] = tabela_export['valor_total'].round(2)  # Garante 2 casas decimais
             
             # Remove timezone e converte para apenas data (sem hora)
+            if 'data_vencimento_parcela' in tabela_export.columns:
+                tabela_export['data_vencimento_parcela'] = tabela_export['data_vencimento_parcela'].dt.tz_localize(None).dt.date
             if 'data_pagamento_parcela' in tabela_export.columns:
                 tabela_export['data_pagamento_parcela'] = tabela_export['data_pagamento_parcela'].dt.tz_localize(None).dt.date
-                
+
             # Cria buffer para o Excel
             buffer = io.BytesIO()
             with ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 # Exporta a tabela principal
                 tabela_export.to_excel(
-                    writer, 
-                    index=False, 
+                    writer,
+                    index=False,
                     sheet_name='Despesas Detalhadas',
-                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "valor_total", "data_pagamento_parcela"]
+                    columns=["centro_custo", "categoria_pedido_compra", "descricao_pedido_compra", "data_vencimento_parcela", "data_pagamento_parcela", "valor_total"]
                 )
                 
                 # Adiciona uma aba com totais consolidados

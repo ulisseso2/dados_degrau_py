@@ -37,6 +37,7 @@ def run_page():
     df['valor_rateio_aula'] = pd.to_numeric(df['valor_rateio_aula'], errors='coerce')
     df['carga_horaria_decimal'] = pd.to_numeric(df['carga_horaria_decimal'], errors='coerce')
     df['inicio_grade'] = pd.to_datetime(df['inicio_grade'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
+    df['fim_grade'] = pd.to_datetime(df['fim_grade'], errors='coerce').dt.tz_localize(TIMEZONE, ambiguous='infer')
     df['data_prevista'] = pd.to_datetime(df['data_prevista'], errors='coerce')
     df['turno'] = df['turno'].astype(str).replace('None', '')
     df['possui_grade'] = df['possui_grade'].astype(str).replace('None', '')
@@ -464,6 +465,7 @@ def run_page():
             data_prevista=('data_prevista', 'first'),
             tipo_turma=('tipo_turma', 'first'),
             inicio_grade=('inicio_grade', 'first'),
+            fim_grade=('fim_grade', 'first'),
             turno=('turno', 'first'),
             possui_grade=('possui_grade', 'first'),
             total_aulas=('aula_id', 'nunique'),
@@ -520,7 +522,7 @@ def run_page():
 
     colunas_cons = [
         'turma_nome', 'curso', 'tipo_turma', 'unidade', 'turno', 'possui_grade',
-        'inicio_grade', 'data_prevista', 'status_conexao', 'qtd_turmas_ligadas',
+        'inicio_grade', 'fim_grade', 'data_prevista', 'status_conexao', 'qtd_turmas_ligadas',
         'turma_compartilhada', 'total_aulas', 'aulas_dadas', 'aulas_restantes',
         'progresso_grade_pct', 'total_horas', 'matriculas', 'valor_iniciar',
         'custo_previsto', 'fat_total', 'result_bruto', 'cancelado', 'fat_canc', 'resultado', 'margem_pct',
@@ -552,6 +554,7 @@ def run_page():
             "turno": st.column_config.TextColumn("Turno", width="small"),
             "possui_grade": st.column_config.TextColumn("Possui\nGrade", width="small"),
             "inicio_grade": st.column_config.DatetimeColumn("Início\nGrade", format="DD/MM/YYYY"),
+            "fim_grade": st.column_config.DatetimeColumn("Última Aula\nda Grade", format="DD/MM/YYYY"),
             "data_prevista": st.column_config.DateColumn("Data\nPrevista", format="DD/MM/YYYY"),
             "status_conexao": st.column_config.TextColumn("Status\nConexão", width="small"),
             "qtd_turmas_ligadas": st.column_config.NumberColumn("Turmas\nLigadas"),
@@ -580,6 +583,8 @@ def run_page():
     df_cons_export = df_cons_exib.copy()
     if 'inicio_grade' in df_cons_export.columns:
         df_cons_export['inicio_grade'] = pd.to_datetime(df_cons_export['inicio_grade'], errors='coerce').dt.tz_localize(None)
+    if 'fim_grade' in df_cons_export.columns:
+        df_cons_export['fim_grade'] = pd.to_datetime(df_cons_export['fim_grade'], errors='coerce').dt.tz_localize(None)
     buffer_cons = io.BytesIO()
     with pd.ExcelWriter(buffer_cons, engine='xlsxwriter') as writer:
         df_cons_export.to_excel(writer, index=False, sheet_name='Consolidado por Turma')

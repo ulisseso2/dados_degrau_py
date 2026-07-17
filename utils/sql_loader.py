@@ -1,7 +1,10 @@
 from pathlib import Path
+
 import pandas as pd
 import streamlit as st
+
 from conexao.mysql_connector import conectar_mysql, conectar_mysql_secundario
+
 
 def carregar_sql(caminho_arquivo):
     caminho = Path(caminho_arquivo)
@@ -13,7 +16,7 @@ def carregar_sql(caminho_arquivo):
 # Carrega os dados do banco executando o SQL de um arquivo.
 # Usa um engine do SQLAlchemy para a conexão, como recomendado pelo pandas.
 # O cache é configurado para expirar a cada 10 minutos (600 segundos).
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def carregar_dados(caminho_sql):
     """
     Carrega os dados do banco executando o SQL de um arquivo.

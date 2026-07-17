@@ -192,7 +192,41 @@ def run_page():
         'PDF': ''
     }])
 
-    df_tabela_com_total = pd.concat([df_tabela, linha_total], ignore_index=True)
+    # --- Paginação (10 notas por página) ---
+    registros_por_pagina = 10
+    total_registros = len(df_tabela)
+    total_paginas = max(1, -(-total_registros // registros_por_pagina))  # ceil
+
+    filtros_atual = (data_inicio, data_fim, empresa_sel, tipo_sel)
+    if st.session_state.get('notas_filtros_anterior') != filtros_atual:
+        st.session_state.notas_filtros_anterior = filtros_atual
+        st.session_state.notas_pagina = 1
+
+    pagina = st.session_state.get('notas_pagina', 1)
+    pagina = min(max(pagina, 1), total_paginas)
+    st.session_state.notas_pagina = pagina
+
+    def _ir_pagina_anterior():
+        st.session_state.notas_pagina = max(1, st.session_state.notas_pagina - 1)
+
+    def _ir_proxima_pagina():
+        st.session_state.notas_pagina = st.session_state.notas_pagina + 1
+
+    col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
+    with col_pag1:
+        st.button("⬅️ Anterior", disabled=pagina <= 1, on_click=_ir_pagina_anterior)
+    with col_pag3:
+        st.button("Próxima ➡️", disabled=pagina >= total_paginas, on_click=_ir_proxima_pagina)
+    with col_pag2:
+        st.markdown(
+            f"<div style='text-align:center'>Página {pagina} de {total_paginas} "
+            f"({total_registros} notas)</div>",
+            unsafe_allow_html=True
+        )
+
+    inicio = (pagina - 1) * registros_por_pagina
+    df_tabela_pagina = df_tabela.iloc[inicio:inicio + registros_por_pagina]
+    df_tabela_com_total = pd.concat([df_tabela_pagina, linha_total], ignore_index=True)
 
     # Exibir tabela com links HTML
     st.write(df_tabela_com_total.to_html(escape=False, index=False), unsafe_allow_html=True)

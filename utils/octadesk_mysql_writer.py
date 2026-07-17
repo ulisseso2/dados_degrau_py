@@ -1,6 +1,10 @@
 # utils/octadesk_mysql_writer.py
 # Escreve chats e mensagens do Octadesk no banco MySQL (seducar).
 # Espelha a estrutura do cache SQLite local (octadesk_db.py).
+#
+# Schema de octadesk_chats/octadesk_messages: `id` é autoincrement (PK,
+# gerado pelo MySQL, nunca escrito aqui); a chave natural/UNIQUE é
+# `chat_id`/`message_id`. Ver api-analises/INFRA.md §2.1 para o DDL.
 
 import json
 import logging
@@ -130,12 +134,12 @@ def _extract_fields(chat: dict) -> dict:
 
 _INSERT_CHAT = text("""
     INSERT INTO seducar.octadesk_chats (
-        id, status, created_at, updated_at_octa, closed_at,
+        chat_id, status, created_at, updated_at_octa, closed_at,
         phone, contact_name, agent_name, channel, tags,
         `group`, origin, bot_name, survey_response,
         raw_json, cached_at, synced_at
     ) VALUES (
-        :id, :status, :created_at, :updated_at_octa, :closed_at,
+        :chat_id, :status, :created_at, :updated_at_octa, :closed_at,
         :phone, :contact_name, :agent_name, :channel, :tags,
         :group, :origin, :bot_name, :survey_response,
         :raw_json, :cached_at, NOW()
@@ -158,8 +162,8 @@ _INSERT_CHAT = text("""
 """)
 
 _INSERT_MESSAGE = text("""
-    INSERT INTO seducar.octadesk_messages (id, chat_id, raw_json, cached_at, synced_at)
-    VALUES (:id, :chat_id, :raw_json, :cached_at, NOW())
+    INSERT INTO seducar.octadesk_messages (message_id, chat_id, raw_json, cached_at, synced_at)
+    VALUES (:message_id, :chat_id, :raw_json, :cached_at, NOW())
     ON DUPLICATE KEY UPDATE
         raw_json  = VALUES(raw_json),
         synced_at = NOW()
@@ -204,7 +208,7 @@ def save_chats_mysql(chats_list: list, cached_at: Optional[str] = None) -> int:
                 fields = _extract_fields(chat)
                 try:
                     conn.execute(_INSERT_CHAT, {
-                        "id":               chat_id,
+                        "chat_id":          chat_id,
                         "raw_json":         json.dumps(chat, ensure_ascii=False, default=str),
                         "cached_at":        _cached_at,
                         **fields,
@@ -241,10 +245,10 @@ def save_messages_mysql(chat_id: str, messages_list: list, cached_at: Optional[s
                 msg_id = msg.get("id") or msg.get("_id") or f"{chat_id}_{idx}"
                 try:
                     conn.execute(_INSERT_MESSAGE, {
-                        "id":       msg_id,
-                        "chat_id":  chat_id,
-                        "raw_json": json.dumps(msg, ensure_ascii=False, default=str),
-                        "cached_at": _cached_at,
+                        "message_id": msg_id,
+                        "chat_id":    chat_id,
+                        "raw_json":   json.dumps(msg, ensure_ascii=False, default=str),
+                        "cached_at":  _cached_at,
                     })
                     saved += 1
                 except Exception as e:

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CANÔNICO v1 · Avaliação Comercial IA · VCA-2026.07</title>
+<style>
+  :root{
+    --papel:#F6F8F9; --cartao:#FFFFFF; --tinta:#18222B; --tinta2:#46545F;
+    --linha:#DDE4E8; --linha2:#C4CED4;
+    --degrau:#31c490; --degrau-esc:#1E8F68; --degrau-bg:#E8F8F2;
+    --central:#0B27E8; --central-esc:#0A1FA8; --central-bg:#EBEEFE;
+    --alerta:#C0392B; --alerta-bg:#FBEDEB;
+    --ambar:#B7791F; --ambar-bg:#FCF3E3;
+    --mono:ui-monospace,'Cascadia Code','SF Mono',Menlo,Consolas,monospace;
+    --disp:'Avenir Next','Segoe UI Variable Display','Trebuchet MS',system-ui,sans-serif;
+    --corpo:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--papel);color:var(--tinta);font:16px/1.65 var(--corpo)}
+  ::selection{background:var(--degrau);color:#fff}
+
+  .moldura{max-width:980px;margin:0 auto;padding:0 28px 120px}
+
+  /* ── Cabeçalho canônico ─────────────────────────────── */
+  header.capa{padding:64px 0 40px;border-bottom:3px solid var(--tinta)}
+  .selo{display:inline-flex;align-items:center;gap:10px;font:700 12px/1 var(--mono);
+        letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--tinta);
+        padding:8px 14px;border-radius:3px}
+  .selo .v{color:var(--degrau)}
+  h1{font:800 clamp(34px,5vw,52px)/1.08 var(--disp);letter-spacing:-.02em;margin:26px 0 10px}
+  h1 .fina{font-weight:400;color:var(--tinta2)}
+  .subtitulo{font-size:18px;color:var(--tinta2);max-width:70ch}
+  .meta-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+              gap:1px;background:var(--linha2);border:1px solid var(--linha2);
+              border-radius:6px;overflow:hidden;margin-top:30px}
+  .meta-grade div{background:var(--cartao);padding:12px 16px}
+  .meta-grade b{display:block;font:700 10.5px/1 var(--mono);letter-spacing:.12em;
+                text-transform:uppercase;color:var(--tinta2);margin-bottom:6px}
+  .meta-grade span{font-size:14.5px;font-weight:600}
+
+  /* ── Sumário ────────────────────────────────────────── */
+  nav.sumario{margin:44px 0 0;border:1px solid var(--linha2);border-radius:8px;
+              background:var(--cartao);padding:22px 26px}
+  nav.sumario h2{font:700 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+                 color:var(--tinta2);margin-bottom:14px}
+  nav.sumario ol{list-style:none;columns:2;column-gap:36px}
+  nav.sumario li{margin:0 0 9px;break-inside:avoid}
+  nav.sumario a{color:var(--tinta);text-decoration:none;font-weight:600;font-size:15px}
+  nav.sumario a:hover{color:var(--degrau-esc)}
+  nav.sumario .n{font:700 12px var(--mono);color:var(--degrau-esc);margin-right:8px}
+
+  /* ── Seções ─────────────────────────────────────────── */
+  section{margin-top:72px}
+  .cabeca-sec{display:flex;align-items:baseline;gap:16px;border-bottom:2px solid var(--tinta);
+              padding-bottom:12px;margin-bottom:26px}
+  .cabeca-sec .num{font:800 15px var(--mono);color:#fff;background:var(--tinta);
+                   padding:5px 10px;border-radius:3px;flex:none}
+  h2.tit{font:800 clamp(22px,3vw,30px)/1.15 var(--disp);letter-spacing:-.015em}
+  h3{font:700 19px/1.3 var(--disp);margin:30px 0 12px}
+  p{margin:0 0 15px;max-width:76ch}
+  p.aberta{font-size:17.5px;color:var(--tinta2)}
+  strong{font-weight:700}
+  code{font:600 .88em var(--mono);background:#EDF1F3;border:1px solid var(--linha);
+       border-radius:4px;padding:1px 6px}
+  ul.lista{margin:0 0 16px 20px}
+  ul.lista li{margin-bottom:8px;max-width:74ch}
+
+  /* ── Componentes ────────────────────────────────────── */
+  .cartao{background:var(--cartao);border:1px solid var(--linha2);border-radius:8px;
+          padding:22px 26px;margin:20px 0}
+  .regra{border-left:5px solid var(--tinta);background:var(--cartao);padding:18px 24px;
+         margin:22px 0;border-radius:0 8px 8px 0;box-shadow:0 1px 3px rgba(24,34,43,.06)}
+  .regra.verde{border-color:var(--degrau)}
+  .regra.azul{border-color:var(--central)}
+  .regra.vermelha{border-color:var(--alerta);background:var(--alerta-bg)}
+  .regra.ambar{border-color:var(--ambar);background:var(--ambar-bg)}
+  .regra b.rotulo{display:block;font:700 11px/1 var(--mono);letter-spacing:.13em;
+                  text-transform:uppercase;margin-bottom:8px;color:var(--tinta2)}
+
+  table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--cartao);
+        border:1px solid var(--linha2);border-radius:8px;overflow:hidden;font-size:14.5px}
+  th{background:var(--tinta);color:#fff;text-align:left;padding:10px 14px;
+     font:700 12px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+  td{padding:10px 14px;border-top:1px solid var(--linha);vertical-align:top}
+  tr:nth-child(even) td{background:#FAFCFC}
+  td .peso{font:800 15px var(--mono)}
+  .tag{display:inline-block;font:700 11px/1 var(--mono);padding:4px 9px;border-radius:20px;
+       letter-spacing:.05em}
+  .tag.d{background:var(--degrau-bg);color:var(--degrau-esc);border:1px solid var(--degrau)}
+  .tag.c{background:var(--central-bg);color:var(--central-esc);border:1px solid var(--central)}
+  .tag.x{background:var(--alerta-bg);color:var(--alerta);border:1px solid var(--alerta)}
+  .tag.n{background:#EDF1F3;color:var(--tinta2);border:1px solid var(--linha2)}
+
+  pre{background:#101820;color:#D7E3EA;font:13px/1.6 var(--mono);padding:18px 22px;
+      border-radius:8px;overflow-x:auto;margin:16px 0}
+  pre .k{color:#7BE0B4}.j{color:#8FB8FF}
+
+  .duas-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:760px){.duas-col{grid-template-columns:1fr}nav.sumario ol{columns:1}}
+
+  figure{margin:26px 0}
+  figure svg{width:100%;height:auto;display:block;background:var(--cartao);
+             border:1px solid var(--linha2);border-radius:8px}
+  figcaption{font:600 12.5px/1.5 var(--mono);color:var(--tinta2);margin-top:10px;
+             letter-spacing:.02em}
+
+  footer{margin-top:90px;border-top:3px solid var(--tinta);padding-top:26px;
+         display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+         font:600 13px var(--mono);color:var(--tinta2)}
+  .linhagem{margin-top:14px}
+  .linhagem span{display:inline-block;background:var(--cartao);border:1px solid var(--linha2);
+                 border-radius:4px;padding:5px 11px;margin:0 8px 8px 0;font-weight:700}
+  .linhagem span.atual{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+  .linhagem span.atual em{color:var(--degrau);font-style:normal}
+  @media print{body{background:#fff}.moldura{max-width:100%}section{break-inside:avoid-page}}
+</style>
+</head>
+<body>
+<div class="moldura">
+
+<header class="capa">
+  <span class="selo">DOCUMENTO CANÔNICO · <span class="v">v1.0</span> · RÉGUA VCA-2026.07</span>
+  <h1>Avaliação Comercial via IA<br><span class="fina">WhatsApp + Ligações · Degrau Cultural &amp; Central de Concursos</span></h1>
+  <p class="subtitulo">A referência definitiva de como o sistema avalia cada conversa de venda, cruza a qualificação do bot com a leitura da IA, protege os dados do time e devolve inteligência ao CRM. Quem lê este documento entende o projeto inteiro.</p>
+  <div class="meta-grade">
+    <div><b>Versão</b><span>v1.0 — 15/07/2026</span></div>
+    <div><b>Régua vigente</b><span>VCA-2026.07</span></div>
+    <div><b>Juiz (modelo)</b><span>Claude Sonnet 4.6</span></div>
+    <div><b>Dono</b><span>Velazquez (Diretor Geral)</span></div>
+    <div><b>Implementação</b><span>Ulisses · Gabriel (CRM)</span></div>
+    <div><b>Status</b><span>Pronto para deploy</span></div>
+  </div>
+
+  <nav class="sumario">
+    <h2>Sumário</h2>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span>O que este sistema é</a></li>
+      <li><a href="#s2"><span class="n">02</span>Arquitetura e fluxo de dados</a></li>
+      <li><a href="#s3"><span class="n">03</span>A régua: Venda Consultiva Adaptada</a></li>
+      <li><a href="#s4"><span class="n">04</span>P1/P2 e o Princípio do Juiz Cego</a></li>
+      <li><a href="#s5"><span class="n">05</span>Contrato de dados (JSON)</a></li>
+      <li><a href="#s6"><span class="n">06</span>Política de retorno ao CRM</a></li>
+      <li><a href="#s7"><span class="n">07</span>Modelos de IA e custo</a></li>
+      <li><a href="#s8"><span class="n">08</span>O que mudou nesta rodada</a></li>
+      <li><a href="#s9"><span class="n">09</span>Governança: eras e versões</a></li>
+      <li><a href="#s10"><span class="n">10</span>Inventário de arquivos</a></li>
+    </ol>
+  </nav>
+</header>
+
+<!-- ══════════════════ 01 ══════════════════ -->
+<section id="s1">
+  <div class="cabeca-sec"><span class="num">01</span><h2 class="tit">O que este sistema é</h2></div>
+  <p class="aberta">Toda conversa comercial das duas marcas — chat de WhatsApp no Octadesk ou ligação transcrita — passa por um avaliador de IA que produz, numa única chamada, quatro coisas: a <strong>classificação</strong> da conversa (é venda? é suporte? é URA?), a <strong>nota do vendedor</strong> em sete competências, o <strong>score do lead</strong> com classificação A–D, e uma <strong>recomendação de próximo passo</strong> com mensagem pronta.</p>
+  <p>O sistema existe para responder três perguntas de gestão que relatório manual nunca respondeu em escala: <strong>quem do time vende bem e onde exatamente cada um falha</strong> (alimenta os treinamentos individuais em PPTX); <strong>que qualidade de lead cada vendedor está recebendo</strong> (sem isso, nota de vendedor mistura mérito com sorte); e <strong>se a régua de qualificação do bot (P1/P2) diz a verdade</strong> — porque é ela que alimenta o sinal <code>lead_qualificado</code> que o Google e a Meta usam para otimizar mídia paga.</p>
+  <div class="regra verde">
+    <b class="rotulo">Princípio nº 1 — Fonte única da régua</b>
+    Tudo que define o julgamento (categorias, pesos, listas fechadas, prompts, schema) vive num único módulo: <code>utils/venda_consultiva_core.py</code>. Os dois canais consomem o mesmo arquivo. Foi assim que eliminamos o problema histórico de cada canal "enviesar para um lado": não existe mais onde divergir.
+  </div>
+</section>
+
+<!-- ══════════════════ 02 ══════════════════ -->
+<section id="s2">
+  <div class="cabeca-sec"><span class="num">02</span><h2 class="tit">Arquitetura e fluxo de dados</h2></div>
+  <figure>
+    <svg viewBox="0 0 960 470" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,Consolas,monospace">
+      <defs>
+        <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#46545F"/>
+        </marker>
+        <marker id="setaV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1E8F68"/>
+        </marker>
+      </defs>
+      <!-- Coluna 1: origens -->
+      <rect x="20" y="40" width="170" height="64" rx="8" fill="#EBEEFE" stroke="#0B27E8" stroke-width="1.6"/>
+      <text x="105" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="#18222B">Octadesk</text>
+      <text x="105" y="86" text-anchor="middle" font-size="11" fill="#46545F">chats WhatsApp</text>
+
+      <rect x="20" y="130" width="170" height="64" rx="8" fill="#EBEEFE" stroke="#0B27E8" stroke-width="1.6"/>
+      <text x="105" y="156" text-anchor="middle" font-size="13" font-weight="700" fill="#18222B">Telefonia</text>
+      <text x="105" y="176" text-anchor="middle" font-size="11" fill="#46545F">transcrições de ligação</text>
+
+      <rect x="20" y="250" width="170" height="76" rx="8" fill="#E8F8F2" stroke="#31c490" stroke-width="1.6"/>
+      <text x="105" y="276" text-anchor="middle" font-size="13" font-weight="700" fill="#18222B">CRM Seducar</text>
+      <text x="105" y="294" text-anchor="middle" font-size="11" fill="#46545F">oportunidade + P1/P2</text>
+      <text x="105" y="310" text-anchor="middle" font-size="11" fill="#46545F">match: chat → email → tel.</text>
+
+      <!-- Coluna 2: preparo -->
+      <rect x="255" y="80" width="185" height="120" rx="8" fill="#FFFFFF" stroke="#C4CED4" stroke-width="1.6"/>
+      <text x="347" y="106" text-anchor="middle" font-size="13" font-weight="700" fill="#18222B">Preparo (0 tokens)</text>
+      <text x="347" y="128" text-anchor="middle" font-size="11" fill="#46545F">filtro de bots</text>
+      <text x="347" y="146" text-anchor="middle" font-size="11" fill="#46545F">avaliabilidade</text>
+      <text x="347" y="164" text-anchor="middle" font-size="11" fill="#46545F">heurísticas de triagem</text>
+      <text x="347" y="182" text-anchor="middle" font-size="11" fill="#46545F">detecção de inversão</text>
+
+      <!-- Coluna 3: juiz -->
+      <rect x="505" y="60" width="200" height="170" rx="10" fill="#18222B"/>
+      <text x="605" y="92" text-anchor="middle" font-size="14" font-weight="800" fill="#FFFFFF">JUIZ ÚNICO</text>
+      <text x="605" y="112" text-anchor="middle" font-size="11.5" fill="#31c490">Claude Sonnet 4.6</text>
+      <text x="605" y="136" text-anchor="middle" font-size="11" fill="#D7E3EA">régua VCA-2026.07</text>
+      <text x="605" y="154" text-anchor="middle" font-size="11" fill="#D7E3EA">1 chamada = triagem +</text>
+      <text x="605" y="170" text-anchor="middle" font-size="11" fill="#D7E3EA">vendedor + lead + reco</text>
+      <text x="605" y="196" text-anchor="middle" font-size="10.5" fill="#8FB8FF">tempo real ou Batch (−50%)</text>
+      <text x="605" y="214" text-anchor="middle" font-size="10.5" fill="#8FB8FF">system prompt em cache</text>
+
+      <!-- Coluna 4: destinos -->
+      <rect x="770" y="30" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#C4CED4" stroke-width="1.6"/>
+      <text x="855" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#18222B">MySQL interno</text>
+      <text x="855" y="76" text-anchor="middle" font-size="10.5" fill="#46545F">avaliação completa</text>
+
+      <rect x="770" y="120" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#C4CED4" stroke-width="1.6"/>
+      <text x="855" y="146" text-anchor="middle" font-size="12.5" font-weight="700" fill="#18222B">Dashboards</text>
+      <text x="855" y="166" text-anchor="middle" font-size="10.5" fill="#46545F">ranking · radar · Bot×IA</text>
+
+      <rect x="770" y="210" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#C4CED4" stroke-width="1.6"/>
+      <text x="855" y="236" text-anchor="middle" font-size="12.5" font-weight="700" fill="#18222B">Treinamentos</text>
+      <text x="855" y="256" text-anchor="middle" font-size="10.5" fill="#46545F">PPTX por vendedor</text>
+
+      <rect x="770" y="310" width="170" height="86" rx="8" fill="#E8F8F2" stroke="#31c490" stroke-width="2"/>
+      <text x="855" y="338" text-anchor="middle" font-size="12.5" font-weight="700" fill="#18222B">CRM Seducar</text>
+      <text x="855" y="358" text-anchor="middle" font-size="10.5" fill="#1E8F68">transcrição + insight</text>
+      <text x="855" y="374" text-anchor="middle" font-size="10.5" fill="#1E8F68">do LEAD (whitelist)</text>
+
+      <!-- Fluxos -->
+      <line x1="190" y1="72" x2="255" y2="110" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <line x1="190" y1="162" x2="255" y2="150" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <line x1="440" y1="140" x2="505" y2="140" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <path d="M190,288 C 380,288 430,205 500,180" fill="none" stroke="#1E8F68" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#setaV)"/>
+      <text x="352" y="252" font-size="10.5" fill="#1E8F68" font-weight="700">contexto: P1/P2 + etapa (só p/ julgar o VENDEDOR)</text>
+
+      <line x1="705" y1="90" x2="770" y2="66" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <line x1="705" y1="145" x2="770" y2="152" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <line x1="705" y1="200" x2="770" y2="240" stroke="#46545F" stroke-width="1.8" marker-end="url(#seta)"/>
+      <path d="M705,222 C 740,300 740,340 770,348" fill="none" stroke="#1E8F68" stroke-width="2" marker-end="url(#setaV)"/>
+      <text x="726" y="316" font-size="10.5" fill="#1E8F68" font-weight="700" transform="rotate(38 726 316)">CRM sync</text>
+
+      <!-- Batch manifest note -->
+      <rect x="255" y="330" width="420" height="66" rx="8" fill="#FCF3E3" stroke="#B7791F" stroke-width="1.4"/>
+      <text x="465" y="356" text-anchor="middle" font-size="11.5" font-weight="700" fill="#18222B">Manifest de batch (novo)</text>
+      <text x="465" y="376" text-anchor="middle" font-size="10.5" fill="#46545F">preserva oportunidade + metadados entre criar o batch e coletar</text>
+    </svg>
+    <figcaption>Fig. 1 — Fluxo ponta a ponta. Verde tracejado = dados do CRM entrando como contexto; verde sólido = inteligência voltando ao CRM. O juiz é um só para os dois canais.</figcaption>
+  </figure>
+  <p>Três propriedades de engenharia sustentam o fluxo: <strong>economia em camadas</strong> (bots, conversas vazias, URAs e ligações curtas morrem nas heurísticas em Python antes de gastar um token); <strong>uma chamada por conversa</strong> (triagem e avaliação no mesmo prompt — nada de pipeline de dois modelos); e <strong>idempotência com memória</strong> (o manifest de batch garante que avaliação processada horas depois volta com o vínculo de oportunidade intacto — antes desta versão, todo o volume do cron noturno era salvo órfão, com <code>opportunity_id=None</code>).</p>
+</section>
+
+<!-- ══════════════════ 03 ══════════════════ -->
+<section id="s3">
+  <div class="cabeca-sec"><span class="num">03</span><h2 class="tit">A régua: Venda Consultiva Adaptada</h2></div>
+  <p class="aberta">A metodologia nasceu de um framework próprio construído sobre <strong>Cialdini</strong> (As Armas da Persuasão — gatilhos éticos), <strong>Rackham</strong> (SPIN Selling — a lógica de perguntas) e disciplina de processo à la <strong>Chet Holmes</strong>, adaptado ao nosso contexto real: B2C educacional, lead de tráfego pago com intenção declarada, ciclo de horas, canal rápido.</p>
+  <p>A decisão fundadora da régua foi <strong>abandonar o SPIN puro</strong>. SPIN foi desenhado para B2B complexo de ciclo longo; aqui, lead que chega decidido ("quero TJSP presencial, turno manhã") não precisa ser entrevistado — precisa ser fechado. O caso que cristalizou isso: uma venda de R$3.148 à vista fechada em menos de 1 hora recebeu nota 52 na régua antiga "por não fazer SPIN". A vendedora fez o certo; a régua estava errada. A régua atual pune o contrário: interrogar quem já se declarou.</p>
+
+  <h3>As sete categorias (somam 100)</h3>
+  <table>
+    <tr><th>Categoria</th><th style="width:90px">Peso</th><th>O que mede</th></tr>
+    <tr><td><strong>Construção de Valor e Diferenciação</strong></td><td><span class="peso">30</span></td><td><strong>A categoria decisiva.</strong> Ancorou valor ANTES do preço? Tradição, aprovações, professores, método? Conectou o produto à dor do lead? Pular pro preço sem construir valor = penalização pesada. É o gap nº 1 histórico do time.</td></tr>
+    <tr><td><strong>Condução ao Fechamento</strong></td><td><span class="peso">20</span></td><td>CTA claro, próximo passo concreto com data, facilitação de pagamento. Conversa que morre sem compromisso = nota baixa.</td></tr>
+    <tr><td>Qualificação / Leitura de Contexto</td><td><span class="peso">15</span></td><td>Identificou concurso, modalidade, urgência — <em>lendo</em>, não interrogando. Se o lead já trouxe (na conversa ou no P1/P2 do bot), reconhecer e usar.</td></tr>
+    <tr><td>Rapport e Conexão</td><td><span class="peso">10</span></td><td>Abertura natural, uso do nome, tom adaptado.</td></tr>
+    <tr><td>Persuasão Ética</td><td><span class="peso">10</span></td><td>Prova social, autoridade, urgência real (nunca fabricada).</td></tr>
+    <tr><td>Tratamento de Objeções</td><td><span class="peso">10</span></td><td>Acolheu, contornou com evidência, ofereceu alternativa.</td></tr>
+    <tr><td>Clareza e Compliance</td><td><span class="peso">5</span></td><td>Comunicação limpa; zero promessa de aprovação garantida.</td></tr>
+  </table>
+
+  <div class="duas-col">
+    <div class="regra azul">
+      <b class="rotulo">Listas fechadas (agora nos DOIS canais)</b>
+      Pontos fortes, melhorias e "erro mais caro" são escolhidos de listas de textos exatos. Motivo: agregação. "Ancorou valor antes de apresentar o preço" contado 47 vezes é gestão; 47 frases livres parecidas é ruído. O WhatsApp ganhou itens próprios (link de pagamento, follow-up de conversa parada, mensagens escaneáveis).
+    </div>
+    <div class="regra azul">
+      <b class="rotulo">Modalidades — a confusão proibida</b>
+      <strong>Live não é EAD.</strong> Live (~R$1.000, ao vivo, prioridade alta) fechado é bom resultado. EAD (~R$300, gravado) é secundário. Hierarquia: Presencial &gt; Passaporte &gt; Live &gt; Smart &gt; EAD. O prompt martela isso porque era fonte recorrente de nota injusta.
+    </div>
+  </div>
+  <p>O juiz também emite dois <strong>disclaimers executivos</strong> (por que essa nota; por que essa classe de lead) para o gestor que não vai ler o chat, e um <strong>índice de confiança</strong> (0.30–0.90) que desconta ruído de transcrição, conversa curta e atores ambíguos — agora nos dois canais.</p>
+</section>
+
+<!-- ══════════════════ 04 ══════════════════ -->
+<section id="s4">
+  <div class="cabeca-sec"><span class="num">04</span><h2 class="tit">P1/P2 e o Princípio do Juiz Cego</h2></div>
+  <p class="aberta">Grande parte das oportunidades agora chega com duas respostas dadas ao bot <em>antes</em> de qualquer humano: <strong>P1 (urgência)</strong> e <strong>P2 (prontidão de investimento)</strong>. Esse é o dado que faltava para separar "vendedor ruim" de "lead ruim" — e é também um dado que precisa ser <em>auditado</em>, porque alimenta a otimização de mídia.</p>
+
+  <table>
+    <tr><th>P1 — Urgência (máx. 60)</th><th style="width:70px">Pts</th><th>P2 — Investimento (máx. 30)</th><th style="width:70px">Pts</th></tr>
+    <tr><td>Quero começar agora</td><td><span class="peso">60</span></td><td>Tem como investir agora</td><td><span class="peso">+30</span></td></tr>
+    <tr><td>Ainda este mês</td><td><span class="peso">45</span></td><td>Consegue com planejamento</td><td><span class="peso">+20</span></td></tr>
+    <tr><td>Quando sair o edital / texto livre</td><td><span class="peso">25</span></td><td>Hesitou / abandonou a P2 (timeout)</td><td><span class="peso">+5</span></td></tr>
+    <tr><td>Só pesquisando</td><td><span class="peso">0</span></td><td>Não tem como no momento</td><td><span class="peso">veto</span></td></tr>
+  </table>
+  <p>Score = P1 + P2, <strong>corte em 45</strong>, disparo do <code>lead_qualificado</code> só após as duas respostas (ou timeout com +5). O veto da P2 zera o <em>sinal para as plataformas</em>, nunca o contato comercial. Régua vigente desde 10/07/2026 — a espinha dorsal do corte de eras (§9).</p>
+
+  <figure>
+    <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,Consolas,monospace">
+      <defs>
+        <marker id="s2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1E8F68"/>
+        </marker>
+        <marker id="s2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#0B27E8"/>
+        </marker>
+      </defs>
+      <!-- fonte -->
+      <rect x="30" y="140" width="200" height="96" rx="10" fill="#E8F8F2" stroke="#31c490" stroke-width="2"/>
+      <text x="130" y="172" text-anchor="middle" font-size="13.5" font-weight="800" fill="#18222B">P1 + P2 do bot</text>
+      <text x="130" y="192" text-anchor="middle" font-size="11" fill="#46545F">declarado pelo lead</text>
+      <text x="130" y="212" text-anchor="middle" font-size="11" fill="#46545F">antes da conversa</text>
+
+      <!-- avaliação vendedor -->
+      <rect x="380" y="40" width="250" height="110" rx="10" fill="#FFFFFF" stroke="#31c490" stroke-width="2"/>
+      <text x="505" y="72" text-anchor="middle" font-size="13.5" font-weight="800" fill="#1E8F68">AVALIAÇÃO DO VENDEDOR</text>
+      <text x="505" y="94" text-anchor="middle" font-size="11" fill="#46545F">"o lead se declarou quente —</text>
+      <text x="505" y="112" text-anchor="middle" font-size="11" fill="#46545F">ele tratou à altura?"</text>
+      <text x="505" y="134" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1E8F68">campo: tratamento_lead_qualificado</text>
+
+      <!-- avaliação lead -->
+      <rect x="380" y="220" width="250" height="110" rx="10" fill="#FFFFFF" stroke="#0B27E8" stroke-width="2"/>
+      <text x="505" y="252" text-anchor="middle" font-size="13.5" font-weight="800" fill="#0A1FA8">SCORE DO LEAD (IA)</text>
+      <text x="505" y="274" text-anchor="middle" font-size="11" fill="#46545F">só pelo comportamento</text>
+      <text x="505" y="292" text-anchor="middle" font-size="11" fill="#46545F">observado na conversa</text>
+      <text x="505" y="314" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0A1FA8">JUIZ CEGO — não vê P1/P2</text>
+
+      <!-- fluxo permitido -->
+      <path d="M230,165 C 300,140 320,110 380,95" fill="none" stroke="#1E8F68" stroke-width="2.4" marker-end="url(#s2a)"/>
+      <text x="268" y="112" font-size="10.5" fill="#1E8F68" font-weight="800">PERMITIDO</text>
+
+      <!-- fluxo bloqueado -->
+      <path d="M230,215 C 290,240 310,258 372,272" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-dasharray="7 5"/>
+      <g transform="translate(300,258)">
+        <circle r="15" fill="#FBEDEB" stroke="#C0392B" stroke-width="2.2"/>
+        <line x1="-8" y1="-8" x2="8" y2="8" stroke="#C0392B" stroke-width="2.6"/>
+        <line x1="-8" y1="8" x2="8" y2="-8" stroke="#C0392B" stroke-width="2.6"/>
+      </g>
+      <text x="252" y="300" font-size="10.5" fill="#C0392B" font-weight="800">PROIBIDO (ancoraria o juiz)</text>
+
+      <!-- comparação externa -->
+      <rect x="720" y="130" width="215" height="116" rx="10" fill="#18222B"/>
+      <text x="827" y="162" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">TAB "BOT × IA"</text>
+      <text x="827" y="184" text-anchor="middle" font-size="11" fill="#D7E3EA">declarado × inferido</text>
+      <text x="827" y="202" text-anchor="middle" font-size="11" fill="#D7E3EA">× nota vendedor × desfecho</text>
+      <text x="827" y="226" text-anchor="middle" font-size="10.5" fill="#31c490">comparação FORA do prompt</text>
+
+      <line x1="630" y1="95" x2="760" y2="140" stroke="#46545F" stroke-width="1.8" marker-end="url(#s2b)"/>
+      <line x1="630" y1="275" x2="760" y2="238" stroke="#46545F" stroke-width="1.8" marker-end="url(#s2b)"/>
+      <path d="M130,236 C 130,370 700,370 812,250" fill="none" stroke="#46545F" stroke-width="1.6" stroke-dasharray="4 5" marker-end="url(#s2b)"/>
+      <text x="430" y="378" font-size="10.5" fill="#46545F" font-weight="700">score declarado (normalizado 0–100) entra direto na comparação</text>
+    </svg>
+    <figcaption>Fig. 2 — O Princípio do Juiz Cego. O P1/P2 contextualiza a nota do VENDEDOR, mas nunca toca o score do lead. A comparação declarado × inferido acontece fora do prompt — é isso que mantém a auditoria da régua estatisticamente honesta.</figcaption>
+  </figure>
+
+  <div class="regra vermelha">
+    <b class="rotulo">Por que o juiz precisa ser cego (não mexer nisso)</b>
+    Se a IA visse "esse lead marcou 90/90" antes de pontuá-lo, ela ancoraria o próprio score no declarado — e o gráfico Bot × IA viraria um espelho: concordância alta, informação zero. Cego, o sistema responde as duas perguntas que valem dinheiro: <strong>leads mentem/chutam no bot?</strong> (bot quente / IA frio em massa → régua frouxa contaminando a otimização de mídia) e <strong>o corte 45 deixa dinheiro na mesa?</strong> (bot frio / IA quente em massa → leads bons sendo excluídos do sinal).
+  </div>
+  <p>O que a tab <strong>Bot × IA</strong> entrega, por canal: correlação e gap médio entre declarado e inferido; a matriz de concordância com os dois quadrantes de alerta; as 20 maiores divergências com o disclaimer do lead; e o <strong>aproveitamento por vendedor</strong> — dos leads que o bot qualificou, quantos cada vendedor tratou como "adequado", "parcial" ou "subaproveitado" (campo novo <code>tratamento_lead_qualificado</code>), com a nota média dele exatamente nesses leads. É a resposta estrutural ao enigma histórico de score alto com conversão zero: a nota passa a ser lida contra a matéria-prima recebida.</p>
+</section>
+
+<!-- ══════════════════ 05 ══════════════════ -->
+<section id="s5">
+  <div class="cabeca-sec"><span class="num">05</span><h2 class="tit">Contrato de dados (JSON)</h2></div>
+  <p>Um único schema para os dois canais. Campos novos desta versão em destaque:</p>
+<pre>{
+  "tipo": "venda",                    <span class="k">← ou tipo de triagem (ura, suporte, …) + motivo</span>
+  "canal": "whatsapp|ligacao",
+  <span class="j">"regua_versao": "VCA-2026.07",      ← NOVO: corte de eras automático</span>
+  <span class="j">"contexto_recebido": { "qualificacao_previa": true, "tipo_ligacao": "receptivo" },</span>
+  "qualidade_entrada": { "iqh_0_100": … },
+  "extracao": { "concurso_area": …, "dores_principais": [...], "produtos_citados": [...] },
+  "avaliacao_vendedor": {
+    "nota_final_0_100": …,
+    "notas_por_categoria": { 7 chaves canônicas },
+    "pontos_fortes": [ { "ponto": "texto EXATO da lista", "evidencia": … } ],
+    "melhorias":     [ { "melhoria": "texto EXATO da lista", "como_fazer": … } ],
+    "erro_mais_caro": { "descricao": "texto EXATO da lista" },
+    <span class="j">"tratamento_lead_qualificado": { "status": "adequado|parcial|subaproveitado|nao_aplicavel" },</span>
+    "alertas": [...]
+  },
+  "vendedor_disclaimer": "…",         <span class="k">← gestão interna. NUNCA vai ao CRM</span>
+  "avaliacao_lead": { "lead_score_0_100": …, "classificacao": "A|B|C|D",
+                      "dimensoes": { 5 chaves canônicas }, "sinais_quente": […] },
+  "lead_disclaimer": "…",             <span class="k">← este PODE ir ao CRM</span>
+  "recomendacao_final": { "produto_principal": …, "mensagem_pronta": "≤240 chars" },
+  <span class="j">"confianca_avaliacao": 0.30–0.90    ← agora nos dois canais</span>
+}</pre>
+  <p>As chaves de dimensão do lead foram unificadas (<code>intencao_0_30</code>, <code>abertura_0_10</code>, <code>restricoes_invertido_0_10</code>); os dashboards mantêm fallback para as variantes antigas, então o histórico continua legível. Nota <code>0</code> deixou de ser sentinela de "não avaliado" — inaptos gravam <code>NULL</code>, e zero volta a significar zero.</p>
+</section>
+
+<!-- ══════════════════ 06 ══════════════════ -->
+<section id="s6">
+  <div class="cabeca-sec"><span class="num">06</span><h2 class="tit">Política de retorno ao CRM</h2></div>
+  <p class="aberta">A transcrição é ativo comercial: o próximo contato precisa saber o que já foi conversado. Mas o mesmo pipeline produz avaliação de desempenho de colaborador — e isso é material de gestão interna. Expor nota e crítica de vendedor no CRM, visível à operação inteira, cria exposição trabalhista desnecessária. A separação abaixo é <strong>decisão de diretoria implementada como código</strong>, não convenção.</p>
+  <div class="duas-col">
+    <div class="regra verde">
+      <b class="rotulo">✔ Vai ao CRM (timeline da oportunidade)</b>
+      Transcrição completa · canal e data do evento · agente (fato operacional) · <strong>score e classe do LEAD</strong> · lead_disclaimer · próximo passo recomendado · mensagem pronta · versão da régua.
+    </div>
+    <div class="regra vermelha">
+      <b class="rotulo">✘ Nunca vai ao CRM</b>
+      Nota do vendedor · vendedor_disclaimer · notas por categoria · pontos fortes/melhorias · erro mais caro · alertas de compliance. <strong>Mecanismo:</strong> whitelist hard-coded em <code>crm_sync_writer.py</code> — mesmo recebendo o JSON inteiro, o writer só grava os campos permitidos e descarta o resto por blacklist dupla.
+    </div>
+  </div>
+  <p>Gravação idempotente por <code>(canal, origem_id)</code> na tabela <code>crm_lead_interacoes</code> (DDL no MD do Ulisses), ativada por <code>CRM_SYNC_ENABLED=1</code> apenas quando o Gabriel expuser a timeline no Seducar. Atenção permanente de casa: ERP grava UTC, CRM grava BRT — <code>data_evento</code> aqui já chega convertida para <code>America/Sao_Paulo</code>; não misturar com timestamps do ERP sem converter.</p>
+</section>
+
+<!-- ══════════════════ 07 ══════════════════ -->
+<section id="s7">
+  <div class="cabeca-sec"><span class="num">07</span><h2 class="tit">Modelos de IA e custo</h2></div>
+  <p class="aberta">Critério: <strong>consistência do juiz acima de economia marginal; modelo topo só onde o volume é pequeno e a decisão é cara.</strong></p>
+  <table>
+    <tr><th>Camada</th><th>Modelo</th><th>Racional</th></tr>
+    <tr><td>Triagem</td><td><span class="tag n">0 tokens</span></td><td>Heurísticas em Python matam URA, bot-only e conversa vazia de graça. IA aqui seria desperdício puro.</td></tr>
+    <tr><td><strong>Avaliação em massa</strong> (motor diário, os dois canais)</td><td><span class="tag d">Sonnet 4.6 + Batch</span></td><td>O juiz. Batch dá −50%; caching do system prompt corta o custo fixo de cada chamada. Ordem de grandeza: ~US$0,03/avaliação → <strong>~R$600–800/mês</strong> no volume atual. Julga nuance comercial (ancoragem, persuasão ética) com consistência — que é o produto.</td></tr>
+    <tr><td>Piloto de economia (opcional)</td><td><span class="tag n">Haiku 4.5 (A/B)</span></td><td>~⅓ do custo. Regra de decisão pré-definida: rodar 50 avaliações duplas; migrar só se correlação com o Sonnet ≥ 0,9 e disclaimers mantiverem qualidade. Sem "achismo" na troca de juiz.</td></tr>
+    <tr><td>Sínteses estratégicas (mensal)</td><td><span class="tag c">Modelo topo (Fable/Opus)</span></td><td>Auditoria da régua, análise geral vendas×marketing. Dezenas de chamadas/mês — custo irrelevante, qualidade máxima. <strong>Proibido em lote diário</strong>: pagaria raciocínio premium sem ganho de régua.</td></tr>
+  </table>
+  <div class="regra ambar">
+    <b class="rotulo">Nota honesta sobre a unificação</b>
+    O GPT-5.4 não era um juiz ruim — o problema era haver <em>dois</em> juízes. Escolhemos consolidar no Claude por três integrações que já estavam pagas: prompt caching implementado, Batch Anthropic nos dois lados do fluxo de ligações, e o gerador de treinamentos que já roda em Claude Batch. Consolidar no GPT jogaria fora três peças; no Claude, uma. Preços de tabela mudam — validar em docs.claude.com antes de orçar.
+  </div>
+</section>
+
+<!-- ══════════════════ 08 ══════════════════ -->
+<section id="s8">
+  <div class="cabeca-sec"><span class="num">08</span><h2 class="tit">O que mudou nesta rodada (v1)</h2></div>
+  <table>
+    <tr><th style="width:40%">Antes (estado auditado em 15/07)</th><th>Agora (v2026.07)</th></tr>
+    <tr><td>Dois juízes: WhatsApp no GPT-5.4, telefone no Claude — notas incomparáveis entre canais.</td><td><strong>Juiz único</strong> (Sonnet 4.6) e régua única no <code>venda_consultiva_core.py</code>.</td></tr>
+    <tr><td>Listas fechadas só no telefone; WhatsApp em texto livre (agregação fraca no dashboard).</td><td>Listas fechadas nos dois canais, com itens específicos de cada um.</td></tr>
+    <tr><td>P1/P2 existiam no CRM mas nunca chegavam ao prompt nem aos dashboards.</td><td>Contexto de qualificação injetado (juiz cego) + tab <strong>Bot × IA</strong> nos dois dashboards + campo <code>tratamento_lead_qualificado</code>.</td></tr>
+    <tr><td>Ligações avaliadas sem saber se eram ativas ou receptivas (o dado estava no banco).</td><td><code>tipo_ligacao</code>, empresa e etapa entram no contexto de toda avaliação de ligação.</td></tr>
+    <tr><td>Batch de chats salvava tudo órfão: <code>opportunity_id=None</code>, sem agente/origem/transcript.</td><td>Manifest por batch preserva e reidrata todos os metadados na coleta.</td></tr>
+    <tr><td>Radar de ligações usava proporção fortes/(fortes+melhorias) — achatado por construção (o prompt sempre gera 3+3).</td><td>Radar e barras usam as <strong>notas reais por categoria</strong> do JSON (com fallback legacy).</td></tr>
+    <tr><td>Nota 0 ambígua (inapto = 0 = vendedor péssimo).</td><td>Inapto grava <code>NULL</code>; zero volta a ser nota.</td></tr>
+    <tr><td>Transcrição não voltava ao CRM; decorador de cache órfão; bloco de UI duplicado; env vars de dois fornecedores.</td><td>CRM sync com whitelist jurídica (Fase 2); resíduos removidos; env unificado.</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════ 09 ══════════════════ -->
+<section id="s9">
+  <div class="cabeca-sec"><span class="num">09</span><h2 class="tit">Governança: eras e versões</h2></div>
+  <h3>Eras da régua (nunca misturar em análise histórica)</h3>
+  <table>
+    <tr><th>Era</th><th>Período</th><th>O que caracteriza</th></tr>
+    <tr><td><span class="tag n">SPIN</span></td><td>até abr/2026</td><td>SPIN pesava 30/100; chaves antigas de categoria. Dashboards leem via mapa legacy.</td></tr>
+    <tr><td><span class="tag n">VCA inicial</span></td><td>abr → 09/jul/2026</td><td>Régua VCA sem P1/P2 no prompt; P2 antiga ("preparo") no bot; juízes distintos por canal.</td></tr>
+    <tr><td><span class="tag d">VCA-2026.07</span></td><td>10/jul/2026 →</td><td>P2 de investimento (+30/+20/+5/veto), juiz único, juiz cego, <code>regua_versao</code> gravada em todo JSON.</td></tr>
+  </table>
+  <div class="regra ambar">
+    <b class="rotulo">Regra de análise</b>
+    Comparações de nota entre eras só como tendência qualitativa, nunca como série contínua — mudou o juiz do WhatsApp e mudou a P2. O campo <code>regua_versao</code> existe para o corte ser automático em qualquer query.
+  </div>
+  <h3>Versionamento dos canônicos</h3>
+  <p>Cada rodada de evolução do projeto gera <strong>um novo HTML canônico completo</strong> (v2, v3…), nunca uma edição silenciosa deste. O canônico registra: o que mudou, por quê, e o estado da régua. O MD de implementação acompanha cada versão. A linhagem fica no rodapé de todos os documentos — quem abrir qualquer versão sabe onde está na história.</p>
+</section>
+
+<!-- ══════════════════ 10 ══════════════════ -->
+<section id="s10">
+  <div class="cabeca-sec"><span class="num">10</span><h2 class="tit">Inventário de arquivos desta versão</h2></div>
+  <table>
+    <tr><th>Arquivo</th><th style="width:110px">Estado</th><th>Papel</th></tr>
+    <tr><td><code>utils/venda_consultiva_core.py</code></td><td><span class="tag d">NOVO</span></td><td>Fonte única: régua, listas, prompts, schema, P1/P2, juiz cego.</td></tr>
+    <tr><td><code>utils/qualificacao_dashboard.py</code></td><td><span class="tag d">NOVO</span></td><td>Tab Bot × IA compartilhada.</td></tr>
+    <tr><td><code>utils/crm_sync_writer.py</code></td><td><span class="tag d">NOVO</span></td><td>Retorno ao CRM com whitelist jurídica.</td></tr>
+    <tr><td><code>utils/cats_vendedor.py</code></td><td><span class="tag c">SHIM</span></td><td>Reexporta categorias do core (compat).</td></tr>
+    <tr><td><code>utils/chat_ia_analyzer.py</code></td><td><span class="tag c">v3</span></td><td>WhatsApp → Claude; consome o core; batch Anthropic.</td></tr>
+    <tr><td><code>utils/transcricao_analyzer.py</code></td><td><span class="tag c">v2</span></td><td>Ligações; consome o core; aceita contexto completo.</td></tr>
+    <tr><td><code>_pages/octadesk.py</code></td><td><span class="tag c">patch</span></td><td>Contexto P1/P2, manifest de batch, coleta reidratada, protocolo Anthropic, CRM hook.</td></tr>
+    <tr><td><code>_pages/transcricoes.py</code></td><td><span class="tag c">patch</span></td><td>Contexto nas 3 chamadas, decorador órfão removido, CRM hook.</td></tr>
+    <tr><td><code>_pages/analise_transcricoes.py</code></td><td><span class="tag c">patch</span></td><td>Notas reais no radar, tab Bot × IA.</td></tr>
+    <tr><td><code>_pages/analise_chats.py</code></td><td><span class="tag c">patch</span></td><td>tlq_status, tab Bot × IA.</td></tr>
+    <tr><td><code>IMPLEMENTACAO_ULISSES.md</code></td><td><span class="tag d">NOVO</span></td><td>Deploy passo a passo, SQLs, env, cron, DDL, smoke test.</td></tr>
+    <tr><td><code>avaliar_diario.py</code> · SQLs · Seducar</td><td><span class="tag x">pendente</span></td><td>Ações do Ulisses/Gabriel — especificadas no MD (§3, §5, §6).</td></tr>
+  </table>
+</section>
+
+<footer>
+  <div>
+    <div>PROJETO AVALIAÇÃO COMERCIAL IA · DEGRAU CULTURAL &amp; CENTRAL DE CONCURSOS</div>
+    <div class="linhagem">
+      <span class="atual">v1.0 · 15/07/2026 · <em>VCA-2026.07</em> · você está aqui</span>
+      <span>v2 · (próxima rodada)</span>
+    </div>
+  </div>
+  <div style="text-align:right">
+    Documento canônico — edições geram nova versão, nunca sobrescrevem.<br>
+    Dúvidas de deploy → IMPLEMENTACAO_ULISSES.md
+  </div>
+</footer>
+
+</div>
+</body>
+</html>

@@ -13,21 +13,32 @@ SELECT
     nf.data_emissao,
 
     -- Destinatário / Tomador (cliente)
-    CASE
-        WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/CPF')
-        ELSE COALESCE(
-            NULLIF(ExtractValue(nf.xml_resposta, '//toma/CPF'), ''),
-            NULLIF(ExtractValue(nf.xml_resposta, '//toma/CNPJ'), '')
-        )
-    END AS cpf,
-    CASE
-        WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/xNome')
-        ELSE ExtractValue(nf.xml_resposta, '//toma/xNome')
-    END AS xNome,
-    CASE
-        WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/email')
-        ELSE ExtractValue(nf.xml_resposta, '//toma/email')
-    END AS email,
+    -- Para NFSe-SP, o xml_resposta guarda apenas o retorno do lote (RetornoEnvioLoteRPS),
+    -- sem dados do tomador, então o nome/CPF vem do pedido (orders/customers) via order_id.
+    COALESCE(
+        NULLIF(CASE
+            WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/CPF')
+            ELSE COALESCE(
+                NULLIF(ExtractValue(nf.xml_resposta, '//toma/CPF'), ''),
+                NULLIF(ExtractValue(nf.xml_resposta, '//toma/CNPJ'), '')
+            )
+        END, ''),
+        c.cpf
+    ) AS cpf,
+    COALESCE(
+        NULLIF(CASE
+            WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/xNome')
+            ELSE ExtractValue(nf.xml_resposta, '//toma/xNome')
+        END, ''),
+        c.full_name
+    ) AS xNome,
+    COALESCE(
+        NULLIF(CASE
+            WHEN nf.tipo = 'NFe' THEN ExtractValue(nf.xml_nfe, '//dest/email')
+            ELSE ExtractValue(nf.xml_resposta, '//toma/email')
+        END, ''),
+        c.email
+    ) AS email,
 
     -- Produtos (NFe) ou descrição do serviço (NFSe)
     CASE
@@ -65,4 +76,6 @@ FROM (
     SELECT *, JSON_UNQUOTE(JSON_EXTRACT(resultado_json, '$.xmlProc')) AS xml_nfe
     FROM seducar.notas_fiscais
 ) nf
+LEFT JOIN seducar.orders o ON o.id = nf.order_id
+LEFT JOIN seducar.customers c ON c.id = o.customer_id
 WHERE nf.id NOT IN (6, 115, 116, 117)
